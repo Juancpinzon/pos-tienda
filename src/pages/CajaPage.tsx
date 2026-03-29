@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import {
   Plus, Wallet, ShoppingBag, TrendingDown,
   Smartphone, Banknote, BookOpen, Lock, ChevronDown, Truck,
@@ -10,6 +10,7 @@ import {
   useResumenCaja,
   abrirCaja,
   registrarGasto,
+  obtenerUltimaCajaCerrada,
 } from '../hooks/useCaja'
 import { usePagosProveedoresSesion } from '../hooks/useProveedores'
 import { formatCOP } from '../utils/moneda'
@@ -34,6 +35,19 @@ export default function CajaPage() {
   // Estado apertura de caja
   const [montoApertura, setMontoApertura] = useState('')
   const [abriendo, setAbriendo] = useState(false)
+
+  // Sugerencia: monto de cierre de la última caja
+  const [montoCierreSugerido, setMontoCierreSugerido] = useState<number | null>(null)
+  const [sugerenciaDismissed, setSugerenciaDismissed] = useState(false)
+
+  useEffect(() => {
+    // Solo actuar cuando la pantalla "Abrir caja" está visible (sesion === null)
+    if (sesion !== null) return
+    setSugerenciaDismissed(false)
+    obtenerUltimaCajaCerrada().then((ultima) => {
+      setMontoCierreSugerido(ultima?.montoCierre ?? null)
+    })
+  }, [sesion])
 
   // Estado modal cierre
   const [mostrarCierre, setMostrarCierre] = useState(false)
@@ -91,6 +105,38 @@ export default function CajaPage() {
           <h2 className="font-display font-bold text-xl text-texto mb-1">Abrir caja del día</h2>
           <p className="text-sm text-suave">Ingresa el efectivo con que arrancas hoy</p>
         </div>
+
+        {/* Sugerencia basada en el cierre de la última caja */}
+        {montoCierreSugerido !== null && montoCierreSugerido > 0 && !sugerenciaDismissed && (
+          <div className="w-full max-w-xs bg-exito/8 border border-exito/25 rounded-2xl p-4 flex flex-col gap-3">
+            <p className="text-sm text-texto text-center leading-snug">
+              La última caja cerró con{' '}
+              <span className="moneda font-bold text-exito">{formatCOP(montoCierreSugerido)}</span>
+              {' '}en efectivo. ¿Arranca con ese mismo monto?
+            </p>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setMontoApertura(String(montoCierreSugerido))
+                  setSugerenciaDismissed(true)
+                }}
+                className="flex-1 h-11 bg-exito text-white rounded-xl font-semibold text-sm
+                           hover:bg-exito/90 active:scale-95 transition-all"
+              >
+                Sí, usar {formatCOP(montoCierreSugerido)}
+              </button>
+              <button
+                type="button"
+                onClick={() => setSugerenciaDismissed(true)}
+                className="h-11 px-3 border border-borde text-suave rounded-xl text-sm
+                           hover:border-gray-300 hover:text-texto active:scale-95 transition-all"
+              >
+                No
+              </button>
+            </div>
+          </div>
+        )}
 
         <div className="w-full max-w-xs bg-white rounded-2xl border border-borde p-5 flex flex-col gap-4">
           <div className="text-center">

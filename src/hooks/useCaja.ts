@@ -261,3 +261,15 @@ export async function registrarGasto(
 export async function obtenerSesionActiva(): Promise<SesionCaja | undefined> {
   return db.sesionCaja.where('estado').equals('abierta').first()
 }
+
+/**
+ * Obtiene la última sesión de caja cerrada (la más reciente por fecha de cierre).
+ * Sirve para sugerir el monto de apertura de la siguiente jornada.
+ */
+export async function obtenerUltimaCajaCerrada(): Promise<SesionCaja | undefined> {
+  const cerradas = await db.sesionCaja.where('estado').equals('cerrada').toArray()
+  if (cerradas.length === 0) return undefined
+  return cerradas.sort(
+    (a, b) => (b.cerradaEn?.getTime() ?? 0) - (a.cerradaEn?.getTime() ?? 0)
+  )[0]
+}
