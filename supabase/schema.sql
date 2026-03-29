@@ -330,9 +330,12 @@ ALTER TABLE movimientos_stock ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "tiendas_select" ON tiendas
   FOR SELECT USING (id = get_tienda_id());
 
--- El INSERT se hace desde la Edge Function de registro (SECURITY DEFINER)
+-- Cualquier usuario autenticado puede crear una tienda (necesario en el registro,
+-- cuando aún no existe fila en `usuarios` y get_tienda_id() devuelve NULL)
 CREATE POLICY "tiendas_insert" ON tiendas
-  FOR INSERT WITH CHECK (TRUE);
+  FOR INSERT
+  TO authenticated
+  WITH CHECK (true);
 
 CREATE POLICY "tiendas_update" ON tiendas
   FOR UPDATE USING (id = get_tienda_id());
@@ -341,8 +344,11 @@ CREATE POLICY "tiendas_update" ON tiendas
 CREATE POLICY "usuarios_select" ON usuarios
   FOR SELECT USING (tienda_id = get_tienda_id());
 
+-- Solo puede insertar su propio perfil (auth.uid() = id)
 CREATE POLICY "usuarios_insert" ON usuarios
-  FOR INSERT WITH CHECK (TRUE); -- controlado por la función de registro/invitación
+  FOR INSERT
+  TO authenticated
+  WITH CHECK (auth.uid() = id);
 
 CREATE POLICY "usuarios_update" ON usuarios
   FOR UPDATE USING (tienda_id = get_tienda_id());
