@@ -12,7 +12,14 @@ import { registrarSalida, verificarStockInsuficiente } from '../../hooks/useStoc
 import type { Venta, DetalleVenta } from '../../db/schema'
 
 type MetodoPago = 'efectivo' | 'fiado' | 'transferencia'
+type PlataformaTransferencia = 'Nequi' | 'Daviplata' | 'Dale'
 type EstadoModal = 'seleccion' | 'confirmando' | 'exito' | 'error'
+
+const PLATAFORMAS: { id: PlataformaTransferencia; emoji: string }[] = [
+  { id: 'Nequi',     emoji: '🟣' },
+  { id: 'Daviplata', emoji: '🔵' },
+  { id: 'Dale',      emoji: '🟡' },
+]
 
 interface ModalCobroProps {
   onClose: () => void
@@ -92,15 +99,37 @@ function TabFiado({
 
 // ─── Tab Transferencia ────────────────────────────────────────────────────────
 
-function TabTransferencia() {
+function TabTransferencia({
+  plataforma,
+  onPlataformaChange,
+}: {
+  plataforma: PlataformaTransferencia | null
+  onPlataformaChange: (p: PlataformaTransferencia) => void
+}) {
   return (
-    <div className="flex flex-col items-center gap-4 py-4">
-      <Smartphone size={48} className="text-primario" />
-      <p className="text-center text-base text-texto font-medium">
-        Confirma que recibiste la transferencia
-        <br />
-        <span className="text-suave text-sm">Nequi · Daviplata · Bancolombia</span>
-      </p>
+    <div className="flex flex-col gap-4">
+      <p className="text-sm text-suave text-center">¿Por cuál plataforma llegó la transferencia?</p>
+      <div className="grid grid-cols-3 gap-3">
+        {PLATAFORMAS.map(({ id, emoji }) => (
+          <button
+            key={id}
+            type="button"
+            onClick={() => onPlataformaChange(id)}
+            className={[
+              'flex flex-col items-center justify-center gap-2 h-20 rounded-xl border-2 font-semibold text-sm transition-all active:scale-95',
+              plataforma === id
+                ? 'border-acento bg-acento/8 text-texto shadow-sm'
+                : 'border-borde text-suave hover:border-gray-300 hover:text-texto',
+            ].join(' ')}
+          >
+            <span className="text-2xl leading-none">{emoji}</span>
+            <span>{id}</span>
+          </button>
+        ))}
+      </div>
+      {!plataforma && (
+        <p className="text-xs text-suave text-center">Selecciona una plataforma para continuar</p>
+      )}
     </div>
   )
 }
@@ -148,6 +177,11 @@ function PantallaExito({
           {venta.tipoPago === 'fiado' && (
             <p className="text-white/80 text-sm font-medium">Anotado a fiado</p>
           )}
+          {venta.tipoPago === 'transferencia' && (
+            <p className="text-white/80 text-sm font-medium">
+              {venta.notas ?? 'Transferencia'}
+            </p>
+          )}
         </div>
 
         {/* Acciones */}
@@ -191,6 +225,7 @@ export function ModalCobro({ onClose }: ModalCobroProps) {
   const [metodo, setMetodo] = useState<MetodoPago>('efectivo')
   const [billete, setBillete] = useState('')
   const [clienteFiado, setClienteFiado] = useState<ClienteFiado | null>(null)
+  const [plataforma, setPlataforma] = useState<PlataformaTransferencia | null>(null)
   const [estado, setEstado] = useState<EstadoModal>('seleccion')
   const [mensajeError, setMensajeError] = useState('')
 
@@ -200,6 +235,9 @@ export function ModalCobro({ onClose }: ModalCobroProps) {
   // Para la pantalla de éxito necesitamos la venta guardada y sus detalles
   const [ventaGuardada, setVentaGuardada] = useState<Venta | null>(null)
   const [detallesGuardados, setDetallesGuardados] = useState<DetalleVenta[]>([])
+
+  // Resetear plataforma al cambiar método de pago
+  useEffect(() => { setPlataforma(null) }, [metodo])
 
   // Verificar stock cuando cambian los ítems
   useEffect(() => {
@@ -213,6 +251,7 @@ export function ModalCobro({ onClose }: ModalCobroProps) {
     if (estado === 'confirmando') return false
     if (metodo === 'efectivo') return parsearEntero(billete) >= total
     if (metodo === 'fiado') return (clienteFiado?.nombre?.trim()?.length ?? 0) >= 2
+    if (metodo === 'transferencia') return plataforma !== null
     return true
   }
 
@@ -267,6 +306,7 @@ export function ModalCobro({ onClose }: ModalCobroProps) {
             efectivoRecibido: recibido,
             cambio: recibido !== undefined ? recibido - total : undefined,
             estado: 'completada',
+            notas: metodo === 'transferencia' && plataforma ? plataforma : undefined,
             creadaEn: ahora,
           })) as number
 
@@ -326,6 +366,7 @@ export function ModalCobro({ onClose }: ModalCobroProps) {
         tipoPago: metodo,
         efectivoRecibido: recibido,
         cambio: recibido !== undefined ? recibido - total : undefined,
+        notas: metodo === 'transferencia' && plataforma ? plataforma : undefined,
         estado: 'completada',
         creadaEn: ahora,
       })
@@ -422,7 +463,9 @@ export function ModalCobro({ onClose }: ModalCobroProps) {
           {metodo === 'fiado' && (
             <TabFiado clienteFiado={clienteFiado} onClienteChange={setClienteFiado} />
           )}
-          {metodo === 'transferencia' && <TabTransferencia />}
+          {metodo === 'transferencia' && (
+            <TabTransferencia plataforma={plataforma} onPlataformaChange={setPlataforma} />
+          )}
         </div>
 
         {/* Footer */}

@@ -4,17 +4,17 @@
 
 @layer base {
   :root {
-    --color-primario: #2D6A4F;
-    --color-primario-hover: #1B4332;
-    --color-acento: #F77F00;
-    --color-acento-hover: #D62828;
-    --color-fondo: #FAFAF7;
+    --color-primario: #1E3A5F;
+    --color-primario-hover: #152D4A;
+    --color-acento: #0EA5E9;
+    --color-acento-hover: #0284C7;
+    --color-fondo: #F8F9FA;
     --color-superficie: #FFFFFF;
-    --color-borde: #E8E8E0;
-    --color-texto: #1A1A1A;
-    --color-texto-suave: #6B7280;
+    --color-borde: #E2E8F0;
+    --color-texto: #1A1A2E;
+    --color-texto-suave: #64748B;
     --color-peligro: #DC2626;
-    --color-exito: #16A34A;
+    --color-exito: #0EA5E9;
     --color-advertencia: #D97706;
     --color-fiado: #7C3AED;
 

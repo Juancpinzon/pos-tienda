@@ -39,6 +39,9 @@ export default function ReportesPage() {
     ticketPromedio: number
     totalEfectivo: number
     totalTransferencia: number
+    totalNequi: number
+    totalDaviplata: number
+    totalDale: number
     totalFiado: number
   }
   type TopProducto = { nombre: string; cantidad: number; monto: number }
@@ -55,21 +58,25 @@ export default function ReportesPage() {
         .toArray()
 
       if (ventas.length === 0) {
-        return { ventas: [], totalVendido: 0, cantidadVentas: 0, ticketPromedio: 0, totalEfectivo: 0, totalTransferencia: 0, totalFiado: 0 }
+        return { ventas: [], totalVendido: 0, cantidadVentas: 0, ticketPromedio: 0, totalEfectivo: 0, totalTransferencia: 0, totalNequi: 0, totalDaviplata: 0, totalDale: 0, totalFiado: 0 }
       }
 
-      const totalVendido      = ventas.reduce((s, v) => s + v.total, 0)
-      const totalEfectivo     = ventas.filter((v) => v.tipoPago === 'efectivo').reduce((s, v) => s + v.total, 0)
-      const totalTransferencia = ventas.filter((v) => v.tipoPago === 'transferencia').reduce((s, v) => s + v.total, 0)
-      const totalFiado        = ventas.filter((v) => v.tipoPago === 'fiado').reduce((s, v) => s + v.total, 0)
-      const ticketPromedio    = Math.round(totalVendido / ventas.length)
+      const totalVendido       = ventas.reduce((s, v) => s + v.total, 0)
+      const totalEfectivo      = ventas.filter((v) => v.tipoPago === 'efectivo').reduce((s, v) => s + v.total, 0)
+      const transVentas        = ventas.filter((v) => v.tipoPago === 'transferencia')
+      const totalTransferencia = transVentas.reduce((s, v) => s + v.total, 0)
+      const totalNequi         = transVentas.filter((v) => v.notas === 'Nequi').reduce((s, v) => s + v.total, 0)
+      const totalDaviplata     = transVentas.filter((v) => v.notas === 'Daviplata').reduce((s, v) => s + v.total, 0)
+      const totalDale          = transVentas.filter((v) => v.notas === 'Dale').reduce((s, v) => s + v.total, 0)
+      const totalFiado         = ventas.filter((v) => v.tipoPago === 'fiado').reduce((s, v) => s + v.total, 0)
+      const ticketPromedio     = Math.round(totalVendido / ventas.length)
 
-      return { ventas, totalVendido, cantidadVentas: ventas.length, ticketPromedio, totalEfectivo, totalTransferencia, totalFiado }
+      return { ventas, totalVendido, cantidadVentas: ventas.length, ticketPromedio, totalEfectivo, totalTransferencia, totalNequi, totalDaviplata, totalDale, totalFiado }
     }).subscribe({
       next: setDatos,
       error: (err) => {
         console.error('[ReportesPage:datos]', err)
-        setDatos({ ventas: [], totalVendido: 0, cantidadVentas: 0, ticketPromedio: 0, totalEfectivo: 0, totalTransferencia: 0, totalFiado: 0 })
+        setDatos({ ventas: [], totalVendido: 0, cantidadVentas: 0, ticketPromedio: 0, totalEfectivo: 0, totalTransferencia: 0, totalNequi: 0, totalDaviplata: 0, totalDale: 0, totalFiado: 0 })
       },
     })
     return () => sub.unsubscribe()
@@ -203,7 +210,12 @@ export default function ReportesPage() {
                 {/* Desglose por método de pago */}
                 <div className="grid grid-cols-3 gap-0 border-t border-borde/60 pt-3 divide-x divide-borde/50">
                   <SubMetrica emoji="💵" label="Efectivo"       valor={datos.totalEfectivo}      color="text-exito"   />
-                  <SubMetrica emoji="📱" label="Transferencias" valor={datos.totalTransferencia} color="text-primario" />
+                  <SubMetricaTransferencia
+                    total={datos.totalTransferencia}
+                    nequi={datos.totalNequi}
+                    daviplata={datos.totalDaviplata}
+                    dale={datos.totalDale}
+                  />
                   <SubMetrica emoji="📒" label="Fiado"          valor={datos.totalFiado}         color="text-fiado"   />
                 </div>
               </div>
@@ -382,6 +394,43 @@ export default function ReportesPage() {
 }
 
 // ─── Componente auxiliar ──────────────────────────────────────────────────────
+
+// ─── Sub-métrica de transferencias con desglose por plataforma ───────────────
+
+function SubMetricaTransferencia({
+  total,
+  nequi,
+  daviplata,
+  dale,
+}: {
+  total: number
+  nequi: number
+  daviplata: number
+  dale: number
+}) {
+  const tieneDesglose = nequi > 0 || daviplata > 0 || dale > 0
+  return (
+    <div className="flex flex-col gap-1 px-3">
+      <p className="text-xs text-suave">📱 Transferencias</p>
+      <p className={`moneda font-bold text-sm leading-tight ${total > 0 ? 'text-primario' : 'text-suave/40'}`}>
+        {formatCOP(total)}
+      </p>
+      {tieneDesglose && (
+        <div className="flex flex-col gap-0.5 mt-0.5 border-t border-borde/40 pt-1">
+          {nequi > 0 && (
+            <p className="text-[10px] text-suave leading-tight">🟣 Nequi: <span className="moneda">{formatCOP(nequi)}</span></p>
+          )}
+          {daviplata > 0 && (
+            <p className="text-[10px] text-suave leading-tight">🔵 Daviplata: <span className="moneda">{formatCOP(daviplata)}</span></p>
+          )}
+          {dale > 0 && (
+            <p className="text-[10px] text-suave leading-tight">🟡 Dale: <span className="moneda">{formatCOP(dale)}</span></p>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
 
 // ─── Sub-métrica dentro del card "Total vendido" ─────────────────────────────
 

@@ -40,17 +40,17 @@ export function ResumenVenta({ onCobrar }: ResumenVentaProps) {
           <Trash2 size={18} />
         </button>
 
-        {/* COBRAR — botón principal, verde, prominente */}
+        {/* COBRAR — botón principal, celeste, prominente */}
         <button
           type="button"
           onClick={onCobrar}
           disabled={items.length === 0}
           className="flex-1 flex items-center justify-center gap-3
-                     h-14 bg-primario text-white rounded-xl
+                     h-14 bg-acento text-white rounded-xl
                      font-display font-bold text-xl
-                     hover:bg-primario-hover active:scale-95
+                     hover:bg-acento-hover active:scale-95
                      transition-all disabled:opacity-40 disabled:cursor-not-allowed
-                     shadow-md shadow-primario/30"
+                     shadow-md shadow-acento/30"
         >
           <ShoppingBag size={22} />
           COBRAR

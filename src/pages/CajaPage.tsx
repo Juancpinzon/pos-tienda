@@ -8,6 +8,7 @@ import { CerrarCaja } from '../components/caja/CerrarCaja'
 import {
   useSesionActual,
   useResumenCaja,
+  useDesglosePlatformasSesion,
   abrirCaja,
   registrarGasto,
   obtenerUltimaCajaCerrada,
@@ -31,6 +32,7 @@ export default function CajaPage() {
   const sesion = useSesionActual()
   const resumen = useResumenCaja(sesion?.id)
   const pagosProveedores = usePagosProveedoresSesion(sesion?.id)
+  const desglosePlatformas = useDesglosePlatformasSesion(sesion?.id)
 
   // Estado apertura de caja
   const [montoApertura, setMontoApertura] = useState('')
@@ -209,6 +211,29 @@ export default function CajaPage() {
                     color="text-primario"
                     siempre
                   />
+                  {/* Sub-filas por plataforma — solo si hay ventas con plataforma registrada */}
+                  {desglosePlatformas && resumen.totalTransferencia > 0 && (
+                    <>
+                      {desglosePlatformas.nequi > 0 && (
+                        <div className="flex items-center justify-between px-4 py-1.5 pl-12 bg-fondo/60">
+                          <span className="text-xs text-suave">🟣 Nequi</span>
+                          <span className="moneda text-xs text-suave font-medium">{formatCOP(desglosePlatformas.nequi)}</span>
+                        </div>
+                      )}
+                      {desglosePlatformas.daviplata > 0 && (
+                        <div className="flex items-center justify-between px-4 py-1.5 pl-12 bg-fondo/60">
+                          <span className="text-xs text-suave">🔵 Daviplata</span>
+                          <span className="moneda text-xs text-suave font-medium">{formatCOP(desglosePlatformas.daviplata)}</span>
+                        </div>
+                      )}
+                      {desglosePlatformas.dale > 0 && (
+                        <div className="flex items-center justify-between px-4 py-1.5 pl-12 bg-fondo/60">
+                          <span className="text-xs text-suave">🟡 Dale</span>
+                          <span className="moneda text-xs text-suave font-medium">{formatCOP(desglosePlatformas.dale)}</span>
+                        </div>
+                      )}
+                    </>
+                  )}
                   <FilaDesglose
                     icon={<BookOpen size={14} />}
                     label="📒 Fiado"

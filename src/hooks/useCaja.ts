@@ -263,6 +263,44 @@ export async function obtenerSesionActiva(): Promise<SesionCaja | undefined> {
 }
 
 /**
+ * Desglose de transferencias de una sesión por plataforma (Nequi / Daviplata / Dale).
+ * Se basa en el campo `notas` de la venta, que se guarda al cobrar por transferencia.
+ */
+export interface DesglosePlatformas {
+  nequi: number
+  daviplata: number
+  dale: number
+}
+
+export function useDesglosePlatformasSesion(sesionId: number | undefined) {
+  const [desglose, setDesglose] = useState<DesglosePlatformas | null>(null)
+
+  useEffect(() => {
+    if (!sesionId) { setDesglose(null); return }
+    const sub = liveQuery(async (): Promise<DesglosePlatformas> => {
+      const ventas = await db.ventas
+        .where('sesionCajaId').equals(sesionId)
+        .filter((v) => v.estado === 'completada' && v.tipoPago === 'transferencia')
+        .toArray()
+      return {
+        nequi:     ventas.filter((v) => v.notas === 'Nequi').reduce((s, v) => s + v.total, 0),
+        daviplata: ventas.filter((v) => v.notas === 'Daviplata').reduce((s, v) => s + v.total, 0),
+        dale:      ventas.filter((v) => v.notas === 'Dale').reduce((s, v) => s + v.total, 0),
+      }
+    }).subscribe({
+      next: setDesglose,
+      error: (err) => {
+        console.error('[useDesglosePlatformasSesion]', err)
+        setDesglose(null)
+      },
+    })
+    return () => sub.unsubscribe()
+  }, [sesionId])
+
+  return desglose
+}
+
+/**
  * Obtiene la última sesión de caja cerrada (la más reciente por fecha de cierre).
  * Sirve para sugerir el monto de apertura de la siguiente jornada.
  */

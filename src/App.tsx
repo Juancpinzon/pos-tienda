@@ -55,7 +55,7 @@ function HeaderDia({ onAbrirConfig }: { onAbrirConfig: () => void }) {
   const nombreTienda = config?.nombreTienda ?? 'POS Tienda'
 
   return (
-    <header className="h-11 bg-primario-hover flex items-center justify-between px-3 shrink-0">
+    <header className="h-11 bg-primario flex items-center justify-between px-3 shrink-0">
       <button
         type="button"
         onClick={onAbrirConfig}
