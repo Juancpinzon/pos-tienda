@@ -1,0 +1,221 @@
+import { useState, useEffect, useRef } from 'react'
+import { Search, Ghost, X } from 'lucide-react'
+import { db } from '../../db/database'
+import type { Producto } from '../../db/schema'
+import { useVentaStore } from '../../stores/ventaStore'
+import { formatCOP, parsearEntero } from '../../utils/moneda'
+
+export function BuscadorProducto() {
+  const [query, setQuery] = useState('')
+  const [resultados, setResultados] = useState<Producto[]>([])
+  const [abierto, setAbierto] = useState(false)
+  const [mostrarFantasma, setMostrarFantasma] = useState(false)
+  const [fantasmaDesc, setFantasmaDesc] = useState('')
+  const [fantasmaPrecio, setFantasmaPrecio] = useState('')
+
+  const inputRef = useRef<HTMLInputElement>(null)
+  const contenedorRef = useRef<HTMLDivElement>(null)
+  const agregarItem = useVentaStore((s) => s.agregarItem)
+
+  // Búsqueda con debounce 300ms
+  useEffect(() => {
+    if (query.length < 2) {
+      setResultados([])
+      setAbierto(false)
+      return
+    }
+    const timer = setTimeout(async () => {
+      const lower = query.toLowerCase()
+      const found = await db.productos
+        .filter(
+          (p) =>
+            p.activo &&
+            !p.esFantasma &&
+            (p.nombre.toLowerCase().includes(lower) || p.codigoBarras === query)
+        )
+        .limit(8)
+        .toArray()
+      setResultados(found)
+      setAbierto(true)
+    }, 300)
+    return () => clearTimeout(timer)
+  }, [query])
+
+  // Cerrar dropdown al hacer clic fuera
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (contenedorRef.current && !contenedorRef.current.contains(e.target as Node)) {
+        setAbierto(false)
+        setMostrarFantasma(false)
+      }
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [])
+
+  const seleccionarProducto = (producto: Producto) => {
+    agregarItem({
+      productoId: producto.id,
+      nombreProducto: producto.nombre,
+      cantidad: 1,
+      precioUnitario: producto.precio,
+      descuento: 0,
+      esProductoFantasma: false,
+    })
+    setQuery('')
+    setResultados([])
+    setAbierto(false)
+    inputRef.current?.focus()
+  }
+
+  const agregarFantasma = () => {
+    const precio = parsearEntero(fantasmaPrecio)
+    if (precio <= 0) return
+    agregarItem({
+      productoId: undefined,
+      nombreProducto: fantasmaDesc.trim() || 'Producto sin registrar',
+      cantidad: 1,
+      precioUnitario: precio,
+      descuento: 0,
+      esProductoFantasma: true,
+    })
+    setFantasmaDesc('')
+    setFantasmaPrecio('')
+    setMostrarFantasma(false)
+    inputRef.current?.focus()
+  }
+
+  return (
+    <div ref={contenedorRef} className="relative w-full">
+      {/* Input de búsqueda */}
+      <div className="flex gap-2">
+        <div className="relative flex-1">
+          <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-suave pointer-events-none" />
+          <input
+            ref={inputRef}
+            type="text"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Buscar producto o código de barras..."
+            className="w-full h-12 pl-10 pr-4 bg-white border border-borde rounded-xl
+                       text-base text-texto placeholder:text-suave
+                       focus:outline-none focus:ring-2 focus:ring-primario/40 focus:border-primario"
+          />
+          {query && (
+            <button
+              type="button"
+              onClick={() => { setQuery(''); setResultados([]); setAbierto(false) }}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-suave hover:text-texto"
+            >
+              <X size={16} />
+            </button>
+          )}
+        </div>
+
+        {/* Botón vender sin registrar */}
+        <button
+          type="button"
+          onClick={() => { setMostrarFantasma((v) => !v); setAbierto(false) }}
+          className="flex items-center gap-2 h-12 px-4 border border-dashed border-suave
+                     text-suave hover:border-acento hover:text-acento rounded-xl
+                     transition-colors text-sm font-medium whitespace-nowrap"
+        >
+          <Ghost size={16} />
+          Sin registrar
+        </button>
+      </div>
+
+      {/* Dropdown resultados */}
+      {abierto && resultados.length > 0 && (
+        <div className="absolute top-full left-0 right-0 z-50 mt-1
+                        bg-white border border-borde rounded-xl shadow-lg overflow-hidden">
+          {resultados.map((p) => (
+            <button
+              key={p.id}
+              type="button"
+              onClick={() => seleccionarProducto(p)}
+              className="w-full flex items-center justify-between px-4 py-3
+                         hover:bg-fondo text-left transition-colors border-b border-borde/50 last:border-0"
+            >
+              <span className="text-base text-texto font-medium truncate pr-4">{p.nombre}</span>
+              <span className="moneda text-primario font-bold shrink-0">{formatCOP(p.precio)}</span>
+            </button>
+          ))}
+          {/* Sin resultados → ofrecer fantasma */}
+          {resultados.length === 0 && (
+            <div className="px-4 py-3 text-suave text-sm text-center">
+              Sin resultados —{' '}
+              <button
+                type="button"
+                className="text-acento font-medium hover:underline"
+                onClick={() => { setAbierto(false); setMostrarFantasma(true) }}
+              >
+                vender sin registrar
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Sin resultados con query activo */}
+      {abierto && resultados.length === 0 && query.length >= 2 && (
+        <div className="absolute top-full left-0 right-0 z-50 mt-1
+                        bg-white border border-borde rounded-xl shadow-lg">
+          <div className="px-4 py-3 text-suave text-sm text-center">
+            No se encontró «{query}» —{' '}
+            <button
+              type="button"
+              className="text-acento font-medium hover:underline"
+              onClick={() => {
+                setFantasmaDesc(query)
+                setAbierto(false)
+                setMostrarFantasma(true)
+              }}
+            >
+              vender sin registrar
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Formulario producto fantasma */}
+      {mostrarFantasma && (
+        <div className="absolute top-full left-0 right-0 z-50 mt-1
+                        bg-white border border-acento/40 rounded-xl shadow-lg p-4">
+          <p className="text-sm font-semibold text-acento mb-3 flex items-center gap-2">
+            <Ghost size={14} /> Vender sin registrar en sistema
+          </p>
+          <div className="flex gap-2">
+            <input
+              type="text"
+              value={fantasmaDesc}
+              onChange={(e) => setFantasmaDesc(e.target.value)}
+              placeholder="Descripción (opcional)"
+              className="flex-1 h-11 px-3 border border-borde rounded-lg text-sm
+                         focus:outline-none focus:ring-2 focus:ring-acento/40"
+            />
+            <input
+              type="number"
+              value={fantasmaPrecio}
+              onChange={(e) => setFantasmaPrecio(e.target.value)}
+              placeholder="Precio $"
+              min={0}
+              className="w-32 h-11 px-3 border border-borde rounded-lg text-sm moneda
+                         focus:outline-none focus:ring-2 focus:ring-acento/40"
+              onKeyDown={(e) => e.key === 'Enter' && agregarFantasma()}
+            />
+            <button
+              type="button"
+              onClick={agregarFantasma}
+              disabled={parsearEntero(fantasmaPrecio) <= 0}
+              className="h-11 px-4 bg-acento text-white rounded-lg text-sm font-semibold
+                         disabled:opacity-40 hover:opacity-90 active:scale-95 transition-all"
+            >
+              Agregar
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}

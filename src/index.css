@@ -1,0 +1,115 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --color-primario: #2D6A4F;
+    --color-primario-hover: #1B4332;
+    --color-acento: #F77F00;
+    --color-acento-hover: #D62828;
+    --color-fondo: #FAFAF7;
+    --color-superficie: #FFFFFF;
+    --color-borde: #E8E8E0;
+    --color-texto: #1A1A1A;
+    --color-texto-suave: #6B7280;
+    --color-peligro: #DC2626;
+    --color-exito: #16A34A;
+    --color-advertencia: #D97706;
+    --color-fiado: #7C3AED;
+
+    --min-touch-height: 56px;
+    --min-touch-width: 56px;
+    --font-size-min: 15px;
+    --font-size-producto: 18px;
+    --font-size-precio: 24px;
+    --font-size-total: 36px;
+  }
+
+  * {
+    box-sizing: border-box;
+    /* Scroll suave en toda la app */
+    scroll-behavior: smooth;
+  }
+
+  html, body {
+    margin: 0;
+    padding: 0;
+    background-color: var(--color-fondo);
+    color: var(--color-texto);
+    font-family: 'Inter', sans-serif;
+    font-size: var(--font-size-min);
+    /* Eliminar highlight azul en tap (móviles) */
+    -webkit-tap-highlight-color: transparent;
+    /* Prevenir zoom accidental en doble-tap */
+    touch-action: manipulation;
+    /* Overscroll bounce solo en iOS */
+    overscroll-behavior: none;
+  }
+
+  /* Scrollbars ocultas pero funcionales en toda la app */
+  ::-webkit-scrollbar { width: 4px; height: 4px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--color-borde); border-radius: 4px; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--color-texto-suave); }
+
+  h1, h2, h3, h4, h5, h6 {
+    font-family: 'Nunito', sans-serif;
+  }
+}
+
+@layer components {
+  .btn-primario {
+    @apply bg-primario text-white font-semibold rounded-xl
+           flex items-center justify-center gap-2
+           min-h-touch px-6 text-base
+           active:scale-95 transition-transform
+           hover:bg-primario-hover;
+  }
+
+  .btn-acento {
+    @apply bg-acento text-white font-semibold rounded-xl
+           flex items-center justify-center gap-2
+           min-h-touch px-6 text-base
+           active:scale-95 transition-transform;
+  }
+
+  .btn-secundario {
+    @apply bg-white text-texto border border-borde font-semibold rounded-xl
+           flex items-center justify-center gap-2
+           min-h-touch px-6 text-base
+           active:scale-95 transition-transform;
+  }
+
+  .card {
+    @apply bg-superficie rounded-2xl border border-borde p-4 shadow-sm;
+  }
+
+  .moneda {
+    font-family: 'JetBrains Mono', monospace;
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* Tamaños de texto para precios (usados con @apply text-precio, text-total) */
+  .text-precio { font-size: var(--font-size-precio); line-height: 1; }
+  .text-total  { font-size: var(--font-size-total);  line-height: 1; }
+
+  /* Feedback táctil en todos los botones interactivos */
+  button:not(:disabled) {
+    cursor: pointer;
+    user-select: none;
+  }
+
+  /* Transición suave para modales y overlays */
+  .modal-enter {
+    animation: modal-in 200ms ease-out;
+  }
+  @keyframes modal-in {
+    from { opacity: 0; transform: translateY(16px) scale(0.97); }
+    to   { opacity: 1; transform: translateY(0) scale(1); }
+  }
+
+  /* Clases utilitarias para scrollbars ocultas (horizontal chips) */
+  .scrollbar-hide::-webkit-scrollbar { display: none; }
+  .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
+}
