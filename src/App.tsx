@@ -1,11 +1,12 @@
-import { useState } from 'react'
-import { BrowserRouter, Routes, Route, NavLink } from 'react-router-dom'
-import { ShoppingCart, BookOpen, Package, DollarSign, BarChart2, AlertCircle, Settings, Truck, Archive } from 'lucide-react'
+import { useState, useEffect } from 'react'
+import { BrowserRouter, Routes, Route, NavLink, Navigate, useLocation } from 'react-router-dom'
+import { ShoppingCart, BookOpen, Package, DollarSign, BarChart2, AlertCircle, Settings, Truck, Archive, LogOut, RefreshCw } from 'lucide-react'
 import { useSeed } from './hooks/useSeed'
 import { useSesionActual, useResumenCaja } from './hooks/useCaja'
 import { useConfig } from './hooks/useConfig'
 import { useProductosBajoStock } from './hooks/useStock'
 import { useOnboarding } from './hooks/useOnboarding'
+import { useSyncStatus } from './hooks/useSyncStatus'
 import { TourOverlay } from './components/onboarding/TourOverlay'
 import { ConfigModal } from './components/config/ConfigModal'
 import { BannerInstalacion } from './components/shared/BannerInstalacion'
@@ -16,7 +17,12 @@ import CajaPage from './pages/CajaPage'
 import ReportesPage from './pages/ReportesPage'
 import ProveedoresPage from './pages/ProveedoresPage'
 import InventarioPage from './pages/InventarioPage'
+import LoginPage from './pages/LoginPage'
+import RegisterPage from './pages/RegisterPage'
 import { formatCOP } from './utils/moneda'
+import { useAuthStore, puedeAcceder } from './stores/authStore'
+import { supabase, supabaseConfigurado } from './lib/supabase'
+import { startAutoSync, stopAutoSync, pullFromSupabase } from './lib/sync'
 
 // ─── Pantallas de carga / error ───────────────────────────────────────────────
 
@@ -44,15 +50,44 @@ function PantallaError({ error }: { error: string }) {
   )
 }
 
+// ─── Indicador de sincronización ─────────────────────────────────────────────
+
+function IndicadorSync() {
+  const sync = useSyncStatus()
+
+  if (sync.estado === 'desactivado') return null
+
+  const config = {
+    sincronizado: { dot: 'bg-exito',      label: 'Sincronizado'  },
+    pendiente:    { dot: 'bg-advertencia', label: 'Sincronizando' },
+    sin_internet: { dot: 'bg-peligro',     label: 'Sin internet'  },
+    desactivado:  { dot: 'bg-suave',       label: ''              },
+  }[sync.estado]
+
+  return (
+    <div className="flex items-center gap-1.5" title={config.label}>
+      <span className={`w-2 h-2 rounded-full shrink-0 ${config.dot} ${sync.estado === 'pendiente' ? 'animate-pulse' : ''}`} />
+      <span className="text-white/50 text-xs hidden lg:inline">{config.label}</span>
+    </div>
+  )
+}
+
 // ─── Header con totales del día ───────────────────────────────────────────────
 
 function HeaderDia({ onAbrirConfig }: { onAbrirConfig: () => void }) {
-  const sesion = useSesionActual()
-  const resumen = useResumenCaja(sesion?.id)
-  const config = useConfig()
-  const sinCaja = sesion === null
+  const sesion   = useSesionActual()
+  const resumen  = useResumenCaja(sesion?.id)
+  const config   = useConfig()
+  const usuario  = useAuthStore((s) => s.usuario)
+  const cerrarSesion = useAuthStore((s) => s.cerrarSesion)
+  const sinCaja  = sesion === null
 
-  const nombreTienda = config?.nombreTienda ?? 'POS Tienda'
+  const nombreTienda = config?.nombreTienda ?? usuario?.nombreTienda ?? 'POS Tienda'
+
+  const handleCerrarSesion = async () => {
+    await supabase.auth.signOut()
+    cerrarSesion()
+  }
 
   return (
     <header className="h-11 bg-primario flex items-center justify-between px-3 shrink-0">
@@ -63,12 +98,25 @@ function HeaderDia({ onAbrirConfig }: { onAbrirConfig: () => void }) {
         title="Configuración de la tienda"
       >
         <span className="text-white text-base leading-none">🏪</span>
-        <span className="text-white font-display font-bold text-sm truncate max-w-[120px] sm:max-w-none">
+        <span className="text-white font-display font-bold text-sm truncate max-w-[100px] sm:max-w-none">
           {nombreTienda}
         </span>
       </button>
 
       <div className="flex items-center gap-2">
+        {/* Indicador de rol del usuario */}
+        {usuario && (
+          <span className={[
+            'text-[10px] font-semibold px-1.5 py-0.5 rounded-md',
+            usuario.rol === 'dueno'
+              ? 'bg-acento/20 text-acento'
+              : 'bg-white/10 text-white/60',
+          ].join(' ')}>
+            {usuario.rol === 'dueno' ? 'Dueño' : 'Empleado'}
+          </span>
+        )}
+
+        {/* Estado de caja */}
         {sinCaja && (
           <div className="flex items-center gap-1 text-yellow-300 text-xs font-medium">
             <AlertCircle size={13} />
@@ -84,6 +132,11 @@ function HeaderDia({ onAbrirConfig }: { onAbrirConfig: () => void }) {
             </span>
           </div>
         )}
+
+        {/* Indicador de sync */}
+        <IndicadorSync />
+
+        {/* Config */}
         <button
           type="button"
           onClick={onAbrirConfig}
@@ -93,16 +146,95 @@ function HeaderDia({ onAbrirConfig }: { onAbrirConfig: () => void }) {
         >
           <Settings size={16} />
         </button>
+
+        {/* Cerrar sesión (solo si Supabase configurado) */}
+        {supabaseConfigurado && usuario && (
+          <button
+            type="button"
+            onClick={handleCerrarSesion}
+            className="w-8 h-8 flex items-center justify-center rounded-lg
+                       text-white/60 hover:text-white hover:bg-white/10 transition-colors"
+            title={`Cerrar sesión (${usuario.nombre})`}
+          >
+            <LogOut size={15} />
+          </button>
+        )}
       </div>
     </header>
   )
+}
+
+// ─── Guard de ruta por rol ────────────────────────────────────────────────────
+
+function RutaProtegida({ children }: { children: React.ReactNode }) {
+  const usuario = useAuthStore((s) => s.usuario)
+  const location = useLocation()
+
+  if (!usuario) return null
+
+  if (!puedeAcceder(usuario.rol, location.pathname)) {
+    return <Navigate to="/" replace />
+  }
+
+  return <>{children}</>
 }
 
 // ─── App principal ────────────────────────────────────────────────────────────
 
 export default function App() {
   const { estado, error, primerUso } = useSeed()
+  const usuario    = useAuthStore((s) => s.usuario)
+  const isLoading  = useAuthStore((s) => s.isLoading)
+  const setUsuario = useAuthStore((s) => s.setUsuario)
+  const setIsLoading = useAuthStore((s) => s.setIsLoading)
 
+  const [vistaAuth, setVistaAuth] = useState<'login' | 'registro'>('login')
+
+  // Verificar sesión activa de Supabase al montar
+  useEffect(() => {
+    if (!supabaseConfigurado) {
+      setIsLoading(false)
+      return
+    }
+
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
+      if (!session) {
+        setIsLoading(false)
+        return
+      }
+
+      // Hay sesión activa → cargar perfil
+      const { data: perfil } = await supabase
+        .from('usuarios')
+        .select('id, tienda_id, email, nombre, rol, tiendas(nombre)')
+        .eq('id', session.user.id)
+        .single()
+
+      if (perfil) {
+        setUsuario({
+          id:           perfil.id,
+          email:        perfil.email,
+          nombre:       perfil.nombre,
+          rol:          perfil.rol as 'dueno' | 'empleado',
+          tiendaId:     perfil.tienda_id,
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          nombreTienda: (perfil.tiendas as any)?.nombre ?? 'Mi Tienda',
+        })
+      } else {
+        setIsLoading(false)
+      }
+    })
+  }, [setUsuario, setIsLoading])
+
+  // Iniciar/parar auto-sync según usuario
+  useEffect(() => {
+    if (usuario?.tiendaId) {
+      startAutoSync(usuario.tiendaId)
+    }
+    return () => stopAutoSync()
+  }, [usuario?.tiendaId])
+
+  // ── Carga de DB local
   if (estado === 'verificando' || estado === 'cargando') {
     const mensaje = estado === 'cargando'
       ? 'Cargando productos por primera vez…'
@@ -114,6 +246,17 @@ export default function App() {
     return <PantallaError error={error ?? 'Error desconocido'} />
   }
 
+  // ── Auth gate (solo si Supabase está configurado)
+  if (supabaseConfigurado) {
+    if (isLoading) return <PantallaCarga mensaje="Verificando sesión…" />
+
+    if (!usuario) {
+      return vistaAuth === 'login'
+        ? <LoginPage    onIrARegistro={() => setVistaAuth('registro')} />
+        : <RegisterPage onIrALogin={()   => setVistaAuth('login')}    />
+    }
+  }
+
   return (
     <BrowserRouter>
       <AppLayout primerUso={primerUso} />
@@ -123,32 +266,42 @@ export default function App() {
 
 // Separado para que los hooks reactivos tengan acceso al BrowserRouter
 function AppLayout({ primerUso }: { primerUso: boolean }) {
-  const sesion = useSesionActual()
+  const sesion  = useSesionActual()
+  const usuario = useAuthStore((s) => s.usuario)
   const sinCaja = sesion === null
-  // Abrir config en primer uso para que el tendero configure el nombre de la tienda
   const [mostrarConfig, setMostrarConfig] = useState(primerUso)
 
-  // Badge rojo en Productos/Stock cuando hay productos bajo mínimo
-  const bajoStock = useProductosBajoStock()
+  const bajoStock    = useProductosBajoStock()
   const hayBajoStock = (bajoStock?.length ?? 0) > 0
+  const tour         = useOnboarding()
+  const mostrarTour  = tour.tourCompletado === false
 
-  // Tour de onboarding — fuente de verdad única en este componente
-  const tour = useOnboarding()
-  const mostrarTour = tour.tourCompletado === false
+  const rol = usuario?.rol ?? 'dueno'
 
-  const navItems = [
-    { to: '/',            icon: ShoppingCart, label: 'POS',        badge: false,        tourId: undefined     },
-    { to: '/fiados',      icon: BookOpen,     label: 'Fiados',     badge: false,        tourId: 'nav-fiados'  },
-    { to: '/productos',   icon: Package,      label: 'Productos',  badge: hayBajoStock, tourId: undefined     },
-    { to: '/inventario',  icon: Archive,      label: 'Stock',      badge: hayBajoStock, tourId: undefined     },
-    { to: '/proveedores', icon: Truck,        label: 'Proveed.',   badge: false,        tourId: undefined     },
-    { to: '/caja',        icon: DollarSign,   label: 'Caja',       badge: sinCaja,      tourId: 'nav-caja'    },
-    { to: '/reportes',    icon: BarChart2,    label: 'Reportes',   badge: false,        tourId: undefined     },
+  // Pull manual al hacer clic en el indicador de sync
+  const [sincronizando, setSincronizando] = useState(false)
+  const handlePullManual = async () => {
+    if (!usuario?.tiendaId || sincronizando) return
+    setSincronizando(true)
+    await pullFromSupabase(usuario.tiendaId)
+    setSincronizando(false)
+  }
+
+  // Items de navegación filtrados según el rol
+  const navItemsTodos = [
+    { to: '/',            icon: ShoppingCart, label: 'POS',       badge: false,        tourId: undefined,    roles: ['dueno', 'empleado'] },
+    { to: '/fiados',      icon: BookOpen,     label: 'Fiados',    badge: false,        tourId: 'nav-fiados', roles: ['dueno', 'empleado'] },
+    { to: '/productos',   icon: Package,      label: 'Productos', badge: hayBajoStock, tourId: undefined,    roles: ['dueno']             },
+    { to: '/inventario',  icon: Archive,      label: 'Stock',     badge: hayBajoStock, tourId: undefined,    roles: ['dueno']             },
+    { to: '/proveedores', icon: Truck,        label: 'Proveed.',  badge: false,        tourId: undefined,    roles: ['dueno']             },
+    { to: '/caja',        icon: DollarSign,   label: 'Caja',      badge: sinCaja,      tourId: 'nav-caja',   roles: ['dueno']             },
+    { to: '/reportes',    icon: BarChart2,    label: 'Reportes',  badge: false,        tourId: undefined,    roles: ['dueno']             },
   ]
+
+  const navItems = navItemsTodos.filter((item) => item.roles.includes(rol))
 
   return (
     <div className="flex flex-col h-screen bg-fondo overflow-hidden">
-      {/* Header superior */}
       <HeaderDia onAbrirConfig={() => setMostrarConfig(true)} />
 
       <div className="flex flex-1 overflow-hidden">
@@ -174,23 +327,40 @@ function AppLayout({ primerUso }: { primerUso: boolean }) {
               )}
             </NavLink>
           ))}
+
+          {/* Spacer */}
+          <div className="flex-1" />
+
+          {/* Botón de sync manual (solo con Supabase configurado) */}
+          {supabaseConfigurado && usuario && (
+            <button
+              type="button"
+              onClick={handlePullManual}
+              disabled={sincronizando}
+              title="Sincronizar datos"
+              className="w-12 h-12 flex flex-col items-center justify-center rounded-xl gap-1
+                         text-white/40 hover:text-white hover:bg-white/10 transition-colors"
+            >
+              <RefreshCw size={16} className={sincronizando ? 'animate-spin' : ''} />
+              <span className="text-[9px] leading-none">Sync</span>
+            </button>
+          )}
         </nav>
 
         {/* Contenido principal */}
         <main className="flex-1 overflow-hidden">
           <Routes>
-            <Route path="/"            element={<POSPage />}         />
-            <Route path="/fiados"      element={<FiadosPage />}      />
-            <Route path="/productos"   element={<ProductosPage />}   />
-            <Route path="/inventario"  element={<InventarioPage />}  />
-            <Route path="/proveedores" element={<ProveedoresPage />} />
-            <Route path="/caja"        element={<CajaPage />}        />
-            <Route path="/reportes"    element={<ReportesPage />}    />
+            <Route path="/"            element={<POSPage />}                                                          />
+            <Route path="/fiados"      element={<FiadosPage />}                                                       />
+            <Route path="/productos"   element={<RutaProtegida><ProductosPage /></RutaProtegida>}                     />
+            <Route path="/inventario"  element={<RutaProtegida><InventarioPage /></RutaProtegida>}                    />
+            <Route path="/proveedores" element={<RutaProtegida><ProveedoresPage /></RutaProtegida>}                   />
+            <Route path="/caja"        element={<RutaProtegida><CajaPage /></RutaProtegida>}                          />
+            <Route path="/reportes"    element={<RutaProtegida><ReportesPage /></RutaProtegida>}                      />
           </Routes>
         </main>
       </div>
 
-      {/* Modal de configuración */}
       {mostrarConfig && (
         <ConfigModal
           onClose={() => setMostrarConfig(false)}
@@ -198,7 +368,6 @@ function AppLayout({ primerUso }: { primerUso: boolean }) {
         />
       )}
 
-      {/* Tour de onboarding — solo visible la primera vez (tourCompletado === false) */}
       {mostrarTour && (
         <TourOverlay
           pasoActual={tour.pasoActual}
@@ -211,7 +380,6 @@ function AppLayout({ primerUso }: { primerUso: boolean }) {
         />
       )}
 
-      {/* Banner de instalación PWA */}
       <BannerInstalacion />
     </div>
   )

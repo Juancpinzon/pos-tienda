@@ -1,9 +1,11 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
-import { X, Store, Phone, MapPin, FileText, Receipt, BookOpen } from 'lucide-react'
+import { X, Store, Phone, MapPin, FileText, Receipt, BookOpen, Users, Send, CheckCircle } from 'lucide-react'
 import { useConfig, guardarConfig } from '../../hooks/useConfig'
+import { supabase, supabaseConfigurado } from '../../lib/supabase'
+import { useAuthStore } from '../../stores/authStore'
 
 // ─── Schema ───────────────────────────────────────────────────────────────────
 
@@ -50,6 +52,131 @@ function Campo({
 }
 
 // ─── Componente ───────────────────────────────────────────────────────────────
+
+// ─── Sección de invitar empleado ─────────────────────────────────────────────
+
+function SeccionEquipo() {
+  const usuario = useAuthStore((s) => s.usuario)
+  const [emailEmpleado, setEmailEmpleado] = useState('')
+  const [nombreEmpleado, setNombreEmpleado] = useState('')
+  const [cargando, setCargando] = useState(false)
+  const [resultado, setResultado] = useState<{ ok: boolean; msg: string } | null>(null)
+
+  if (!supabaseConfigurado || usuario?.rol !== 'dueno') return null
+
+  const handleInvitar = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!usuario?.tiendaId) return
+    setCargando(true)
+    setResultado(null)
+
+    try {
+      // Crear usuario con contraseña temporal — el empleado la cambia en su primer login
+      const contrasenaTemporal = crypto.randomUUID().slice(0, 12)
+
+      const { data: signupData, error: signupError } = await supabase.auth.signUp({
+        email: emailEmpleado.trim().toLowerCase(),
+        password: contrasenaTemporal,
+        options: { data: { nombre: nombreEmpleado.trim() } },
+      })
+
+      if (signupError && !signupError.message.includes('already registered')) {
+        setResultado({ ok: false, msg: signupError.message })
+        return
+      }
+
+      const userId = signupData?.user?.id
+      if (!userId) {
+        setResultado({ ok: false, msg: 'No se pudo crear la cuenta. Intenta de nuevo.' })
+        return
+      }
+
+      // Registrar en tabla usuarios con rol 'empleado'
+      const { error: usuarioError } = await supabase.from('usuarios').upsert({
+        id:        userId,
+        tienda_id: usuario.tiendaId,
+        email:     emailEmpleado.trim().toLowerCase(),
+        nombre:    nombreEmpleado.trim(),
+        rol:       'empleado',
+      })
+
+      if (usuarioError) {
+        setResultado({ ok: false, msg: 'Error al vincular el empleado a la tienda.' })
+        return
+      }
+
+      setResultado({
+        ok: true,
+        msg: `¡Listo! ${nombreEmpleado} puede entrar con su correo y contraseña temporal: ${contrasenaTemporal}`,
+      })
+      setEmailEmpleado('')
+      setNombreEmpleado('')
+    } catch {
+      setResultado({ ok: false, msg: 'Error de conexión. Verifica tu internet.' })
+    } finally {
+      setCargando(false)
+    }
+  }
+
+  return (
+    <section>
+      <p className="text-xs font-semibold text-suave uppercase tracking-wider mb-3 flex items-center gap-1.5">
+        <Users size={13} />
+        Equipo
+      </p>
+      <div className="bg-fondo rounded-xl border border-borde p-4 flex flex-col gap-3">
+        <p className="text-sm text-texto font-medium">Agregar empleado</p>
+        <p className="text-xs text-suave">
+          El empleado podrá usar el POS y Fiados. No tendrá acceso a Caja, Reportes ni Configuración.
+        </p>
+        <form onSubmit={handleInvitar} className="flex flex-col gap-2.5">
+          <input
+            type="text"
+            value={nombreEmpleado}
+            onChange={(e) => setNombreEmpleado(e.target.value)}
+            placeholder="Nombre del empleado"
+            required
+            maxLength={60}
+            className={INPUT_CLS}
+          />
+          <input
+            type="email"
+            value={emailEmpleado}
+            onChange={(e) => setEmailEmpleado(e.target.value)}
+            placeholder="Correo del empleado"
+            required
+            className={INPUT_CLS}
+          />
+          <button
+            type="submit"
+            disabled={cargando || !emailEmpleado || !nombreEmpleado}
+            className="h-10 bg-primario text-white rounded-xl text-sm font-semibold
+                       flex items-center justify-center gap-2
+                       hover:bg-primario-hover active:scale-95 transition-all
+                       disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            <Send size={14} />
+            {cargando ? 'Creando acceso…' : 'Crear acceso'}
+          </button>
+        </form>
+
+        {resultado && (
+          <div className={[
+            'rounded-xl px-3 py-3 flex gap-2',
+            resultado.ok
+              ? 'bg-exito/8 border border-exito/20'
+              : 'bg-peligro/8 border border-peligro/20',
+          ].join(' ')}>
+            {resultado.ok && <CheckCircle size={16} className="text-exito shrink-0 mt-0.5" />}
+            <p className={`text-xs ${resultado.ok ? 'text-exito' : 'text-peligro'} leading-relaxed`}>
+              {resultado.msg}
+            </p>
+          </div>
+        )}
+      </div>
+    </section>
+  )
+}
 
 interface ConfigModalProps {
   onClose: () => void
@@ -174,6 +301,9 @@ export function ConfigModal({ onClose, onReiniciarTour }: ConfigModalProps) {
                 </Campo>
               </div>
             </section>
+
+            {/* Equipo (solo dueño + Supabase configurado) */}
+            <SeccionEquipo />
 
             {/* Tour de onboarding */}
             {onReiniciarTour && (
