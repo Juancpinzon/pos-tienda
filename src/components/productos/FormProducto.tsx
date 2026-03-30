@@ -250,13 +250,15 @@ export function FormProducto({ producto, nombrePreset, onClose, onGuardado }: Fo
             </div>
 
             {/* ── Calculadora de precio sugerido ─────────────────────────── */}
-            {pc > 0 && (
-              <div className="bg-primario/5 border border-primario/20 rounded-xl p-3 flex flex-col gap-2.5">
-                <div className="flex items-center justify-between gap-3">
-                  <p className="text-xs font-semibold text-primario">Calculadora de precio de venta</p>
-                  <div className="flex items-center gap-1.5 shrink-0">
-                    <label className="text-xs text-suave">Utilidad:</label>
-                    <div className="relative w-20">
+            {pvSugerido > 0 && (
+              <div className="bg-primario/5 border border-primario/20 rounded-xl p-3 flex flex-col gap-3">
+
+                {/* Fila 1: label + input utilidad */}
+                <div className="flex items-center justify-between">
+                  <p className="text-xs font-semibold text-primario">Precio de venta sugerido</p>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <span className="text-xs text-suave">Utilidad:</span>
+                    <div className="relative w-[72px]">
                       <input
                         type="number"
                         value={utilidad}
@@ -266,43 +268,50 @@ export function FormProducto({ producto, nombrePreset, onClose, onGuardado }: Fo
                         }}
                         min={0}
                         max={99}
-                        className="w-full h-8 px-2 pr-6 border border-primario/30 rounded-lg text-sm moneda
-                                   text-texto focus:outline-none focus:ring-1 focus:ring-primario/40 bg-white"
+                        className="w-full h-8 px-2 pr-5 border border-primario/30 rounded-lg text-sm moneda
+                                   text-texto bg-white focus:outline-none focus:ring-1 focus:ring-primario/40"
                       />
-                      <span className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-suave">%</span>
+                      <span className="absolute right-1.5 top-1/2 -translate-y-1/2 text-xs text-suave pointer-events-none">%</span>
                     </div>
                   </div>
                 </div>
 
-                {pvSugerido > 0 && (
-                  <>
-                    <p className="text-xs text-suave leading-relaxed">
-                      Con <span className="font-semibold text-primario">{utilidad}%</span> de utilidad sobre costo{' '}
-                      <span className="moneda font-semibold">${pc.toLocaleString('es-CO')}</span>
-                      {' '}→ PV sugerido:{' '}
-                      <span className="moneda font-bold text-primario">${pvSugerido.toLocaleString('es-CO')}</span>
+                {/* Fila 2: PV sugerido destacado */}
+                <div className="flex items-baseline gap-2">
+                  <span className="text-xs text-suave">PV sugerido:</span>
+                  <span className="moneda font-bold text-lg text-primario leading-none">
+                    ${pvSugerido.toLocaleString('es-CO')}
+                  </span>
+                  <span className="text-[10px] text-suave/70 ml-auto">
+                    = ${pc.toLocaleString('es-CO')} ÷ (1 − {utilidad}%)
+                  </span>
+                </div>
+
+                {/* Fila 3: botón + precio actual */}
+                <div className="flex items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setValue('precio', pvSugerido, { shouldValidate: true })}
+                    className={[
+                      'h-10 px-4 rounded-xl text-sm font-bold transition-all shrink-0',
+                      Number(precioActualW) === pvSugerido
+                        ? 'bg-primario text-white cursor-default'
+                        : 'bg-primario text-white hover:bg-primario-hover active:scale-95',
+                    ].join(' ')}
+                  >
+                    {Number(precioActualW) === pvSugerido
+                      ? `✓ Usando $${pvSugerido.toLocaleString('es-CO')}`
+                      : `✓ Usar $${pvSugerido.toLocaleString('es-CO')}`}
+                  </button>
+                  {Number(precioActualW) > 0 && Number(precioActualW) !== pvSugerido && (
+                    <p className="text-sm text-suave">
+                      Actual:{' '}
+                      <span className="moneda font-semibold text-texto">
+                        ${Number(precioActualW).toLocaleString('es-CO')}
+                      </span>
                     </p>
-                    <div className="flex items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={() => setValue('precio', pvSugerido, { shouldValidate: true })}
-                        className={[
-                          'h-8 px-3 rounded-lg text-xs font-semibold transition-all',
-                          precioActualW === pvSugerido
-                            ? 'bg-primario text-white'
-                            : 'bg-primario/15 text-primario hover:bg-primario/25',
-                        ].join(' ')}
-                      >
-                        {precioActualW === pvSugerido ? '✓ Usando sugerido' : 'Usar sugerido'}
-                      </button>
-                      {precioActualW > 0 && precioActualW !== pvSugerido && (
-                        <p className="text-xs text-suave">
-                          Precio actual: <span className="moneda font-medium">${Number(precioActualW).toLocaleString('es-CO')}</span>
-                        </p>
-                      )}
-                    </div>
-                  </>
-                )}
+                  )}
+                </div>
               </div>
             )}
 
