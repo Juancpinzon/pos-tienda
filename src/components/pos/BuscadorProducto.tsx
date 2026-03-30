@@ -1,9 +1,16 @@
-import { useState, useEffect, useRef } from 'react'
-import { Search, Ghost, X } from 'lucide-react'
+import { useState, useEffect, useRef, useCallback } from 'react'
+import { Search, Ghost, X, ScanBarcode } from 'lucide-react'
 import { db } from '../../db/database'
 import type { Producto } from '../../db/schema'
 import { useVentaStore } from '../../stores/ventaStore'
 import { formatCOP, parsearEntero } from '../../utils/moneda'
+import { EscanerCodigoBarras } from './EscanerCodigoBarras'
+
+// Resultado de búsqueda por código de barras
+type ResultadoScan =
+  | { tipo: 'encontrado'; producto: Producto }
+  | { tipo: 'no_encontrado'; codigo: string }
+  | null
 
 export function BuscadorProducto() {
   const [query, setQuery] = useState('')
@@ -12,6 +19,8 @@ export function BuscadorProducto() {
   const [mostrarFantasma, setMostrarFantasma] = useState(false)
   const [fantasmaDesc, setFantasmaDesc] = useState('')
   const [fantasmaPrecio, setFantasmaPrecio] = useState('')
+  const [mostrarEscaner, setMostrarEscaner] = useState(false)
+  const [resultadoScan, setResultadoScan] = useState<ResultadoScan>(null)
 
   const inputRef = useRef<HTMLInputElement>(null)
   const contenedorRef = useRef<HTMLDivElement>(null)
@@ -85,6 +94,34 @@ export function BuscadorProducto() {
     inputRef.current?.focus()
   }
 
+  // ── Escáner de código de barras ────────────────────────────────────────────
+
+  const handleCodigoDetectado = useCallback(async (codigo: string) => {
+    setMostrarEscaner(false)
+
+    // Buscar producto en Dexie por código de barras (exacto)
+    const producto = await db.productos
+      .where('codigoBarras').equals(codigo)
+      .filter((p) => p.activo && !p.esFantasma)
+      .first()
+
+    if (producto) {
+      // Encontrado → agregar al carrito directamente
+      agregarItem({
+        productoId: producto.id,
+        nombreProducto: producto.nombre,
+        cantidad: 1,
+        precioUnitario: producto.precio,
+        descuento: 0,
+        esProductoFantasma: false,
+      })
+      setResultadoScan(null)
+    } else {
+      // No encontrado → mostrar opciones
+      setResultadoScan({ tipo: 'no_encontrado', codigo })
+    }
+  }, [agregarItem])
+
   return (
     <div ref={contenedorRef} className="relative w-full">
       {/* Input de búsqueda */}
@@ -112,6 +149,18 @@ export function BuscadorProducto() {
           )}
         </div>
 
+        {/* Botón escáner de código de barras */}
+        <button
+          type="button"
+          onClick={() => { setMostrarEscaner(true); setAbierto(false); setResultadoScan(null) }}
+          title="Escanear código de barras"
+          className="flex items-center justify-center w-12 h-12 border border-borde
+                     text-suave hover:border-primario hover:text-primario rounded-xl
+                     transition-colors shrink-0"
+        >
+          <ScanBarcode size={20} />
+        </button>
+
         {/* Botón vender sin registrar */}
         <button
           type="button"
@@ -124,6 +173,40 @@ export function BuscadorProducto() {
           Sin registrar
         </button>
       </div>
+
+      {/* Resultado de scan: producto no encontrado */}
+      {resultadoScan?.tipo === 'no_encontrado' && (
+        <div className="absolute top-full left-0 right-0 z-50 mt-1
+                        bg-white border border-advertencia/50 rounded-xl shadow-lg p-4">
+          <p className="text-sm font-semibold text-advertencia mb-1">
+            Código <span className="font-mono">{resultadoScan.codigo}</span> no registrado
+          </p>
+          <p className="text-xs text-suave mb-3">¿Qué desea hacer?</p>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                setFantasmaDesc(resultadoScan.codigo)
+                setResultadoScan(null)
+                setMostrarFantasma(true)
+              }}
+              className="flex-1 h-10 rounded-xl border border-acento/40 text-acento
+                         text-sm font-semibold hover:bg-acento/5 transition-colors"
+            >
+              <Ghost size={14} className="inline mr-1.5" />
+              Vender sin registrar
+            </button>
+            <button
+              type="button"
+              onClick={() => setResultadoScan(null)}
+              className="h-10 px-4 rounded-xl border border-borde text-suave
+                         text-sm hover:bg-fondo transition-colors"
+            >
+              Cancelar
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Dropdown resultados */}
       {abierto && resultados.length > 0 && (
@@ -176,6 +259,14 @@ export function BuscadorProducto() {
             </button>
           </div>
         </div>
+      )}
+
+      {/* Modal escáner de código de barras */}
+      {mostrarEscaner && (
+        <EscanerCodigoBarras
+          onCodigoDetectado={handleCodigoDetectado}
+          onClose={() => setMostrarEscaner(false)}
+        />
       )}
 
       {/* Formulario producto fantasma */}

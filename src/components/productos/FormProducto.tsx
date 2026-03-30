@@ -2,9 +2,10 @@ import { useEffect, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
-import { X, Package, ChevronDown } from 'lucide-react'
+import { X, Package, ChevronDown, ScanBarcode } from 'lucide-react'
 import { useCategorias, crearProducto, editarProducto } from '../../hooks/useProductos'
 import type { Producto } from '../../db/schema'
+import { EscanerCodigoBarras } from '../pos/EscanerCodigoBarras'
 
 // ─── Schema de validación ─────────────────────────────────────────────────────
 
@@ -106,6 +107,9 @@ export function FormProducto({ producto, nombrePreset, onClose, onGuardado }: Fo
 
   // ─── Calculadora de precio sugerido ──────────────────────────────────────
   const [utilidad, setUtilidad] = useState(30)  // % de utilidad deseada
+
+  // ─── Escáner de código de barras ──────────────────────────────────────────
+  const [mostrarEscanerCodigo, setMostrarEscanerCodigo] = useState(false)
 
   // PV = PC / (1 - %utilidad/100)  — fórmula margen sobre precio de venta
   const pc = parseFloat(precioCompraW ?? '') || 0
@@ -240,12 +244,23 @@ export function FormProducto({ producto, nombrePreset, onClose, onGuardado }: Fo
               </Campo>
 
               <Campo label="Código de barras" error={errors.codigoBarras?.message}>
-                <input
-                  {...register('codigoBarras')}
-                  type="text"
-                  placeholder="EAN opcional"
-                  className={INPUT_CLS}
-                />
+                <div className="relative flex gap-1.5">
+                  <input
+                    {...register('codigoBarras')}
+                    type="text"
+                    placeholder="EAN opcional"
+                    className={`${INPUT_CLS} flex-1 pr-10`}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setMostrarEscanerCodigo(true)}
+                    title="Escanear código de barras"
+                    className="absolute right-2 top-1/2 -translate-y-1/2
+                               text-suave hover:text-primario transition-colors"
+                  >
+                    <ScanBarcode size={18} />
+                  </button>
+                </div>
               </Campo>
             </div>
 
@@ -413,6 +428,17 @@ export function FormProducto({ producto, nombrePreset, onClose, onGuardado }: Fo
           </div>
         </form>
       </div>
+
+      {/* Modal escáner de código de barras para el campo EAN */}
+      {mostrarEscanerCodigo && (
+        <EscanerCodigoBarras
+          onCodigoDetectado={(codigo) => {
+            setValue('codigoBarras', codigo, { shouldValidate: true })
+            setMostrarEscanerCodigo(false)
+          }}
+          onClose={() => setMostrarEscanerCodigo(false)}
+        />
+      )}
     </div>
   )
 }

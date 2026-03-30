@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { X, Plus, Trash2, Search, CheckCircle2, Truck, Camera, AlertTriangle, TrendingUp } from 'lucide-react'
+import { X, Plus, Trash2, Search, CheckCircle2, Truck, Camera, AlertTriangle, TrendingUp, ScanBarcode } from 'lucide-react'
 import {
   registrarCompra,
   buscarProveedores,
@@ -12,6 +12,7 @@ import { formatCOP } from '../../utils/moneda'
 import { db } from '../../db/database'
 import type { CompraProveedor, Producto, Proveedor } from '../../db/schema'
 import { FotoFacturaModal } from './FotoFacturaModal'
+import { EscanerCodigoBarras } from '../pos/EscanerCodigoBarras'
 
 // ─── Tipo para alertas de subida de costo ────────────────────────────────────
 interface AlertaPrecio {
@@ -62,6 +63,7 @@ export function NuevaCompraModal({ proveedorInicial, onClose }: NuevaCompraModal
 
   // ── Estado: OCR modal ─────────────────────────────────────────────────────
   const [mostrarOCR, setMostrarOCR] = useState(false)
+  const [mostrarEscanerCompra, setMostrarEscanerCompra] = useState(false)
 
   // ── Estado: envío ─────────────────────────────────────────────────────────
   const [guardando, setGuardando] = useState(false)
@@ -533,7 +535,19 @@ export function NuevaCompraModal({ proveedorInicial, onClose }: NuevaCompraModal
 
             {/* Formulario agregar ítem */}
             <div className="p-3 border-t border-borde/30 bg-fondo/50 flex flex-col gap-2">
-              <p className="text-xs font-medium text-suave">Agregar producto</p>
+              <div className="flex items-center justify-between">
+                <p className="text-xs font-medium text-suave">Agregar producto</p>
+                <button
+                  type="button"
+                  onClick={() => setMostrarEscanerCompra(true)}
+                  title="Buscar por código de barras"
+                  className="flex items-center gap-1 text-primario text-xs font-medium
+                             hover:opacity-75 transition-opacity"
+                >
+                  <ScanBarcode size={14} />
+                  Escanear
+                </button>
+              </div>
 
               {/* Nombre producto con autocompletar */}
               <div className="relative">
@@ -736,6 +750,35 @@ export function NuevaCompraModal({ proveedorInicial, onClose }: NuevaCompraModal
         <FotoFacturaModal
           onAgregar={(nuevosItems) => setItems((prev) => [...prev, ...nuevosItems])}
           onClose={() => setMostrarOCR(false)}
+        />
+      )}
+
+      {/* Escáner de código de barras — busca producto al registrar compra */}
+      {mostrarEscanerCompra && (
+        <EscanerCodigoBarras
+          onCodigoDetectado={async (codigo) => {
+            setMostrarEscanerCompra(false)
+            // Buscar producto por código de barras en el catálogo
+            const prod = await import('../../db/database').then(({ db }) =>
+              db.productos
+                .where('codigoBarras').equals(codigo)
+                .filter((p) => p.activo && !p.esFantasma)
+                .first()
+            )
+            if (prod) {
+              // Pre-llenar el campo nombre y precio de compra anterior
+              setINombre(prod.nombre)
+              setIProductoId(prod.id)
+              if (prod.precioCompra) setIPrecio(String(prod.precioCompra))
+              nombreInputRef.current?.focus()
+            } else {
+              // No encontrado: pre-llenar con el código como nombre
+              setINombre(codigo)
+              setIProductoId(undefined)
+              nombreInputRef.current?.focus()
+            }
+          }}
+          onClose={() => setMostrarEscanerCompra(false)}
         />
       )}
 
