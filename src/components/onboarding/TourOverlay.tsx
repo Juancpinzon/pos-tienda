@@ -237,13 +237,13 @@ function PantallaFin({ onClose }: { onClose: () => void }) {
 
         <div>
           <p className="font-display font-bold text-xl text-texto mb-2">
-            ¡Listo! Ya sabes lo básico
+            ¡Listo! Su tienda está configurada
           </p>
           <p className="text-sm text-suave leading-relaxed">
-            Ya puedes empezar a vender. Si en algún momento tienes dudas,
-            puedes repetir este tour desde{' '}
-            <strong className="text-texto">Configuración</strong> (toca el nombre
-            de tu tienda arriba).
+            Los datos se guardan solos — usted solo venda. Si en algún momento
+            tiene dudas, puede repetir este tour desde{' '}
+            <strong className="text-texto">Configuración</strong> (toque el
+            nombre de su tienda arriba).
           </p>
         </div>
 

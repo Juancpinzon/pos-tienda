@@ -183,7 +183,7 @@ export default function FiadosPage() {
           )}
 
           {clientes && clientes.length > 0 && (
-            <div className="divide-y divide-borde/50">
+            <div data-tour="lista-clientes-fiados" className="divide-y divide-borde/50">
               {clientes.map((cliente) => {
                 const deudaPositiva = cliente.totalDeuda > 0
                 const activo = clienteSeleccionadoId === cliente.id

@@ -3,10 +3,9 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { db } from '../db/database'
+import { useAuthStore } from '../stores/authStore'
 
 // ─── Definición de pasos ──────────────────────────────────────────────────────
-
-export const TOTAL_PASOS = 7
 
 export interface PasoTour {
   id: number
@@ -15,6 +14,7 @@ export interface PasoTour {
   titulo: string
   descripcion: string
   posTooltip?: 'arriba' | 'abajo' | 'izquierda' | 'derecha'
+  soloRol?: 'dueno' | 'empleado'  // si se define, el paso solo se muestra para ese rol
 }
 
 export const PASOS_TOUR: PasoTour[] = [
@@ -77,8 +77,54 @@ export const PASOS_TOUR: PasoTour[] = [
     emoji: '🏦',
     titulo: 'La Caja',
     descripcion:
-      'Abre la caja al comenzar el día y ciérrala al terminar para ver cuánto hiciste. Te ayuda a cuadrar la plata sin enredos.',
+      'Abra la caja al comenzar el día y ciérrela al terminar para ver cuánto hizo. Le ayuda a cuadrar la plata sin enredos.',
     posTooltip: 'derecha',
+  },
+  {
+    id: 8,
+    target: 'btn-foto-factura',
+    emoji: '📷',
+    titulo: 'Saque foto a la factura',
+    descripcion:
+      'Cuando llegue el proveedor, tome una foto de la factura. La app lee los productos y precios sola.',
+    posTooltip: 'abajo',
+  },
+  {
+    id: 9,
+    target: 'calculadora-precio',
+    emoji: '💰',
+    titulo: 'Nunca pierda plata en el precio',
+    descripcion:
+      'Ingrese lo que le costó el producto y la app le dice a cuánto venderlo para ganar lo que usted quiera.',
+    posTooltip: 'abajo',
+  },
+  {
+    id: 10,
+    target: 'lista-clientes-fiados',
+    emoji: '📅',
+    titulo: 'Sepa quién le debe hace más tiempo',
+    descripcion:
+      'Los clientes con más días sin pagar aparecen arriba con una marca roja. Cóbreles primero a ellos.',
+    posTooltip: 'derecha',
+  },
+  {
+    id: 11,
+    target: 'seccion-equipo',
+    emoji: '👥',
+    titulo: 'Agregue a su empleado',
+    descripcion:
+      'Vaya a Configuración y agregue el correo de su empleado. Él solo podrá ver ventas y fiados — los reportes y la caja son solo suyos.',
+    posTooltip: 'abajo',
+    soloRol: 'dueno',
+  },
+  {
+    id: 12,
+    target: 'indicador-sync',
+    emoji: '🔄',
+    titulo: 'Sus datos están en la nube',
+    descripcion:
+      'El punto verde significa que todo está guardado. Si se va la luz o cambia de celular, sus datos no se pierden.',
+    posTooltip: 'abajo',
   },
 ]
 
@@ -101,6 +147,11 @@ export interface TourState {
 export function useOnboarding(): TourState {
   const [tourCompletado, setTourCompletado] = useState<boolean | undefined>(undefined)
   const [pasoActual, setPasoActual] = useState(0)
+  const rol = useAuthStore((s) => s.usuario?.rol ?? 'dueno')
+
+  // Pasos activos filtrados según rol del usuario
+  const pasosActivos = PASOS_TOUR.filter((p) => !p.soloRol || p.soloRol === rol)
+  const totalPasos   = pasosActivos.length
 
   // Carga inicial: leer estado guardado en DB
   useEffect(() => {
@@ -133,9 +184,9 @@ export function useOnboarding(): TourState {
   return {
     tourCompletado,
     pasoActual,
-    totalPasos: TOTAL_PASOS,
-    pasoInfo: PASOS_TOUR[pasoActual],
-    siguientePaso: () => setPasoActual((p) => Math.min(p + 1, TOTAL_PASOS - 1)),
+    totalPasos,
+    pasoInfo: pasosActivos[pasoActual] ?? pasosActivos[0],
+    siguientePaso: () => setPasoActual((p) => Math.min(p + 1, totalPasos - 1)),
     anteriorPaso:  () => setPasoActual((p) => Math.max(0, p - 1)),
     saltarTour:    marcarCompletado,
     completarTour: marcarCompletado,

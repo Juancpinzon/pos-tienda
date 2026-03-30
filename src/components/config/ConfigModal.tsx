@@ -160,7 +160,7 @@ function SeccionEquipo() {
   }
 
   return (
-    <section>
+    <section data-tour="seccion-equipo">
       <p className="text-xs font-semibold text-suave uppercase tracking-wider mb-3 flex items-center gap-1.5">
         <Users size={13} />
         Equipo

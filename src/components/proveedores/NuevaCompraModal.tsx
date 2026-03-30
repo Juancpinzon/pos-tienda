@@ -490,6 +490,7 @@ export function NuevaCompraModal({ proveedorInicial, onClose }: NuevaCompraModal
               )}
               <button
                 type="button"
+                data-tour="btn-foto-factura"
                 onClick={() => setMostrarOCR(true)}
                 className="flex items-center gap-1.5 h-8 px-3 bg-primario/10 text-primario
                            border border-primario/30 rounded-lg text-xs font-semibold

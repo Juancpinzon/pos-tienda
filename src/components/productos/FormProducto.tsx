@@ -251,7 +251,7 @@ export function FormProducto({ producto, nombrePreset, onClose, onGuardado }: Fo
 
             {/* ── Calculadora de precio sugerido ─────────────────────────── */}
             {pvSugerido > 0 && (
-              <div className="bg-primario/5 border border-primario/20 rounded-xl p-3 flex flex-col gap-3">
+              <div data-tour="calculadora-precio" className="bg-primario/5 border border-primario/20 rounded-xl p-3 flex flex-col gap-3">
 
                 {/* Fila 1: label + input utilidad */}
                 <div className="flex items-center justify-between">

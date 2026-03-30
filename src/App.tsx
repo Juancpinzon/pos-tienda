@@ -65,7 +65,7 @@ function IndicadorSync() {
   }[sync.estado]
 
   return (
-    <div className="flex items-center gap-1.5" title={config.label}>
+    <div data-tour="indicador-sync" className="flex items-center gap-1.5" title={config.label}>
       <span className={`w-2 h-2 rounded-full shrink-0 ${config.dot} ${sync.estado === 'pendiente' ? 'animate-pulse' : ''}`} />
       <span className="text-white/50 text-xs hidden lg:inline">{config.label}</span>
     </div>
