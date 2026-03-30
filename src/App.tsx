@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { BrowserRouter, Routes, Route, NavLink, Navigate, useLocation } from 'react-router-dom'
-import { ShoppingCart, BookOpen, Package, DollarSign, BarChart2, AlertCircle, Settings, Truck, Archive, LogOut, RefreshCw } from 'lucide-react'
+import { ShoppingCart, BookOpen, Package, DollarSign, BarChart2, AlertCircle, Settings, Truck, Archive, LogOut, RefreshCw, Moon, Sun } from 'lucide-react'
+import { useThemeStore, esModoOscuroActivo } from './stores/themeStore'
 import { useSeed } from './hooks/useSeed'
 import { useSesionActual, useResumenCaja } from './hooks/useCaja'
 import { useConfig } from './hooks/useConfig'
@@ -75,13 +76,16 @@ function IndicadorSync() {
 // ─── Header con totales del día ───────────────────────────────────────────────
 
 function HeaderDia({ onAbrirConfig }: { onAbrirConfig: () => void }) {
-  const sesion       = useSesionActual()
-  const resumen      = useResumenCaja(sesion?.id)
-  const config       = useConfig()
-  const usuario      = useAuthStore((s) => s.usuario)
-  const cerrarSesion = useAuthStore((s) => s.cerrarSesion)
-  const sinCaja      = sesion === null
-  const esDueno      = !usuario || usuario.rol === 'dueno'
+  const sesion        = useSesionActual()
+  const resumen       = useResumenCaja(sesion?.id)
+  const config        = useConfig()
+  const usuario       = useAuthStore((s) => s.usuario)
+  const cerrarSesion  = useAuthStore((s) => s.cerrarSesion)
+  const sinCaja       = sesion === null
+  const esDueno       = !usuario || usuario.rol === 'dueno'
+  const tema          = useThemeStore((s) => s.tema)
+  const toggleTema    = useThemeStore((s) => s.toggleTema)
+  const oscuroActivo  = esModoOscuroActivo(tema)
 
   const nombreTienda = config?.nombreTienda ?? usuario?.nombreTienda ?? 'POS Tienda'
 
@@ -159,6 +163,17 @@ function HeaderDia({ onAbrirConfig }: { onAbrirConfig: () => void }) {
             <Settings size={16} />
           </button>
         )}
+
+        {/* Toggle modo oscuro */}
+        <button
+          type="button"
+          onClick={toggleTema}
+          title={oscuroActivo ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'}
+          className="w-8 h-8 flex items-center justify-center rounded-lg
+                     text-white/60 hover:text-white hover:bg-white/10 transition-colors"
+        >
+          {oscuroActivo ? <Sun size={16} /> : <Moon size={16} />}
+        </button>
 
         {/* Cerrar sesión (solo si Supabase configurado) */}
         {supabaseConfigurado && usuario && (
@@ -283,6 +298,21 @@ function AppLayout({ primerUso }: { primerUso: boolean }) {
   const usuario = useAuthStore((s) => s.usuario)
   const sinCaja = sesion === null
   const [mostrarConfig, setMostrarConfig] = useState(primerUso)
+
+  // ── Aplicar clase dark a <html> según preferencia ──────────────────────────
+  const tema = useThemeStore((s) => s.tema)
+  useEffect(() => {
+    const aplicar = () => {
+      document.documentElement.classList.toggle('dark', esModoOscuroActivo(tema))
+    }
+    aplicar()
+    // Si el tema es "sistema", escuchar cambios del OS
+    if (tema === 'sistema') {
+      const mq = window.matchMedia('(prefers-color-scheme: dark)')
+      mq.addEventListener('change', aplicar)
+      return () => mq.removeEventListener('change', aplicar)
+    }
+  }, [tema])
 
   const bajoStock    = useProductosBajoStock()
   const hayBajoStock = (bajoStock?.length ?? 0) > 0

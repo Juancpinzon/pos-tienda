@@ -26,6 +26,67 @@
     --font-size-total: 36px;
   }
 
+  /* ── Modo oscuro — se activa con la clase .dark en <html> ──────────────── */
+  .dark {
+    color-scheme: dark;
+
+    --color-fondo:        #0F1117;   /* fondo de página */
+    --color-superficie:   #1A1D27;   /* tarjetas y modales */
+    --color-borde:        #2D3148;   /* bordes y separadores */
+    --color-texto:        #F0F2F8;   /* texto principal */
+    --color-texto-suave:  #8892B0;   /* texto secundario */
+
+    /* Colores de estado — ligeramente más suaves en oscuro */
+    --color-peligro:     #F87171;
+    --color-exito:       #34D399;
+    --color-advertencia: #FBBF24;
+    --color-fiado:       #A78BFA;
+
+    /* Primario y acento se mantienen — funcionan bien sobre fondo oscuro */
+    --color-primario:       #2563EB;
+    --color-primario-hover: #1D4ED8;
+    --color-acento:         #38BDF8;
+    --color-acento-hover:   #0EA5E9;
+  }
+
+  /* bg-white → superficie oscura cuando está activo dark mode */
+  .dark .bg-white           { background-color: var(--color-superficie) !important; }
+  .dark .bg-gray-50         { background-color: color-mix(in srgb, var(--color-superficie) 60%, var(--color-fondo) 40%) !important; }
+  .dark .bg-gray-100        { background-color: color-mix(in srgb, var(--color-superficie) 80%, var(--color-fondo) 20%) !important; }
+
+  /* hover:bg-white en menús desplegables */
+  .dark .hover\:bg-white:hover { background-color: var(--color-superficie) !important; }
+
+  /* Bordes explícitos grises → color token */
+  .dark .border-gray-100,
+  .dark .border-gray-200,
+  .dark .border-gray-300    { border-color: var(--color-borde) !important; }
+
+  /* Textos grises oscuros → legibles en fondo oscuro */
+  .dark .text-gray-400      { color: var(--color-texto-suave) !important; }
+  .dark .text-gray-500      { color: var(--color-texto-suave) !important; }
+  .dark .text-gray-600      { color: var(--color-texto-suave) !important; }
+  .dark .text-gray-700      { color: var(--color-texto)       !important; }
+  .dark .text-gray-800      { color: var(--color-texto)       !important; }
+  .dark .text-gray-900      { color: var(--color-texto)       !important; }
+
+  /* Inputs y textareas */
+  .dark input:not([type="range"]),
+  .dark textarea,
+  .dark select {
+    background-color: color-mix(in srgb, var(--color-superficie) 70%, var(--color-fondo) 30%);
+    color: var(--color-texto);
+    border-color: var(--color-borde);
+  }
+  .dark input::placeholder,
+  .dark textarea::placeholder { color: var(--color-texto-suave); opacity: 0.7; }
+
+  /* Sombras — más sutiles en oscuro */
+  .dark .shadow-sm     { box-shadow: 0 1px 2px 0 rgba(0,0,0,0.4) !important; }
+  .dark .shadow-lg     { box-shadow: 0 4px 16px 0 rgba(0,0,0,0.5) !important; }
+  .dark .shadow-2xl    { box-shadow: 0 8px 32px 0 rgba(0,0,0,0.6) !important; }
+  .dark .shadow-md     { box-shadow: 0 2px 8px 0  rgba(0,0,0,0.45) !important; }
+
   * {
     box-sizing: border-box;
     /* Scroll suave en toda la app */

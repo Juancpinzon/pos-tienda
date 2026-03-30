@@ -2,11 +2,12 @@ import { useEffect, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
-import { X, Store, Phone, MapPin, FileText, Receipt, BookOpen, Users, Send, CheckCircle, UserX, Loader2 } from 'lucide-react'
+import { X, Store, Phone, MapPin, FileText, Receipt, BookOpen, Users, Send, CheckCircle, UserX, Loader2, Sun, Moon, Monitor } from 'lucide-react'
 import { useConfig, guardarConfig } from '../../hooks/useConfig'
 import { supabase, supabaseConfigurado } from '../../lib/supabase'
 import { useAuthStore } from '../../stores/authStore'
 import { ConfirmDialog } from '../shared/ConfirmDialog'
+import { useThemeStore, type Tema } from '../../stores/themeStore'
 
 // ─── Schema ───────────────────────────────────────────────────────────────────
 
@@ -272,6 +273,49 @@ function SeccionEquipo() {
   )
 }
 
+// ─── Selector de tema ─────────────────────────────────────────────────────────
+
+const OPCIONES_TEMA: { id: Tema; label: string; icon: typeof Sun; desc: string }[] = [
+  { id: 'claro',   label: 'Claro',   icon: Sun,     desc: 'Siempre fondo blanco'     },
+  { id: 'oscuro',  label: 'Oscuro',  icon: Moon,    desc: 'Siempre fondo oscuro'     },
+  { id: 'sistema', label: 'Sistema', icon: Monitor, desc: 'Sigue el celular'         },
+]
+
+function SeccionTema() {
+  const tema    = useThemeStore((s) => s.tema)
+  const setTema = useThemeStore((s) => s.setTema)
+
+  return (
+    <section>
+      <p className="text-xs font-semibold text-suave uppercase tracking-wider mb-3 flex items-center gap-1.5">
+        <Moon size={13} />
+        Apariencia
+      </p>
+      <div className="grid grid-cols-3 gap-2">
+        {OPCIONES_TEMA.map(({ id, label, icon: Icon, desc }) => (
+          <button
+            key={id}
+            type="button"
+            onClick={() => setTema(id)}
+            className={[
+              'flex flex-col items-center gap-2 p-3 rounded-xl border-2 transition-all text-center',
+              tema === id
+                ? 'border-primario bg-primario/8 text-primario'
+                : 'border-borde text-suave hover:border-gray-300 hover:text-texto',
+            ].join(' ')}
+          >
+            <Icon size={20} />
+            <span className="text-xs font-semibold leading-none">{label}</span>
+            <span className="text-[10px] leading-tight opacity-70">{desc}</span>
+          </button>
+        ))}
+      </div>
+    </section>
+  )
+}
+
+// ─── Props del modal ──────────────────────────────────────────────────────────
+
 interface ConfigModalProps {
   onClose: () => void
   onReiniciarTour?: () => Promise<void>
@@ -398,6 +442,9 @@ export function ConfigModal({ onClose, onReiniciarTour }: ConfigModalProps) {
 
             {/* Equipo (solo dueño + Supabase configurado) */}
             <SeccionEquipo />
+
+            {/* Apariencia — selector de tema */}
+            <SeccionTema />
 
             {/* Tour de onboarding */}
             {onReiniciarTour && (
