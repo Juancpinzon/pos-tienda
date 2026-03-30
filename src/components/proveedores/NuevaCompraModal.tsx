@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { X, Plus, Trash2, Search, CheckCircle2, Truck, Camera, AlertTriangle, TrendingUp, ScanBarcode } from 'lucide-react'
+import { X, Plus, Trash2, Search, CheckCircle2, Truck, Camera, AlertTriangle, TrendingUp, ScanBarcode, Link2 } from 'lucide-react'
 import {
   registrarCompra,
   buscarProveedores,
@@ -13,6 +13,7 @@ import { db } from '../../db/database'
 import type { CompraProveedor, Producto, Proveedor } from '../../db/schema'
 import { FotoFacturaModal } from './FotoFacturaModal'
 import { EscanerCodigoBarras } from '../pos/EscanerCodigoBarras'
+import { buscarMapeo } from '../../lib/mapeoSKU'
 
 // ─── Tipo para alertas de subida de costo ────────────────────────────────────
 interface AlertaPrecio {
@@ -54,6 +55,7 @@ export function NuevaCompraModal({ proveedorInicial, onClose }: NuevaCompraModal
   const [iQty, setIQty] = useState('1')
   const [iPrecio, setIPrecio] = useState('')
   const [iSugerencias, setISugerencias] = useState<Producto[]>([])
+  const [iDesdeMapa, setIDesdeMapa] = useState(false)  // badge "Mapeo guardado"
   const nombreInputRef = useRef<HTMLInputElement>(null)
 
   // ── Estado: pago ──────────────────────────────────────────────────────────
@@ -84,11 +86,28 @@ export function NuevaCompraModal({ proveedorInicial, onClose }: NuevaCompraModal
     return () => clearTimeout(t)
   }, [provQuery, provSeleccionado])
 
-  // ── Efectos: autocompletar producto ───────────────────────────────────────
+  // ── Efectos: autocompletar producto con mapeo inteligente ─────────────────
   useEffect(() => {
     const t = setTimeout(async () => {
-      if (iNombre.trim().length < 2) { setISugerencias([]); return }
-      const res = await obtenerProductos({ query: iNombre, soloActivos: true })
+      const q = iNombre.trim()
+      if (q.length < 2) { setISugerencias([]); setIDesdeMapa(false); return }
+
+      // 1. Buscar en mapeos guardados primero
+      const mapeo = await buscarMapeo(q)
+      if (mapeo) {
+        const prod = await import('../../db/database').then(({ db }) =>
+          db.productos.get(mapeo.productoId)
+        )
+        if (prod?.activo) {
+          setISugerencias([prod])
+          setIDesdeMapa(true)
+          return
+        }
+      }
+
+      // 2. Búsqueda normal en catálogo
+      setIDesdeMapa(false)
+      const res = await obtenerProductos({ query: q, soloActivos: true })
       setISugerencias(res.slice(0, 6))
     }, 220)
     return () => clearTimeout(t)
@@ -113,6 +132,7 @@ export function NuevaCompraModal({ proveedorInicial, onClose }: NuevaCompraModal
     setIProductoId(p.id)
     setIPrecio(p.precioCompra ? String(p.precioCompra) : '')
     setISugerencias([])
+    setIDesdeMapa(false)
   }
 
   const agregarItem = () => {
@@ -563,6 +583,12 @@ export function NuevaCompraModal({ proveedorInicial, onClose }: NuevaCompraModal
                 />
                 {iSugerencias.length > 0 && (
                   <div className="absolute z-10 left-0 right-0 top-full mt-1 bg-white border border-borde rounded-xl shadow-lg overflow-hidden">
+                    {iDesdeMapa && (
+                      <div className="px-3 py-1.5 bg-exito/8 border-b border-exito/20 flex items-center gap-1.5">
+                        <Link2 size={11} className="text-exito shrink-0" />
+                        <span className="text-[11px] text-exito font-semibold">Mapeo guardado</span>
+                      </div>
+                    )}
                     {iSugerencias.map((p) => (
                       <button
                         key={p.id}

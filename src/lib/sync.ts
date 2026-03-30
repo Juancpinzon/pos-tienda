@@ -59,6 +59,7 @@ export async function syncToSupabase(tiendaId: string): Promise<void> {
       pushDetallesCompra(tiendaId, deviceId),
       pushPagosProveedor(tiendaId, deviceId),
       pushMovimientosStock(tiendaId, deviceId),
+      pushMapeosSKU(tiendaId, deviceId),
       pushConfigTienda(tiendaId),
     ])
     setLastSyncAt(new Date())
@@ -510,6 +511,25 @@ async function pullMovimientosFiado(tiendaId: string, myDeviceId: string) {
       })
     }
   }
+}
+
+async function pushMapeosSKU(tiendaId: string, deviceId: string) {
+  const registros = await db.mapeosSKU.toArray()
+  if (registros.length === 0) return
+  await supabase.from('mapeos_sku').upsert(
+    registros.map((r) => ({
+      tienda_id:       tiendaId,
+      device_id:       deviceId,
+      local_id:        r.id,
+      nombre_proveedor: r.nombreProveedor,
+      producto_id_local: r.productoId,
+      nombre_producto: r.nombreProducto,
+      veces_usado:     r.vecesUsado,
+      creado_en:       r.creadoEn,
+      actualizado_en:  r.actualizadoEn,
+    })),
+    { onConflict: 'tienda_id,device_id,local_id', ignoreDuplicates: false }
+  )
 }
 
 // ═══════════════════════════════════════════════════════════════════════════

@@ -420,3 +420,32 @@ CREATE INDEX idx_ventas_tienda_sesion   ON ventas (tienda_id, sesion_caja_local_
 CREATE INDEX idx_clientes_tienda_nombre ON clientes (tienda_id, nombre);
 CREATE INDEX idx_productos_tienda_activo ON productos (tienda_id, activo);
 CREATE INDEX idx_mov_fiado_cliente      ON movimientos_fiado (tienda_id, cliente_local_id);
+
+
+-- ═══════════════════════════════════════════════════════════════════════════
+--  TABLA: mapeos_sku  (Fase 15 — aprendizaje de nombres de proveedor)
+-- ═══════════════════════════════════════════════════════════════════════════
+
+CREATE TABLE IF NOT EXISTS mapeos_sku (
+  id                 BIGSERIAL PRIMARY KEY,
+  tienda_id          UUID        NOT NULL REFERENCES tiendas(id) ON DELETE CASCADE,
+  device_id          TEXT        NOT NULL,
+  local_id           INTEGER     NOT NULL,
+  nombre_proveedor   TEXT        NOT NULL,
+  producto_id_local  INTEGER,
+  nombre_producto    TEXT        NOT NULL,
+  veces_usado        INTEGER     NOT NULL DEFAULT 1,
+  creado_en          TIMESTAMPTZ NOT NULL DEFAULT now(),
+  actualizado_en     TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (tienda_id, device_id, local_id)
+);
+
+ALTER TABLE mapeos_sku ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "mapeos_sku: solo su tienda"
+  ON mapeos_sku FOR ALL
+  USING (tienda_id = (
+    SELECT tienda_id FROM usuarios WHERE user_id = auth.uid() LIMIT 1
+  ));
+
+CREATE INDEX idx_mapeos_sku_tienda ON mapeos_sku (tienda_id, nombre_proveedor);

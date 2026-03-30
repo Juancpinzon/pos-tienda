@@ -1,5 +1,9 @@
-import { useState, useMemo } from 'react'
-import { Search, Plus, Ghost, Pencil, Power, ChevronDown, ChevronRight } from 'lucide-react'
+import { useState, useMemo, useEffect } from 'react'
+import { Search, Plus, Ghost, Pencil, Power, ChevronDown, ChevronRight, Link2, Trash2 } from 'lucide-react'
+import { useLiveQuery } from 'dexie-react-hooks'
+import { db } from '../db/database'
+import { listarMapeos, eliminarMapeo, actualizarMapeo } from '../lib/mapeoSKU'
+import type { MapeoSKU } from '../db/schema'
 import {
   useProductos,
   useCategorias,
@@ -11,6 +15,126 @@ import { FormProducto } from '../components/productos/FormProducto'
 import { AlertasStock } from '../components/stock/AlertasStock'
 import { formatCOP } from '../utils/moneda'
 import type { Producto } from '../db/schema'
+
+// ─── Sección de mapeos SKU ────────────────────────────────────────────────────
+
+function SeccionMapeosSKU() {
+  const [abierto, setAbierto]       = useState(false)
+  const [mapeos, setMapeos]         = useState<MapeoSKU[]>([])
+  const [editandoId, setEditandoId] = useState<number | null>(null)
+  const [nuevoNombre, setNuevoNombre] = useState('')
+
+  // Recargar cuando se abre la sección o cambia la DB
+  const mapeosBD = useLiveQuery(() => db.mapeosSKU.orderBy('vecesUsado').reverse().toArray(), [])
+
+  useEffect(() => {
+    if (mapeosBD) setMapeos(mapeosBD)
+  }, [mapeosBD])
+
+  const handleEliminar = async (id: number) => {
+    await eliminarMapeo(id)
+  }
+
+  const handleGuardarEdicion = async (mapeo: MapeoSKU) => {
+    if (!mapeo.id || !nuevoNombre.trim()) return
+    await actualizarMapeo(mapeo.id, { nombreProveedor: nuevoNombre.trim() })
+    setEditandoId(null)
+    setNuevoNombre('')
+  }
+
+  if (mapeos.length === 0 && !abierto) return null
+
+  return (
+    <div className="mx-3 mb-2">
+      <button
+        type="button"
+        onClick={() => setAbierto((v) => !v)}
+        className="w-full flex items-center gap-2 px-4 py-3 bg-white rounded-xl border border-borde
+                   hover:bg-fondo transition-colors text-left"
+      >
+        <Link2 size={16} className="text-primario shrink-0" />
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-semibold text-texto">Nombres de proveedores</p>
+          <p className="text-xs text-suave">
+            {mapeos.length} asociación{mapeos.length !== 1 ? 'es' : ''} aprendida{mapeos.length !== 1 ? 's' : ''}
+          </p>
+        </div>
+        {abierto ? <ChevronDown size={16} className="text-suave" /> : <ChevronRight size={16} className="text-suave" />}
+      </button>
+
+      {abierto && (
+        <div className="mt-1 bg-white rounded-xl border border-borde overflow-hidden">
+          {mapeos.length === 0 ? (
+            <div className="px-4 py-6 text-center">
+              <Link2 size={28} className="text-suave/40 mx-auto mb-2" />
+              <p className="text-sm text-suave">
+                Aún no hay mapeos. Se crean cuando usted escanea facturas
+                y asocia los productos.
+              </p>
+            </div>
+          ) : (
+            <>
+              {/* Cabecera */}
+              <div className="grid grid-cols-[1fr_1fr_auto_auto] gap-2 px-4 py-2 border-b border-borde/50">
+                <span className="text-[11px] font-semibold text-suave uppercase">En factura</span>
+                <span className="text-[11px] font-semibold text-suave uppercase">En catálogo</span>
+                <span className="text-[11px] font-semibold text-suave uppercase text-right">Usos</span>
+                <span />
+              </div>
+
+              {mapeos.map((m) => (
+                <div key={m.id} className="grid grid-cols-[1fr_1fr_auto_auto] gap-2 items-center
+                                           px-4 py-3 border-b last:border-0 border-borde/30">
+                  {/* Nombre proveedor — editable */}
+                  {editandoId === m.id ? (
+                    <input
+                      autoFocus
+                      value={nuevoNombre}
+                      onChange={(e) => setNuevoNombre(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') handleGuardarEdicion(m)
+                        if (e.key === 'Escape') { setEditandoId(null); setNuevoNombre('') }
+                      }}
+                      className="h-7 px-2 border border-primario rounded-lg text-xs text-texto
+                                 focus:outline-none focus:ring-1 focus:ring-primario/40"
+                    />
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => { setEditandoId(m.id!); setNuevoNombre(m.nombreProveedor) }}
+                      className="text-xs text-texto font-mono text-left hover:text-primario transition-colors truncate"
+                      title="Clic para editar"
+                    >
+                      {m.nombreProveedor}
+                    </button>
+                  )}
+
+                  {/* Nombre interno */}
+                  <span className="text-xs text-suave truncate">{m.nombreProducto}</span>
+
+                  {/* Veces usado */}
+                  <span className="text-xs font-bold text-primario text-right tabular-nums">{m.vecesUsado}×</span>
+
+                  {/* Eliminar */}
+                  <button
+                    type="button"
+                    onClick={() => m.id && handleEliminar(m.id)}
+                    className="w-7 h-7 flex items-center justify-center rounded-lg
+                               text-suave hover:text-peligro hover:bg-peligro/5 transition-colors"
+                  >
+                    <Trash2 size={13} />
+                  </button>
+                </div>
+              ))}
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ─── Página principal ─────────────────────────────────────────────────────────
 
 export default function ProductosPage() {
   const [query, setQuery] = useState('')
@@ -304,6 +428,11 @@ export default function ProductosPage() {
         </div>
 
         {/* Espacio para el FAB */}
+        <div className="h-4" />
+
+        {/* ── Sección Nombres de Proveedores ──────────────────────────── */}
+        <SeccionMapeosSKU />
+
         <div className="h-24" />
       </div>
 

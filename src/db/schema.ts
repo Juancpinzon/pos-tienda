@@ -158,6 +158,20 @@ export interface PagoProveedor {
   creadoEn: Date
 }
 
+// ─── Módulo de Mapeo de SKUs de Proveedor (v4) ───────────────────────────────
+// Asocia el texto exacto de una factura con un producto interno del catálogo.
+// Ejemplo: "LCH ENT 1.1" → producto id 42 "Leche Entera 1L"
+
+export interface MapeoSKU {
+  id?: number
+  nombreProveedor: string   // Texto exacto tal como aparece en la factura
+  productoId: number        // FK → productos.id
+  nombreProducto: string    // Snapshot del nombre interno al momento de crear
+  vecesUsado: number        // Incrementa cada vez que se aplica este mapeo
+  creadoEn: Date
+  actualizadoEn: Date
+}
+
 // ─── Módulo de Control de Stock (v3) ─────────────────────────────────────────
 
 export interface MovimientoStock {

@@ -14,6 +14,7 @@ import type {
   DetalleCompra,
   PagoProveedor,
   MovimientoStock,
+  MapeoSKU,
 } from './schema'
 
 // Singleton de Dexie — única instancia para toda la aplicación
@@ -34,6 +35,8 @@ class POSDatabase extends Dexie {
   pagosProveedor!: EntityTable<PagoProveedor, 'id'>
   // v3 — módulo stock
   movimientosStock!: EntityTable<MovimientoStock, 'id'>
+  // v4 — mapeo de SKUs de proveedor
+  mapeosSKU!: EntityTable<MapeoSKU, 'id'>
 
   constructor() {
     super('POSTienda')
@@ -65,6 +68,11 @@ class POSDatabase extends Dexie {
     this.version(3).stores({
       movimientosStock: '++id, productoId, tipo, ventaId, compraId, creadoEn',
     })
+
+    // Versión 4: tabla de mapeos SKU proveedor → producto interno
+    this.version(4).stores({
+      mapeosSKU: '++id, nombreProveedor, productoId, vecesUsado',
+    })
   }
 }
 
@@ -87,4 +95,5 @@ export type {
   DetalleCompra,
   PagoProveedor,
   MovimientoStock,
+  MapeoSKU,
 }
