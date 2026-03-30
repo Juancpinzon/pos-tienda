@@ -70,6 +70,7 @@ export interface DetalleVenta {
   nombreProducto: string
   cantidad: number
   precioUnitario: number
+  precioCompraSnapshot?: number  // Snapshot del costo al vender
   descuento: number
   subtotal: number
   esProductoFantasma: boolean

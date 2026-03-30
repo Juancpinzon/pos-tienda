@@ -261,12 +261,22 @@ export function ModalCobro({ onClose }: ModalCobroProps) {
       const sesionCajaId = await obtenerSesionActiva()
       const ahora = new Date()
 
+      // Pre-fetch precioCompra para snapshot de margen
+      const preciosCompra: Record<number, number | undefined> = {}
+      for (const item of items) {
+        if (item.productoId !== undefined) {
+          const prod = await db.productos.get(item.productoId)
+          preciosCompra[item.productoId] = prod?.precioCompra
+        }
+      }
+
       // Snapshot de los detalles antes de limpiar el carrito
       const detallesSnapshot = items.map((item) => ({
         productoId: item.productoId,
         nombreProducto: item.nombreProducto,
         cantidad: item.cantidad,
         precioUnitario: item.precioUnitario,
+        precioCompraSnapshot: item.productoId !== undefined ? preciosCompra[item.productoId] : undefined,
         descuento: item.descuento,
         subtotal: item.subtotal,
         esProductoFantasma: item.esProductoFantasma,

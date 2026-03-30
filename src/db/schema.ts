@@ -72,6 +72,7 @@ export interface DetalleVenta {
   nombreProducto: string   // Snapshot del nombre al momento de vender
   cantidad: number         // Permite fracciones: 0.5, 250
   precioUnitario: number   // Snapshot del precio al vender
+  precioCompraSnapshot?: number  // Snapshot del costo al vender (para calcular margen)
   descuento: number
   subtotal: number
   esProductoFantasma: boolean

@@ -46,6 +46,14 @@ Flujo principal de venta: máximo 3 toques para completar una transacción.
 El precio de un aguacate cambia todos los días.
 Cambiar el precio de un producto durante una venta es una operación de primer nivel, no una excepción.
 
+### 6. La fórmula de precio de venta es sobre el precio de venta, no sobre el costo
+El tendero piensa en "ganancia del 30%" como: de cada $100 que vende, $30 son ganancia.
+**Fórmula irrompible:** `PV = PC / (1 - %utilidad/100)`
+- Ejemplo: costo $3.500 con 30% → PV = $3.500 / 0.70 = **$5.000**
+- NO usar: PV = PC × (1 + %margen) — esa es la fórmula del margen sobre costo (markup), NO la del margen sobre venta.
+Esta fórmula aplica en FormProducto y en las alertas de precio de NuevaCompraModal.
+El porcentaje de utilidad por defecto es **30%**.
+
 ---
 
 ## 🛠️ Stack Tecnológico

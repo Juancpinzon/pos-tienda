@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -100,7 +100,18 @@ export function FormProducto({ producto, nombrePreset, onClose, onGuardado }: Fo
     },
   })
 
-  const controlaStock = watch('controlaStock')
+  const controlaStock  = watch('controlaStock')
+  const precioCompraW  = watch('precioCompra')
+  const precioActualW  = watch('precio')
+
+  // ─── Calculadora de precio sugerido ──────────────────────────────────────
+  const [utilidad, setUtilidad] = useState(30)  // % de utilidad deseada
+
+  // PV = PC / (1 - %utilidad/100)  — fórmula margen sobre precio de venta
+  const pc = parseFloat(precioCompraW ?? '') || 0
+  const pvSugerido = pc > 0 && utilidad < 100
+    ? Math.round(pc / (1 - utilidad / 100))
+    : 0
 
   // Poblar el formulario cuando estamos editando o hay un preset de nombre
   useEffect(() => {
@@ -237,6 +248,63 @@ export function FormProducto({ producto, nombrePreset, onClose, onGuardado }: Fo
                 />
               </Campo>
             </div>
+
+            {/* ── Calculadora de precio sugerido ─────────────────────────── */}
+            {pc > 0 && (
+              <div className="bg-primario/5 border border-primario/20 rounded-xl p-3 flex flex-col gap-2.5">
+                <div className="flex items-center justify-between gap-3">
+                  <p className="text-xs font-semibold text-primario">Calculadora de precio de venta</p>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <label className="text-xs text-suave">Utilidad:</label>
+                    <div className="relative w-20">
+                      <input
+                        type="number"
+                        value={utilidad}
+                        onChange={(e) => {
+                          const v = Math.min(99, Math.max(0, Number(e.target.value) || 0))
+                          setUtilidad(v)
+                        }}
+                        min={0}
+                        max={99}
+                        className="w-full h-8 px-2 pr-6 border border-primario/30 rounded-lg text-sm moneda
+                                   text-texto focus:outline-none focus:ring-1 focus:ring-primario/40 bg-white"
+                      />
+                      <span className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-suave">%</span>
+                    </div>
+                  </div>
+                </div>
+
+                {pvSugerido > 0 && (
+                  <>
+                    <p className="text-xs text-suave leading-relaxed">
+                      Con <span className="font-semibold text-primario">{utilidad}%</span> de utilidad sobre costo{' '}
+                      <span className="moneda font-semibold">${pc.toLocaleString('es-CO')}</span>
+                      {' '}→ PV sugerido:{' '}
+                      <span className="moneda font-bold text-primario">${pvSugerido.toLocaleString('es-CO')}</span>
+                    </p>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setValue('precio', pvSugerido, { shouldValidate: true })}
+                        className={[
+                          'h-8 px-3 rounded-lg text-xs font-semibold transition-all',
+                          precioActualW === pvSugerido
+                            ? 'bg-primario text-white'
+                            : 'bg-primario/15 text-primario hover:bg-primario/25',
+                        ].join(' ')}
+                      >
+                        {precioActualW === pvSugerido ? '✓ Usando sugerido' : 'Usar sugerido'}
+                      </button>
+                      {precioActualW > 0 && precioActualW !== pvSugerido && (
+                        <p className="text-xs text-suave">
+                          Precio actual: <span className="moneda font-medium">${Number(precioActualW).toLocaleString('es-CO')}</span>
+                        </p>
+                      )}
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
 
             {/* Unidad */}
             <Campo label="Unidad de venta" error={errors.unidad?.message} required>

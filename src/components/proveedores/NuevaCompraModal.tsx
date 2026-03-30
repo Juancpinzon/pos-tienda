@@ -1,16 +1,28 @@
 import { useState, useEffect, useRef } from 'react'
-import { X, Plus, Trash2, Search, CheckCircle2, Truck, Camera } from 'lucide-react'
+import { X, Plus, Trash2, Search, CheckCircle2, Truck, Camera, AlertTriangle, TrendingUp } from 'lucide-react'
 import {
   registrarCompra,
   buscarProveedores,
   crearProveedor,
   type ItemCompra,
 } from '../../hooks/useProveedores'
-import { obtenerProductos } from '../../hooks/useProductos'
+import { obtenerProductos, editarProducto } from '../../hooks/useProductos'
 import { useSesionActual } from '../../hooks/useCaja'
 import { formatCOP } from '../../utils/moneda'
+import { db } from '../../db/database'
 import type { CompraProveedor, Producto, Proveedor } from '../../db/schema'
 import { FotoFacturaModal } from './FotoFacturaModal'
+
+// ─── Tipo para alertas de subida de costo ────────────────────────────────────
+interface AlertaPrecio {
+  productoId: number
+  nombreProducto: string
+  costoAnterior: number
+  costoNuevo: number
+  precioVentaActual: number
+  pvSugerido: number       // con 30% de utilidad
+  pvNuevo: number          // editable por el tendero
+}
 
 // ─── Props ────────────────────────────────────────────────────────────────────
 
@@ -55,6 +67,9 @@ export function NuevaCompraModal({ proveedorInicial, onClose }: NuevaCompraModal
   const [guardando, setGuardando] = useState(false)
   const [exito, setExito] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  // ── Estado: alertas de precio subido ──────────────────────────────────────
+  const [alertasPrecios, setAlertasPrecios] = useState<AlertaPrecio[]>([])
 
   // ── Efectos: autocompletar proveedor ──────────────────────────────────────
   useEffect(() => {
@@ -158,6 +173,15 @@ export function NuevaCompraModal({ proveedorInicial, onClose }: NuevaCompraModal
 
     setGuardando(true)
     try {
+      // Pre-fetch precios actuales para detectar subidas de costo
+      const productosActuales: Record<number, Producto> = {}
+      for (const item of items) {
+        if (item.productoId !== undefined) {
+          const prod = await db.productos.get(item.productoId)
+          if (prod) productosActuales[item.productoId] = prod
+        }
+      }
+
       let provId = provSeleccionado?.id
 
       // Crear proveedor nuevo si no estaba seleccionado
@@ -176,14 +200,159 @@ export function NuevaCompraModal({ proveedorInicial, onClose }: NuevaCompraModal
         sesion?.id,
       )
 
-      setExito(true)
-      setTimeout(onClose, 1200)
+      // Detectar productos donde el costo subió
+      const alertas: AlertaPrecio[] = []
+      for (const item of items) {
+        if (item.productoId === undefined) continue
+        const prod = productosActuales[item.productoId]
+        if (!prod) continue
+        const costoAnterior = prod.precioCompra ?? 0
+        if (costoAnterior > 0 && item.precioUnitario > costoAnterior) {
+          const pvSugerido = Math.round(item.precioUnitario / (1 - 0.30))
+          alertas.push({
+            productoId: item.productoId,
+            nombreProducto: item.nombreProducto,
+            costoAnterior,
+            costoNuevo: item.precioUnitario,
+            precioVentaActual: prod.precio,
+            pvSugerido,
+            pvNuevo: pvSugerido,
+          })
+        }
+      }
+
+      if (alertas.length > 0) {
+        setAlertasPrecios(alertas)
+      } else {
+        setExito(true)
+        setTimeout(onClose, 1200)
+      }
     } catch (err) {
       console.error('[NuevaCompraModal]', err)
       setError('Error al guardar la compra. Intenta de nuevo.')
     } finally {
       setGuardando(false)
     }
+  }
+
+  // ── Handler: actualizar precio de venta desde alerta ─────────────────────
+  const actualizarPrecioVenta = async (alerta: AlertaPrecio) => {
+    await editarProducto(alerta.productoId, { precio: alerta.pvNuevo })
+    const restantes = alertasPrecios.filter((a) => a.productoId !== alerta.productoId)
+    setAlertasPrecios(restantes)
+    if (restantes.length === 0) {
+      setExito(true)
+      setTimeout(onClose, 1200)
+    }
+  }
+
+  const descartarAlerta = (productoId: number) => {
+    const restantes = alertasPrecios.filter((a) => a.productoId !== productoId)
+    setAlertasPrecios(restantes)
+    if (restantes.length === 0) {
+      setExito(true)
+      setTimeout(onClose, 1200)
+    }
+  }
+
+  // ── Vista: alertas de precio subido ──────────────────────────────────────
+  if (alertasPrecios.length > 0) {
+    return (
+      <div className="fixed inset-0 z-50 flex flex-col bg-fondo">
+        <div className="bg-white border-b border-borde px-4 py-3 flex items-center gap-3 shrink-0">
+          <div className="w-9 h-9 bg-advertencia/15 rounded-lg flex items-center justify-center">
+            <AlertTriangle size={18} className="text-advertencia" />
+          </div>
+          <div className="flex-1">
+            <h2 className="font-display font-bold text-texto text-base leading-tight">Compra registrada ✓</h2>
+            <p className="text-xs text-suave">El costo de algunos productos subió</p>
+          </div>
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-3">
+          <p className="text-sm text-suave px-1">
+            Revisa si quieres actualizar el precio de venta para mantener tu margen.
+          </p>
+
+          {alertasPrecios.map((alerta) => (
+            <div key={alerta.productoId} className="bg-white rounded-xl border border-advertencia/30 overflow-hidden">
+              <div className="px-4 py-3 bg-advertencia/5 border-b border-advertencia/20 flex items-center gap-2">
+                <TrendingUp size={15} className="text-advertencia shrink-0" />
+                <p className="font-semibold text-sm text-texto flex-1 truncate">{alerta.nombreProducto}</p>
+              </div>
+              <div className="p-4 flex flex-col gap-3">
+                {/* Subida de costo */}
+                <div className="grid grid-cols-2 gap-2 text-sm">
+                  <div className="bg-fondo rounded-lg p-2.5">
+                    <p className="text-xs text-suave mb-0.5">Costo anterior</p>
+                    <p className="moneda font-bold text-texto">{formatCOP(alerta.costoAnterior)}</p>
+                  </div>
+                  <div className="bg-peligro/5 rounded-lg p-2.5 border border-peligro/20">
+                    <p className="text-xs text-suave mb-0.5">Costo nuevo</p>
+                    <p className="moneda font-bold text-peligro">{formatCOP(alerta.costoNuevo)}</p>
+                  </div>
+                </div>
+
+                {/* Precio de venta */}
+                <div className="grid grid-cols-2 gap-2 text-sm">
+                  <div className="bg-fondo rounded-lg p-2.5">
+                    <p className="text-xs text-suave mb-0.5">PV actual</p>
+                    <p className="moneda font-bold text-texto">{formatCOP(alerta.precioVentaActual)}</p>
+                  </div>
+                  <div className="bg-primario/5 rounded-lg p-2.5 border border-primario/20">
+                    <p className="text-xs text-suave mb-0.5">PV sugerido (30%)</p>
+                    <p className="moneda font-bold text-primario">{formatCOP(alerta.pvSugerido)}</p>
+                  </div>
+                </div>
+
+                {/* Input precio nuevo editable */}
+                <div>
+                  <label className="text-xs text-suave block mb-1">Nuevo precio de venta</label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-suave text-sm font-medium">$</span>
+                    <input
+                      type="number"
+                      value={alerta.pvNuevo}
+                      onChange={(e) => {
+                        const val = parseInt(e.target.value, 10) || 0
+                        setAlertasPrecios((prev) =>
+                          prev.map((a) => a.productoId === alerta.productoId ? { ...a, pvNuevo: val } : a)
+                        )
+                      }}
+                      min={1}
+                      className="w-full h-10 pl-7 pr-3 border border-borde rounded-xl text-sm moneda text-texto
+                                 focus:outline-none focus:ring-2 focus:ring-primario/30 focus:border-primario/50"
+                    />
+                  </div>
+                </div>
+
+                {/* Botones */}
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => descartarAlerta(alerta.productoId)}
+                    className="h-10 border border-borde text-suave rounded-xl text-sm font-semibold
+                               hover:bg-fondo hover:text-texto transition-colors"
+                  >
+                    Mantener actual
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => actualizarPrecioVenta(alerta)}
+                    disabled={alerta.pvNuevo <= 0}
+                    className="h-10 bg-primario text-white rounded-xl text-sm font-semibold
+                               hover:bg-primario-hover transition-colors
+                               disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    Actualizar PV
+                  </button>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    )
   }
 
   // ── Vista: éxito ──────────────────────────────────────────────────────────

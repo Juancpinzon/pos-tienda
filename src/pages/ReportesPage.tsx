@@ -45,6 +45,7 @@ export default function ReportesPage() {
     totalFiado: number
   }
   type TopProducto = { nombre: string; cantidad: number; monto: number }
+  type MargenPeriodo = { margen: number; conConoce: number; sinConoce: number } | null
 
   // Ventas del período
   const [datos, setDatos] = useState<DatosPeriodo | undefined>(undefined)
@@ -82,39 +83,61 @@ export default function ReportesPage() {
     return () => sub.unsubscribe()
   }, [inicio])
 
-  // Top 10 productos más vendidos (por monto)
+  // Top 10 productos más vendidos (por monto) + margen promedio
   const [topProductos, setTopProductos] = useState<TopProducto[] | undefined>(undefined)
+  const [margenPeriodo, setMargenPeriodo] = useState<MargenPeriodo | undefined>(undefined)
 
   useEffect(() => {
     setTopProductos(undefined)
-    const sub = liveQuery(async (): Promise<TopProducto[]> => {
+    setMargenPeriodo(undefined)
+    const sub = liveQuery(async (): Promise<{ top: TopProducto[]; margen: MargenPeriodo }> => {
       const ventasIds = await db.ventas
         .where('creadaEn').aboveOrEqual(inicio)
         .filter((v) => v.estado === 'completada')
         .primaryKeys()
 
-      if (ventasIds.length === 0) return []
+      if (ventasIds.length === 0) return { top: [], margen: null }
 
       const detalles = await db.detallesVenta
         .where('ventaId').anyOf(ventasIds as number[])
         .toArray()
 
       const acum: Record<string, TopProducto> = {}
+      let totalConCosto = 0
+      let totalCosto = 0
+
       for (const d of detalles) {
         const key = d.productoId ? String(d.productoId) : `fantasma_${d.nombreProducto}`
         if (!acum[key]) acum[key] = { nombre: d.nombreProducto, cantidad: 0, monto: 0 }
         acum[key].cantidad += d.cantidad
         acum[key].monto += d.subtotal
+
+        // Calcular margen si hay snapshot de costo
+        if (d.precioCompraSnapshot !== undefined && d.precioCompraSnapshot > 0) {
+          totalConCosto += d.subtotal
+          totalCosto += d.precioCompraSnapshot * d.cantidad
+        }
       }
 
-      return Object.values(acum)
+      const top = Object.values(acum)
         .sort((a, b) => b.monto - a.monto)
         .slice(0, 10)
+
+      const margen: MargenPeriodo = totalConCosto > 0
+        ? {
+            margen: Math.round(((totalConCosto - totalCosto) / totalConCosto) * 100),
+            conConoce: totalConCosto,
+            sinConoce: detalles.reduce((s, d) => s + d.subtotal, 0) - totalConCosto,
+          }
+        : null
+
+      return { top, margen }
     }).subscribe({
-      next: setTopProductos,
+      next: ({ top, margen }) => { setTopProductos(top); setMargenPeriodo(margen) },
       error: (err) => {
         console.error('[ReportesPage:topProductos]', err)
         setTopProductos([])
+        setMargenPeriodo(null)
       },
     })
     return () => sub.unsubscribe()
@@ -241,6 +264,52 @@ export default function ReportesPage() {
               <div className="col-span-2 h-32 bg-white rounded-xl border border-borde animate-pulse" />
               <div className="h-24 bg-white rounded-xl border border-borde animate-pulse" />
               <div className="h-24 bg-white rounded-xl border border-borde animate-pulse" />
+            </div>
+          )}
+
+          {/* Margen promedio del período */}
+          {margenPeriodo !== undefined && margenPeriodo !== null && (
+            <div className={[
+              'rounded-xl border p-4 flex items-center gap-4',
+              margenPeriodo.margen >= 25
+                ? 'bg-exito/5 border-exito/25'
+                : margenPeriodo.margen >= 15
+                  ? 'bg-advertencia/5 border-advertencia/25'
+                  : 'bg-peligro/5 border-peligro/25',
+            ].join(' ')}>
+              <div className={[
+                'w-12 h-12 rounded-xl flex items-center justify-center shrink-0 text-xl font-black',
+                margenPeriodo.margen >= 25
+                  ? 'bg-exito/15 text-exito'
+                  : margenPeriodo.margen >= 15
+                    ? 'bg-advertencia/15 text-advertencia'
+                    : 'bg-peligro/15 text-peligro',
+              ].join(' ')}>
+                {margenPeriodo.margen}%
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-semibold text-texto">Margen promedio del período</p>
+                <p className="text-xs text-suave mt-0.5">
+                  {margenPeriodo.margen >= 25
+                    ? 'Excelente margen — sigue así'
+                    : margenPeriodo.margen >= 15
+                      ? 'Margen aceptable — puedes mejorar'
+                      : 'Margen bajo — revisa precios de venta'}
+                </p>
+                {margenPeriodo.sinConoce > 0 && (
+                  <p className="text-[10px] text-suave/70 mt-1">
+                    Calculado sobre {formatCOP(margenPeriodo.conConoce)} de ventas con costo conocido
+                  </p>
+                )}
+              </div>
+            </div>
+          )}
+          {margenPeriodo !== undefined && margenPeriodo === null && topProductos && topProductos.length > 0 && (
+            <div className="bg-fondo rounded-xl border border-borde p-3 flex items-center gap-3">
+              <span className="text-xl">📊</span>
+              <p className="text-xs text-suave">
+                Registra el precio de compra en los productos para ver el margen promedio aquí.
+              </p>
             </div>
           )}
 
