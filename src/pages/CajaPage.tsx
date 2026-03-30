@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import {
   Plus, Wallet, ShoppingBag, TrendingDown,
   Smartphone, Banknote, BookOpen, Lock, ChevronDown, Truck,
@@ -14,6 +14,7 @@ import {
   obtenerUltimaCajaCerrada,
 } from '../hooks/useCaja'
 import { usePagosProveedoresSesion } from '../hooks/useProveedores'
+import { DashboardUtilidadNeta } from '../components/reportes/DashboardUtilidadNeta'
 import { formatCOP } from '../utils/moneda'
 import type { GastoCaja } from '../db/schema'
 
@@ -33,6 +34,12 @@ export default function CajaPage() {
   const resumen = useResumenCaja(sesion?.id)
   const pagosProveedores = usePagosProveedoresSesion(sesion?.id)
   const desglosePlatformas = useDesglosePlatformasSesion(sesion?.id)
+
+  // Inicio del día actual para el dashboard de utilidad
+  const inicioHoy = useMemo(() => {
+    const ahora = new Date()
+    return new Date(ahora.getFullYear(), ahora.getMonth(), ahora.getDate())
+  }, [])
 
   // Estado apertura de caja
   const [montoApertura, setMontoApertura] = useState('')
@@ -272,6 +279,9 @@ export default function CajaPage() {
               </div>
             )}
           </div>
+
+          {/* Utilidad estimada del día — solo para dueño */}
+          <DashboardUtilidadNeta inicio={inicioHoy} compacto />
 
           {/* Últimas ventas */}
           {resumen && resumen.ultimasVentas.length > 0 && (

@@ -4,6 +4,7 @@ import { TrendingUp, ShoppingBag, BarChart2, Users, Truck, Clock } from 'lucide-
 import { db } from '../db/database'
 import { formatCOP } from '../utils/moneda'
 import { getBucketMora } from '../hooks/useFiados'
+import { DashboardUtilidadNeta } from '../components/reportes/DashboardUtilidadNeta'
 import type { Cliente } from '../db/schema'
 
 // ─── Tipos de período ─────────────────────────────────────────────────────────
@@ -234,6 +235,9 @@ export default function ReportesPage() {
               </button>
             ))}
           </div>
+
+          {/* Dashboard de Utilidad Neta — solo para dueño */}
+          <DashboardUtilidadNeta inicio={inicio} />
 
           {/* Métricas principales */}
           {datos ? (
