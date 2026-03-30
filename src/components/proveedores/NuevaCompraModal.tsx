@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { X, Plus, Trash2, Search, CheckCircle2, Truck } from 'lucide-react'
+import { X, Plus, Trash2, Search, CheckCircle2, Truck, Camera } from 'lucide-react'
 import {
   registrarCompra,
   buscarProveedores,
@@ -10,6 +10,7 @@ import { obtenerProductos } from '../../hooks/useProductos'
 import { useSesionActual } from '../../hooks/useCaja'
 import { formatCOP } from '../../utils/moneda'
 import type { CompraProveedor, Producto, Proveedor } from '../../db/schema'
+import { FotoFacturaModal } from './FotoFacturaModal'
 
 // ─── Props ────────────────────────────────────────────────────────────────────
 
@@ -46,6 +47,9 @@ export function NuevaCompraModal({ proveedorInicial, onClose }: NuevaCompraModal
   const [tipoPago, setTipoPago] = useState<CompraProveedor['tipoPago']>('contado')
   const [montoPagadoStr, setMontoPagadoStr] = useState('')
   const [notas, setNotas] = useState('')
+
+  // ── Estado: OCR modal ─────────────────────────────────────────────────────
+  const [mostrarOCR, setMostrarOCR] = useState(false)
 
   // ── Estado: envío ─────────────────────────────────────────────────────────
   const [guardando, setGuardando] = useState(false)
@@ -315,6 +319,16 @@ export function NuevaCompraModal({ proveedorInicial, onClose }: NuevaCompraModal
                   Total {formatCOP(totalCompra)}
                 </span>
               )}
+              <button
+                type="button"
+                onClick={() => setMostrarOCR(true)}
+                className="flex items-center gap-1.5 h-8 px-3 bg-primario/10 text-primario
+                           border border-primario/30 rounded-lg text-xs font-semibold
+                           hover:bg-primario/20 transition-colors"
+              >
+                <Camera size={13} />
+                Foto de factura
+              </button>
             </div>
 
             {/* Lista de ítems agregados */}
@@ -546,6 +560,14 @@ export function NuevaCompraModal({ proveedorInicial, onClose }: NuevaCompraModal
           <div className="h-4" />
         </div>
       </div>
+
+      {/* Modal OCR */}
+      {mostrarOCR && (
+        <FotoFacturaModal
+          onAgregar={(nuevosItems) => setItems((prev) => [...prev, ...nuevosItems])}
+          onClose={() => setMostrarOCR(false)}
+        />
+      )}
 
       {/* Botón registrar */}
       <div className="bg-white border-t border-borde p-4 shrink-0">
