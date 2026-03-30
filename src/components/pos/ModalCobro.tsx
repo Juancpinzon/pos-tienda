@@ -350,7 +350,10 @@ export function ModalCobro({ onClose }: ModalCobroProps) {
         const montoDeuda = total // capturar antes de que limpiarCarrito() lo ponga en 0
         await db.clientes
           .where('id').equals(clienteId)
-          .modify((c) => { c.totalDeuda = (c.totalDeuda ?? 0) + montoDeuda })
+          .modify((c) => {
+            c.totalDeuda = (c.totalDeuda ?? 0) + montoDeuda
+            c.ultimoMovimiento = ahora  // registrar fecha del cargo para mora
+          })
       }
 
       // Descontar stock para cada producto catalogado con stock controlado.

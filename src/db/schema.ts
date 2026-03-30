@@ -32,6 +32,7 @@ export interface Cliente {
   direccion?: string
   limiteCredito?: number   // COP. undefined = sin límite
   totalDeuda: number       // Se actualiza con cada movimiento
+  ultimoMovimiento?: Date  // Fecha del último cargo o pago (para calcular mora)
   activo: boolean
   creadoEn: Date
 }

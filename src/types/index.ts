@@ -30,6 +30,7 @@ export interface Cliente {
   direccion?: string
   limiteCredito?: number
   totalDeuda: number
+  ultimoMovimiento?: Date  // Fecha del último cargo o pago
   activo: boolean
   creadoEn: Date
 }

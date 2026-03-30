@@ -1,6 +1,6 @@
 import { useState } from 'react'
-import { ArrowLeft, TrendingUp, TrendingDown, Plus } from 'lucide-react'
-import { useCuentaCliente } from '../../hooks/useFiados'
+import { ArrowLeft, TrendingUp, TrendingDown, Plus, AlertTriangle } from 'lucide-react'
+import { useCuentaCliente, calcularDiasMora } from '../../hooks/useFiados'
 import { ModalNuevoPago } from './ModalNuevoPago'
 import { formatCOP } from '../../utils/moneda'
 
@@ -47,7 +47,8 @@ export function CuentaCliente({ clienteId, onVolver }: CuentaClienteProps) {
 
   const { cliente, movimientos } = datos
   const deudaPositiva = (cliente.totalDeuda ?? 0) > 0
-  const tieneCredito = (cliente.totalDeuda ?? 0) < 0
+  const tieneCredito  = (cliente.totalDeuda ?? 0) < 0
+  const diasMora      = calcularDiasMora(cliente)
 
   return (
     <div className="h-full flex flex-col overflow-hidden">
@@ -93,6 +94,23 @@ export function CuentaCliente({ clienteId, onVolver }: CuentaClienteProps) {
                 : '$0'}
           </span>
         </div>
+
+        {/* Banner de mora cuando supera 7 días */}
+        {deudaPositiva && diasMora > 7 && (
+          <div className={[
+            'mt-3 flex items-center gap-2 rounded-xl px-3 py-2.5 text-sm font-semibold',
+            diasMora > 30
+              ? 'bg-peligro/10 text-peligro border border-peligro/25'
+              : 'bg-advertencia/10 text-advertencia border border-advertencia/25',
+          ].join(' ')}>
+            <AlertTriangle size={16} className="shrink-0" />
+            <span>
+              {diasMora > 30
+                ? `⚠️ Este cliente lleva ${diasMora} días sin abonar`
+                : `Este cliente lleva ${diasMora} días sin abonar`}
+            </span>
+          </div>
+        )}
 
         {/* Botón registrar pago */}
         <button

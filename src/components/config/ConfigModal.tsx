@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
-import { X, Store, Phone, MapPin, FileText, Receipt, BookOpen, Users, Send, CheckCircle } from 'lucide-react'
+import { X, Store, Phone, MapPin, FileText, Receipt, BookOpen, Users, Send, CheckCircle, UserX, Loader2 } from 'lucide-react'
 import { useConfig, guardarConfig } from '../../hooks/useConfig'
 import { supabase, supabaseConfigurado } from '../../lib/supabase'
 import { useAuthStore } from '../../stores/authStore'
@@ -53,16 +53,52 @@ function Campo({
 
 // ─── Componente ───────────────────────────────────────────────────────────────
 
-// ─── Sección de invitar empleado ─────────────────────────────────────────────
+// ─── Tipos internos ───────────────────────────────────────────────────────────
+
+interface EmpleadoRow { id: string; nombre: string; email: string }
+
+// ─── Sección de equipo (solo dueño + Supabase) ────────────────────────────────
 
 function SeccionEquipo() {
   const usuario = useAuthStore((s) => s.usuario)
-  const [emailEmpleado, setEmailEmpleado] = useState('')
+
+  // Formulario de nuevo empleado
+  const [emailEmpleado,  setEmailEmpleado]  = useState('')
   const [nombreEmpleado, setNombreEmpleado] = useState('')
-  const [cargando, setCargando] = useState(false)
-  const [resultado, setResultado] = useState<{ ok: boolean; msg: string } | null>(null)
+  const [cargando,       setCargando]       = useState(false)
+  const [resultado,      setResultado]      = useState<{ ok: boolean; msg: string } | null>(null)
+
+  // Lista de empleados activos
+  const [empleados,        setEmpleados]        = useState<EmpleadoRow[]>([])
+  const [cargandoLista,    setCargandoLista]    = useState(false)
+  const [desactivandoId,   setDesactivandoId]   = useState<string | null>(null)
 
   if (!supabaseConfigurado || usuario?.rol !== 'dueno') return null
+
+  // Cargar lista de empleados
+  const cargarEmpleados = async () => {
+    if (!usuario?.tiendaId) return
+    setCargandoLista(true)
+    const { data } = await supabase
+      .from('usuarios')
+      .select('id, nombre, email')
+      .eq('tienda_id', usuario.tiendaId)
+      .eq('rol', 'empleado')
+      .order('nombre')
+    setEmpleados((data as EmpleadoRow[]) ?? [])
+    setCargandoLista(false)
+  }
+
+  useEffect(() => { void cargarEmpleados() }, [usuario?.tiendaId]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const handleDesactivar = async (emp: EmpleadoRow) => {
+    if (!confirm(`¿Revocar acceso de ${emp.nombre}? El empleado no podrá ingresar.`)) return
+    setDesactivandoId(emp.id)
+    // Eliminar la fila de usuarios — sin perfil, no puede autenticarse
+    await supabase.from('usuarios').delete().eq('id', emp.id)
+    setEmpleados((prev) => prev.filter((e) => e.id !== emp.id))
+    setDesactivandoId(null)
+  }
 
   const handleInvitar = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -71,9 +107,7 @@ function SeccionEquipo() {
     setResultado(null)
 
     try {
-      // Crear usuario con contraseña temporal — el empleado la cambia en su primer login
       const contrasenaTemporal = crypto.randomUUID().slice(0, 12)
-
       const { data: signupData, error: signupError } = await supabase.auth.signUp({
         email: emailEmpleado.trim().toLowerCase(),
         password: contrasenaTemporal,
@@ -91,7 +125,6 @@ function SeccionEquipo() {
         return
       }
 
-      // Registrar en tabla usuarios con rol 'empleado'
       const { error: usuarioError } = await supabase.from('usuarios').upsert({
         id:        userId,
         tienda_id: usuario.tiendaId,
@@ -107,10 +140,11 @@ function SeccionEquipo() {
 
       setResultado({
         ok: true,
-        msg: `¡Listo! ${nombreEmpleado} puede entrar con su correo y contraseña temporal: ${contrasenaTemporal}`,
+        msg: `¡Listo! ${nombreEmpleado} entra con correo y contraseña temporal: ${contrasenaTemporal}`,
       })
       setEmailEmpleado('')
       setNombreEmpleado('')
+      void cargarEmpleados()
     } catch {
       setResultado({ ok: false, msg: 'Error de conexión. Verifica tu internet.' })
     } finally {
@@ -124,11 +158,53 @@ function SeccionEquipo() {
         <Users size={13} />
         Equipo
       </p>
+
+      {/* Lista de empleados activos */}
+      {cargandoLista ? (
+        <div className="flex justify-center py-4">
+          <Loader2 size={18} className="animate-spin text-suave" />
+        </div>
+      ) : empleados.length > 0 && (
+        <div className="mb-3 bg-fondo rounded-xl border border-borde overflow-hidden">
+          <div className="px-3 py-2 border-b border-borde/50">
+            <p className="text-xs font-semibold text-suave">Empleados con acceso ({empleados.length})</p>
+          </div>
+          {empleados.map((emp) => (
+            <div key={emp.id} className="flex items-center gap-3 px-3 py-2.5 border-b last:border-0 border-borde/30">
+              <div className="w-8 h-8 rounded-full bg-sky-100 flex items-center justify-center shrink-0">
+                <span className="text-sm font-bold text-sky-600">{emp.nombre.charAt(0).toUpperCase()}</span>
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-semibold text-texto truncate">{emp.nombre}</p>
+                <p className="text-xs text-suave truncate">{emp.email}</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => handleDesactivar(emp)}
+                disabled={desactivandoId === emp.id}
+                className="flex items-center gap-1 h-7 px-2.5 rounded-lg text-xs font-semibold
+                           text-peligro border border-peligro/30 hover:bg-peligro/8 transition-colors
+                           disabled:opacity-40 disabled:cursor-not-allowed"
+                title="Revocar acceso"
+              >
+                {desactivandoId === emp.id
+                  ? <Loader2 size={12} className="animate-spin" />
+                  : <UserX size={12} />}
+                Revocar
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Formulario agregar empleado */}
       <div className="bg-fondo rounded-xl border border-borde p-4 flex flex-col gap-3">
-        <p className="text-sm text-texto font-medium">Agregar empleado</p>
-        <p className="text-xs text-suave">
-          El empleado podrá usar el POS y Fiados. No tendrá acceso a Caja, Reportes ni Configuración.
-        </p>
+        <div>
+          <p className="text-sm text-texto font-medium">Agregar empleado</p>
+          <p className="text-xs text-suave mt-0.5">
+            Solo puede usar POS y Fiados. Sin acceso a Caja, Reportes ni Configuración.
+          </p>
+        </div>
         <form onSubmit={handleInvitar} className="flex flex-col gap-2.5">
           <input
             type="text"
@@ -163,9 +239,7 @@ function SeccionEquipo() {
         {resultado && (
           <div className={[
             'rounded-xl px-3 py-3 flex gap-2',
-            resultado.ok
-              ? 'bg-exito/8 border border-exito/20'
-              : 'bg-peligro/8 border border-peligro/20',
+            resultado.ok ? 'bg-exito/8 border border-exito/20' : 'bg-peligro/8 border border-peligro/20',
           ].join(' ')}>
             {resultado.ok && <CheckCircle size={16} className="text-exito shrink-0 mt-0.5" />}
             <p className={`text-xs ${resultado.ok ? 'text-exito' : 'text-peligro'} leading-relaxed`}>

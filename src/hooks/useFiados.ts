@@ -127,7 +127,7 @@ export async function crearCliente(
 
 /**
  * Registra un pago contra la deuda de un cliente.
- * Transacción atómica: crea MovimientoFiado y actualiza totalDeuda.
+ * Transacción atómica: crea MovimientoFiado y actualiza totalDeuda + ultimoMovimiento.
  * Permite pagos parciales, totales y "sobrepagos" (crédito a favor).
  */
 export async function registrarPago(
@@ -135,23 +135,51 @@ export async function registrarPago(
   monto: number,
   sesionCajaId?: number
 ): Promise<void> {
+  const ahora = new Date()
   await db.transaction('rw', [db.movimientosFiado, db.clientes], async () => {
     await db.movimientosFiado.add({
       clienteId,
       tipo: 'pago',
       monto,
       descripcion: `Pago de deuda — ${formatCOP(monto)}`,
-      creadoEn: new Date(),
+      creadoEn: ahora,
       sesionCajaId,
     })
     const cliente = await db.clientes.get(clienteId)
     if (cliente) {
-      // Permitir saldo negativo (crédito a favor del cliente)
       await db.clientes.update(clienteId, {
         totalDeuda: (cliente.totalDeuda ?? 0) - monto,
+        ultimoMovimiento: ahora,
       })
     }
   })
+}
+
+// ─── Utilidades de mora (no reactivas) ───────────────────────────────────────
+
+/**
+ * Días sin movimiento cuando el cliente tiene deuda activa.
+ * Retorna 0 si no tiene deuda o no hay registro de movimiento.
+ */
+export function calcularDiasMora(cliente: Cliente): number {
+  if (!cliente.ultimoMovimiento || cliente.totalDeuda <= 0) return 0
+  const ms = Date.now() - new Date(cliente.ultimoMovimiento).getTime()
+  return Math.floor(ms / (1000 * 60 * 60 * 24))
+}
+
+export type BucketMora = 'al_dia' | 'media' | 'alta'
+
+/**
+ * Clasifica un cliente según su antigüedad de mora.
+ *   al_dia  → sin deuda o movimiento hace ≤ 7 días   🟢
+ *   media   → deuda y entre 8-30 días sin abonar      🟡
+ *   alta    → deuda y más de 30 días sin abonar        🔴
+ */
+export function getBucketMora(cliente: Cliente): BucketMora {
+  const dias = calcularDiasMora(cliente)
+  if (cliente.totalDeuda <= 0 || dias <= 7) return 'al_dia'
+  if (dias <= 30) return 'media'
+  return 'alta'
 }
 
 /**

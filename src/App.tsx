@@ -75,12 +75,13 @@ function IndicadorSync() {
 // ─── Header con totales del día ───────────────────────────────────────────────
 
 function HeaderDia({ onAbrirConfig }: { onAbrirConfig: () => void }) {
-  const sesion   = useSesionActual()
-  const resumen  = useResumenCaja(sesion?.id)
-  const config   = useConfig()
-  const usuario  = useAuthStore((s) => s.usuario)
+  const sesion       = useSesionActual()
+  const resumen      = useResumenCaja(sesion?.id)
+  const config       = useConfig()
+  const usuario      = useAuthStore((s) => s.usuario)
   const cerrarSesion = useAuthStore((s) => s.cerrarSesion)
-  const sinCaja  = sesion === null
+  const sinCaja      = sesion === null
+  const esDueno      = !usuario || usuario.rol === 'dueno'
 
   const nombreTienda = config?.nombreTienda ?? usuario?.nombreTienda ?? 'POS Tienda'
 
@@ -91,33 +92,43 @@ function HeaderDia({ onAbrirConfig }: { onAbrirConfig: () => void }) {
 
   return (
     <header className="h-11 bg-primario flex items-center justify-between px-3 shrink-0">
-      <button
-        type="button"
-        onClick={onAbrirConfig}
-        className="flex items-center gap-2 hover:opacity-80 transition-opacity"
-        title="Configuración de la tienda"
-      >
-        <span className="text-white text-base leading-none">🏪</span>
-        <span className="text-white font-display font-bold text-sm truncate max-w-[100px] sm:max-w-none">
-          {nombreTienda}
-        </span>
-      </button>
+      {/* Nombre tienda — solo dueño puede abrir config */}
+      {esDueno ? (
+        <button
+          type="button"
+          onClick={onAbrirConfig}
+          className="flex items-center gap-2 hover:opacity-80 transition-opacity"
+          title="Configuración de la tienda"
+        >
+          <span className="text-white text-base leading-none">🏪</span>
+          <span className="text-white font-display font-bold text-sm truncate max-w-[100px] sm:max-w-none">
+            {nombreTienda}
+          </span>
+        </button>
+      ) : (
+        <div className="flex items-center gap-2">
+          <span className="text-white text-base leading-none">🏪</span>
+          <span className="text-white font-display font-bold text-sm truncate max-w-[100px] sm:max-w-none">
+            {nombreTienda}
+          </span>
+        </div>
+      )}
 
       <div className="flex items-center gap-2">
-        {/* Indicador de rol del usuario */}
+        {/* Badge de rol — más visible */}
         {usuario && (
           <span className={[
-            'text-[10px] font-semibold px-1.5 py-0.5 rounded-md',
+            'text-xs font-bold px-2 py-0.5 rounded-md',
             usuario.rol === 'dueno'
-              ? 'bg-acento/20 text-acento'
-              : 'bg-white/10 text-white/60',
+              ? 'bg-acento/25 text-acento'
+              : 'bg-sky-400/20 text-sky-300',
           ].join(' ')}>
-            {usuario.rol === 'dueno' ? 'Dueño' : 'Empleado'}
+            {usuario.rol === 'dueno' ? '👑 Dueño' : '👤 Empleado'}
           </span>
         )}
 
-        {/* Estado de caja */}
-        {sinCaja && (
+        {/* Estado de caja (solo dueño ve la alerta) */}
+        {esDueno && sinCaja && (
           <div className="flex items-center gap-1 text-yellow-300 text-xs font-medium">
             <AlertCircle size={13} />
             <span className="hidden sm:inline">Caja sin abrir</span>
@@ -136,16 +147,18 @@ function HeaderDia({ onAbrirConfig }: { onAbrirConfig: () => void }) {
         {/* Indicador de sync */}
         <IndicadorSync />
 
-        {/* Config */}
-        <button
-          type="button"
-          onClick={onAbrirConfig}
-          className="w-8 h-8 flex items-center justify-center rounded-lg
-                     text-white/60 hover:text-white hover:bg-white/10 transition-colors"
-          title="Configuración"
-        >
-          <Settings size={16} />
-        </button>
+        {/* Config — solo dueño */}
+        {esDueno && (
+          <button
+            type="button"
+            onClick={onAbrirConfig}
+            className="w-8 h-8 flex items-center justify-center rounded-lg
+                       text-white/60 hover:text-white hover:bg-white/10 transition-colors"
+            title="Configuración"
+          >
+            <Settings size={16} />
+          </button>
+        )}
 
         {/* Cerrar sesión (solo si Supabase configurado) */}
         {supabaseConfigurado && usuario && (

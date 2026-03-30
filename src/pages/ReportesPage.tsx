@@ -1,8 +1,9 @@
 import { useState, useEffect, useMemo } from 'react'
 import { liveQuery } from 'dexie'
-import { TrendingUp, ShoppingBag, BarChart2, Users, Truck } from 'lucide-react'
+import { TrendingUp, ShoppingBag, BarChart2, Users, Truck, Clock } from 'lucide-react'
 import { db } from '../db/database'
 import { formatCOP } from '../utils/moneda'
+import { getBucketMora } from '../hooks/useFiados'
 import type { Cliente } from '../db/schema'
 
 // ─── Tipos de período ─────────────────────────────────────────────────────────
@@ -181,6 +182,32 @@ export default function ReportesPage() {
     })
     return () => sub.unsubscribe()
   }, [inicio])
+
+  // Cartera por antigüedad (no depende del período — es snapshot actual)
+  type BucketCartera = { monto: number; clientes: number }
+  type CarteraAntiguedad = { al_dia: BucketCartera; media: BucketCartera; alta: BucketCartera }
+  const [carteraAntiguedad, setCarteraAntiguedad] = useState<CarteraAntiguedad | undefined>(undefined)
+
+  useEffect(() => {
+    const sub = liveQuery(async (): Promise<CarteraAntiguedad> => {
+      const todos = await db.clientes.filter((c) => c.activo && c.totalDeuda > 0).toArray()
+      const result: CarteraAntiguedad = {
+        al_dia: { monto: 0, clientes: 0 },
+        media:  { monto: 0, clientes: 0 },
+        alta:   { monto: 0, clientes: 0 },
+      }
+      for (const c of todos) {
+        const bucket = getBucketMora(c)
+        result[bucket].monto   += c.totalDeuda
+        result[bucket].clientes += 1
+      }
+      return result
+    }).subscribe({
+      next: setCarteraAntiguedad,
+      error: (err) => { console.error('[ReportesPage:cartera]', err) },
+    })
+    return () => sub.unsubscribe()
+  }, [])
 
   const maxMonto = topProductos && topProductos.length > 0 ? topProductos[0].monto : 1
 
@@ -413,6 +440,43 @@ export default function ReportesPage() {
               )}
             </div>
           )}
+
+          {/* Cartera por antigüedad */}
+          <div className="bg-white rounded-xl border border-borde overflow-hidden">
+            <div className="px-4 py-3 border-b border-borde/50 flex items-center gap-2">
+              <Clock size={16} className="text-fiado" />
+              <span className="text-sm font-semibold text-texto">Cartera por antigüedad</span>
+            </div>
+            {!carteraAntiguedad ? (
+              <div className="p-6 flex justify-center">
+                <div className="w-5 h-5 border-2 border-fiado/30 border-t-fiado rounded-full animate-spin" />
+              </div>
+            ) : (
+              <div className="divide-y divide-borde/30">
+                {([
+                  { key: 'al_dia', emoji: '🟢', label: 'Al día (≤ 7 días)',  color: 'text-exito',      bg: 'bg-exito/8' },
+                  { key: 'media',  emoji: '🟡', label: '8-30 días de mora',  color: 'text-advertencia', bg: 'bg-advertencia/8' },
+                  { key: 'alta',   emoji: '🔴', label: '+30 días de mora',   color: 'text-peligro',    bg: 'bg-peligro/8' },
+                ] as const).map(({ key, emoji, label, color, bg }) => {
+                  const b = carteraAntiguedad[key]
+                  return (
+                    <div key={key} className={`flex items-center gap-3 px-4 py-3 ${b.clientes > 0 ? bg : ''}`}>
+                      <span className="text-base shrink-0">{emoji}</span>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-texto">{label}</p>
+                        <p className="text-xs text-suave">
+                          {b.clientes} cliente{b.clientes !== 1 ? 's' : ''}
+                        </p>
+                      </div>
+                      <span className={`moneda font-bold text-sm ${b.monto > 0 ? color : 'text-suave/40'}`}>
+                        {formatCOP(b.monto)}
+                      </span>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </div>
 
           {/* Top deudores */}
           <div className="bg-white rounded-xl border border-borde overflow-hidden">
