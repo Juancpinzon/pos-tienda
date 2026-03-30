@@ -15,7 +15,8 @@
       "Bash(npx vite:*)",
       "Bash(node scripts/generate-icons.mjs)",
       "Skill(claude-api)",
-      "Skill(claude-api:*)"
+      "Skill(claude-api:*)",
+      "Bash(python -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\(d[''''dependencies''''].get\\(''''@zxing/library'''',''''not found''''\\)\\)\")"
     ]
   }
 }
