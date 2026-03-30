@@ -139,6 +139,7 @@ async function pushClientes(tiendaId: string, deviceId: string) {
       direccion: r.direccion ?? null,
       limite_credito: r.limiteCredito ?? null,
       total_deuda: r.totalDeuda,
+      ultimo_movimiento: r.ultimoMovimiento ?? null,
       activo: r.activo,
       creado_en: r.creadoEn,
     })),
@@ -205,6 +206,7 @@ async function pushDetallesVenta(tiendaId: string, deviceId: string) {
         precio_unitario: r.precioUnitario,
         descuento: r.descuento,
         subtotal: r.subtotal,
+        precio_compra_snapshot: r.precioCompraSnapshot ?? null,
         es_producto_fantasma: r.esProductoFantasma,
       })),
       { onConflict: 'tienda_id,device_id,local_id', ignoreDuplicates: false }

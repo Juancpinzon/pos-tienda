@@ -6,6 +6,7 @@ import { X, Store, Phone, MapPin, FileText, Receipt, BookOpen, Users, Send, Chec
 import { useConfig, guardarConfig } from '../../hooks/useConfig'
 import { supabase, supabaseConfigurado } from '../../lib/supabase'
 import { useAuthStore } from '../../stores/authStore'
+import { ConfirmDialog } from '../shared/ConfirmDialog'
 
 // ─── Schema ───────────────────────────────────────────────────────────────────
 
@@ -72,6 +73,7 @@ function SeccionEquipo() {
   const [empleados,        setEmpleados]        = useState<EmpleadoRow[]>([])
   const [cargandoLista,    setCargandoLista]    = useState(false)
   const [desactivandoId,   setDesactivandoId]   = useState<string | null>(null)
+  const [confirmarRevocar, setConfirmarRevocar] = useState<EmpleadoRow | null>(null)
 
   if (!supabaseConfigurado || usuario?.rol !== 'dueno') return null
 
@@ -92,11 +94,16 @@ function SeccionEquipo() {
   useEffect(() => { void cargarEmpleados() }, [usuario?.tiendaId]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleDesactivar = async (emp: EmpleadoRow) => {
-    if (!confirm(`¿Revocar acceso de ${emp.nombre}? El empleado no podrá ingresar.`)) return
-    setDesactivandoId(emp.id)
+    setConfirmarRevocar(emp)
+  }
+
+  const confirmarRevocacion = async () => {
+    if (!confirmarRevocar) return
+    setDesactivandoId(confirmarRevocar.id)
+    setConfirmarRevocar(null)
     // Eliminar la fila de usuarios — sin perfil, no puede autenticarse
-    await supabase.from('usuarios').delete().eq('id', emp.id)
-    setEmpleados((prev) => prev.filter((e) => e.id !== emp.id))
+    await supabase.from('usuarios').delete().eq('id', confirmarRevocar.id)
+    setEmpleados((prev) => prev.filter((e) => e.id !== confirmarRevocar.id))
     setDesactivandoId(null)
   }
 
@@ -248,6 +255,19 @@ function SeccionEquipo() {
           </div>
         )}
       </div>
+
+      {/* Confirmación de revocar acceso */}
+      {confirmarRevocar && (
+        <ConfirmDialog
+          titulo="Revocar acceso"
+          mensaje={`¿Seguro que quieres revocar el acceso de ${confirmarRevocar.nombre}? No podrá ingresar al sistema.`}
+          labelConfirmar="Sí, revocar"
+          labelCancelar="Cancelar"
+          peligroso
+          onConfirmar={confirmarRevocacion}
+          onCancelar={() => setConfirmarRevocar(null)}
+        />
+      )}
     </section>
   )
 }

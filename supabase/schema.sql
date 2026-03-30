@@ -85,9 +85,10 @@ CREATE TABLE clientes (
   telefono       TEXT,
   direccion      TEXT,
   limite_credito INTEGER,
-  total_deuda    INTEGER NOT NULL DEFAULT 0,
-  activo         BOOLEAN DEFAULT TRUE,
-  creado_en      TIMESTAMPTZ,
+  total_deuda        INTEGER NOT NULL DEFAULT 0,
+  ultimo_movimiento  TIMESTAMPTZ,      -- fecha del último cargo o pago (para calcular mora)
+  activo             BOOLEAN DEFAULT TRUE,
+  creado_en          TIMESTAMPTZ,
   created_at     TIMESTAMPTZ DEFAULT NOW(),
   updated_at     TIMESTAMPTZ DEFAULT NOW(),
   UNIQUE (tienda_id, device_id, local_id)
@@ -147,9 +148,10 @@ CREATE TABLE detalles_venta (
   nombre_producto       TEXT NOT NULL,
   cantidad              NUMERIC NOT NULL,
   precio_unitario       INTEGER NOT NULL,
-  descuento             INTEGER NOT NULL DEFAULT 0,
-  subtotal              INTEGER NOT NULL,
-  es_producto_fantasma  BOOLEAN DEFAULT FALSE,
+  descuento               INTEGER NOT NULL DEFAULT 0,
+  subtotal                INTEGER NOT NULL,
+  precio_compra_snapshot  INTEGER,          -- snapshot del costo al vender (para margen)
+  es_producto_fantasma    BOOLEAN DEFAULT FALSE,
   created_at            TIMESTAMPTZ DEFAULT NOW(),
   updated_at            TIMESTAMPTZ DEFAULT NOW(),
   UNIQUE (tienda_id, device_id, local_id)
