@@ -82,17 +82,52 @@ function TabEfectivo({
 
 function TabFiado({
   clienteFiado,
+  total,
   onClienteChange,
 }: {
   clienteFiado: ClienteFiado | null
+  total: number
   onClienteChange: (v: ClienteFiado | null) => void
 }) {
+  // Advertencia de límite de crédito — no bloquea, el tendero decide
+  const advertenciaLimite = (() => {
+    if (!clienteFiado) return null
+    const limite = clienteFiado.limiteCredito
+    if (!limite || limite <= 0) return null
+    const deudaTrasCargo = (clienteFiado.totalDeuda ?? 0) + total
+    if (deudaTrasCargo <= limite) return null
+    return {
+      limite,
+      deudaActual: clienteFiado.totalDeuda ?? 0,
+      deudaTrasCargo,
+      exceso: deudaTrasCargo - limite,
+    }
+  })()
+
   return (
     <div className="flex flex-col gap-3">
       <div className="bg-fiado/10 border border-fiado/30 rounded-xl p-3 text-sm text-fiado font-medium">
         Se anotará la deuda. No se requiere cédula ni documentos.
       </div>
       <SelectorClienteFiado value={clienteFiado} onChange={onClienteChange} />
+
+      {/* Advertencia de límite de crédito — siempre no bloqueante */}
+      {advertenciaLimite && (
+        <div className="flex items-start gap-2 bg-orange-50 border border-orange-300
+                        rounded-xl px-3 py-2.5 text-sm text-orange-800">
+          <AlertCircle size={16} className="shrink-0 mt-0.5 text-orange-500" />
+          <div className="flex flex-col gap-0.5">
+            <span className="font-bold">Supera el límite de crédito</span>
+            <span className="text-xs text-orange-700">
+              Límite: {formatCOP(advertenciaLimite.limite)} · Deuda tras esta venta: {formatCOP(advertenciaLimite.deudaTrasCargo)}
+              {' '}(exceso de {formatCOP(advertenciaLimite.exceso)})
+            </span>
+            <span className="text-xs text-orange-600 font-medium mt-0.5">
+              La venta continúa — el tendero decide si fía.
+            </span>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -474,7 +509,7 @@ export function ModalCobro({ onClose }: ModalCobroProps) {
             <TabEfectivo total={total} billete={billete} onBilleteChange={setBillete} />
           )}
           {metodo === 'fiado' && (
-            <TabFiado clienteFiado={clienteFiado} onClienteChange={setClienteFiado} />
+            <TabFiado clienteFiado={clienteFiado} total={total} onClienteChange={setClienteFiado} />
           )}
           {metodo === 'transferencia' && (
             <TabTransferencia plataforma={plataforma} onPlataformaChange={setPlataforma} />
