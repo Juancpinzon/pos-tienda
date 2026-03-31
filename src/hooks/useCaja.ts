@@ -25,6 +25,8 @@ export interface ResumenCaja {
   cobrosFiadoTransferencia: number
   cobrosFiadoTarjeta: number
   efectivoEsperado: number   // montoApertura + totalEfectivo + cobrosFiadoEfectivo - totalGastos
+  totalAnulado: number       // total de ventas anuladas en la sesión
+  cantidadAnuladas: number
   gastos: GastoCaja[]
   ultimasVentas: UltimaVenta[]
 }
@@ -90,10 +92,12 @@ export function useResumenCaja(sesionId: number | undefined) {
       const sesion = await db.sesionCaja.get(sesionId)
       if (!sesion) return null
 
-      const ventas = await db.ventas
+      const todasVentas = await db.ventas
         .where('sesionCajaId').equals(sesionId)
-        .filter((v) => v.estado === 'completada')
         .toArray()
+
+      const ventas = todasVentas.filter((v) => v.estado === 'completada')
+      const ventasAnuladas = todasVentas.filter((v) => v.estado === 'anulada')
 
       const gastos = await db.gastosCaja
         .where('sesionCajaId').equals(sesionId)
@@ -140,6 +144,8 @@ export function useResumenCaja(sesionId: number | undefined) {
         .reduce((s, m) => s + m.monto, 0)
 
       const efectivoEsperado = sesion.montoApertura + totalEfectivo + cobrosFiadoEfectivo - totalGastos
+      const totalAnulado = ventasAnuladas.reduce((s, v) => s + v.total, 0)
+      const cantidadAnuladas = ventasAnuladas.length
 
       // Últimas 10 ventas con conteo de ítems
       const ultimasVentas = await Promise.all(
@@ -176,6 +182,8 @@ export function useResumenCaja(sesionId: number | undefined) {
         cobrosFiadoTransferencia,
         cobrosFiadoTarjeta,
         efectivoEsperado,
+        totalAnulado,
+        cantidadAnuladas,
         gastos,
         ultimasVentas,
       }

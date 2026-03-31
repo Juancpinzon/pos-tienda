@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { BrowserRouter, Routes, Route, NavLink, Navigate, useLocation, useNavigate } from 'react-router-dom'
-import { ShoppingCart, BookOpen, Package, DollarSign, BarChart2, AlertCircle, Settings, Truck, Archive, LogOut, RefreshCw, Moon, Sun, Store, ChevronDown } from 'lucide-react'
+import { ShoppingCart, BookOpen, Package, DollarSign, BarChart2, AlertCircle, Settings, Truck, Archive, LogOut, RefreshCw, Moon, Sun, Store, ChevronDown, Receipt } from 'lucide-react'
 import { useThemeStore, esModoOscuroActivo } from './stores/themeStore'
 import { useSeed } from './hooks/useSeed'
 import { useSesionActual, useResumenCaja } from './hooks/useCaja'
@@ -19,6 +19,7 @@ import ReportesPage from './pages/ReportesPage'
 import ProveedoresPage from './pages/ProveedoresPage'
 import InventarioPage from './pages/InventarioPage'
 import DashboardMultitienda from './pages/DashboardMultitienda'
+import HistorialVentasPage from './pages/HistorialVentasPage'
 import LoginPage from './pages/LoginPage'
 import RegisterPage from './pages/RegisterPage'
 import { formatCOP } from './utils/moneda'
@@ -437,6 +438,7 @@ function AppLayout({ primerUso }: { primerUso: boolean }) {
     { to: '/proveedores',   icon: Truck,        label: 'Proveed.',  badge: false,           tourId: undefined,    roles: ['dueno']             },
     { to: '/caja',          icon: DollarSign,   label: 'Caja',      badge: sinCaja,         tourId: 'nav-caja',   roles: ['dueno']             },
     { to: '/reportes',      icon: BarChart2,    label: 'Reportes',  badge: false,           tourId: undefined,    roles: ['dueno']             },
+    { to: '/historial',     icon: Receipt,      label: 'Historial', badge: false,           tourId: undefined,    roles: ['dueno', 'empleado'] },
     // Multi-tienda: solo si el dueño tiene 2+ tiendas en Supabase
     ...(tieneMultitienda
       ? [{ to: '/multi-tienda', icon: Store, label: 'Tiendas', badge: false, tourId: undefined, roles: ['dueno'] }]
@@ -502,6 +504,7 @@ function AppLayout({ primerUso }: { primerUso: boolean }) {
             <Route path="/proveedores" element={<RutaProtegida><ProveedoresPage /></RutaProtegida>}                   />
             <Route path="/caja"        element={<RutaProtegida><CajaPage /></RutaProtegida>}                          />
             <Route path="/reportes"      element={<RutaProtegida><ReportesPage /></RutaProtegida>}                  />
+            <Route path="/historial"     element={<HistorialVentasPage />}                                             />
             <Route path="/multi-tienda" element={<RutaProtegida><DashboardMultitienda /></RutaProtegida>}             />
           </Routes>
         </main>

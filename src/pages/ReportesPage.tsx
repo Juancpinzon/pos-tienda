@@ -45,6 +45,9 @@ export default function ReportesPage() {
     totalDaviplata: number
     totalDale: number
     totalFiado: number
+    // Anuladas
+    totalAnulado: number
+    cantidadAnuladas: number
   }
   type TopProducto = { nombre: string; cantidad: number; monto: number }
   type MargenPeriodo = { margen: number; conConoce: number; sinConoce: number } | null
@@ -60,8 +63,17 @@ export default function ReportesPage() {
         .filter((v) => v.estado === 'completada')
         .toArray()
 
+      // Anuladas del mismo período
+      const anuladas = await db.ventas
+        .where('creadaEn').aboveOrEqual(inicio)
+        .filter((v) => v.estado === 'anulada')
+        .toArray()
+
+      const totalAnulado    = anuladas.reduce((s, v) => s + v.total, 0)
+      const cantidadAnuladas = anuladas.length
+
       if (ventas.length === 0) {
-        return { ventas: [], totalVendido: 0, cantidadVentas: 0, ticketPromedio: 0, totalEfectivo: 0, totalTransferencia: 0, totalNequi: 0, totalDaviplata: 0, totalDale: 0, totalFiado: 0 }
+        return { ventas: [], totalVendido: 0, cantidadVentas: 0, ticketPromedio: 0, totalEfectivo: 0, totalTransferencia: 0, totalNequi: 0, totalDaviplata: 0, totalDale: 0, totalFiado: 0, totalAnulado, cantidadAnuladas }
       }
 
       const totalVendido       = ventas.reduce((s, v) => s + v.total, 0)
@@ -74,12 +86,12 @@ export default function ReportesPage() {
       const totalFiado         = ventas.filter((v) => v.tipoPago === 'fiado').reduce((s, v) => s + v.total, 0)
       const ticketPromedio     = Math.round(totalVendido / ventas.length)
 
-      return { ventas, totalVendido, cantidadVentas: ventas.length, ticketPromedio, totalEfectivo, totalTransferencia, totalNequi, totalDaviplata, totalDale, totalFiado }
+      return { ventas, totalVendido, cantidadVentas: ventas.length, ticketPromedio, totalEfectivo, totalTransferencia, totalNequi, totalDaviplata, totalDale, totalFiado, totalAnulado, cantidadAnuladas }
     }).subscribe({
       next: setDatos,
       error: (err) => {
         console.error('[ReportesPage:datos]', err)
-        setDatos({ ventas: [], totalVendido: 0, cantidadVentas: 0, ticketPromedio: 0, totalEfectivo: 0, totalTransferencia: 0, totalNequi: 0, totalDaviplata: 0, totalDale: 0, totalFiado: 0 })
+        setDatos({ ventas: [], totalVendido: 0, cantidadVentas: 0, ticketPromedio: 0, totalEfectivo: 0, totalTransferencia: 0, totalNequi: 0, totalDaviplata: 0, totalDale: 0, totalFiado: 0, totalAnulado: 0, cantidadAnuladas: 0 })
       },
     })
     return () => sub.unsubscribe()
@@ -251,7 +263,7 @@ export default function ReportesPage() {
                     <TrendingUp size={18} />
                   </div>
                   <div>
-                    <p className="text-xs text-suave">Total vendido</p>
+                    <p className="text-xs text-suave">Ventas netas</p>
                     <p className="moneda font-bold text-xl text-primario leading-tight">
                       {formatCOP(datos.totalVendido)}
                     </p>
@@ -260,6 +272,21 @@ export default function ReportesPage() {
                     {datos.cantidadVentas} venta{datos.cantidadVentas !== 1 ? 's' : ''}
                   </p>
                 </div>
+
+                {/* Ventas anuladas — solo si hay alguna */}
+                {datos.cantidadAnuladas > 0 && (
+                  <div className="flex items-center justify-between px-3 py-2 bg-peligro/5 border border-peligro/20 rounded-xl">
+                    <div>
+                      <p className="text-xs font-medium text-peligro">
+                        ❌ {datos.cantidadAnuladas} venta{datos.cantidadAnuladas !== 1 ? 's' : ''} anulada{datos.cantidadAnuladas !== 1 ? 's' : ''}
+                      </p>
+                      <p className="text-[10px] text-suave mt-0.5">
+                        Ventas brutas: {formatCOP(datos.totalVendido + datos.totalAnulado)} · Netas: {formatCOP(datos.totalVendido)}
+                      </p>
+                    </div>
+                    <span className="moneda font-bold text-sm text-peligro">-{formatCOP(datos.totalAnulado)}</span>
+                  </div>
+                )}
 
                 {/* Desglose por método de pago */}
                 <div className="grid grid-cols-3 gap-0 border-t border-borde/60 pt-3 divide-x divide-borde/50">

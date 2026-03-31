@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import {
   Plus, Wallet, ShoppingBag, TrendingDown,
-  Smartphone, Banknote, BookOpen, Lock, ChevronDown, Truck, CreditCard,
+  Smartphone, Banknote, BookOpen, Lock, ChevronDown, Truck, CreditCard, Ban,
 } from 'lucide-react'
 import { TecladoNumerico } from '../components/shared/TecladoNumerico'
 import { CerrarCaja } from '../components/caja/CerrarCaja'
@@ -304,6 +304,19 @@ export default function CajaPage() {
                     color="text-fiado"
                     siempre
                   />
+
+                  {/* ── Ventas anuladas ── */}
+                  {resumen.cantidadAnuladas > 0 && (
+                    <div className="flex items-center gap-3 px-4 py-2.5 bg-peligro/5">
+                      <span className="text-peligro shrink-0"><Ban size={14} /></span>
+                      <span className="text-sm flex-1 text-suave">
+                        ❌ Anuladas ({resumen.cantidadAnuladas})
+                      </span>
+                      <span className="moneda font-medium text-sm text-peligro">
+                        -{formatCOP(resumen.totalAnulado)}
+                      </span>
+                    </div>
+                  )}
 
                   {/* ── Gastos ── */}
                   <FilaDesglose
