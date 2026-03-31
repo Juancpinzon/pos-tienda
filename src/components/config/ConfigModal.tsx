@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
-import { X, Store, Phone, MapPin, FileText, Receipt, BookOpen, Users, Send, CheckCircle, UserX, Loader2, Sun, Moon, Monitor, Printer, Bluetooth, BluetoothOff, CheckCircle2 } from 'lucide-react'
+import { X, Store, Phone, MapPin, FileText, Receipt, BookOpen, Users, Send, CheckCircle, UserX, Loader2, Sun, Moon, Monitor, Printer, Bluetooth, BluetoothOff, CheckCircle2, Plus, Pencil } from 'lucide-react'
 import { useConfig, guardarConfig } from '../../hooks/useConfig'
 import { supabase, supabaseConfigurado } from '../../lib/supabase'
 import { useAuthStore } from '../../stores/authStore'
@@ -16,6 +16,11 @@ import {
   desconectarImpresora,
   imprimirPrueba,
 } from '../../lib/impresora'
+import {
+  crearTiendaNueva,
+  renombrarTienda,
+  cambiarTiendaActiva,
+} from '../../hooks/useTiendasDueno'
 
 // ─── Schema ───────────────────────────────────────────────────────────────────
 
@@ -276,6 +281,201 @@ function SeccionEquipo() {
           onConfirmar={confirmarRevocacion}
           onCancelar={() => setConfirmarRevocar(null)}
         />
+      )}
+    </section>
+  )
+}
+
+// ─── Sección mis tiendas (solo dueño + Supabase + 1+ tiendas) ────────────────
+
+function SeccionMisTiendas({ onClose }: { onClose: () => void }) {
+  const usuario            = useAuthStore((s) => s.usuario)
+  const todasLasTiendas    = useAuthStore((s) => s.todasLasTiendas)
+  const setTodasLasTiendas = useAuthStore((s) => s.setTodasLasTiendas)
+
+  const [editandoId,    setEditandoId]    = useState<string | null>(null)
+  const [editNombre,    setEditNombre]    = useState('')
+  const [guardando,     setGuardando]     = useState(false)
+  const [creando,       setCreando]       = useState(false)
+  const [nuevaNombre,   setNuevaNombre]   = useState('')
+  const [mostrarNueva,  setMostrarNueva]  = useState(false)
+  const [error,         setError]         = useState<string | null>(null)
+
+  if (!supabaseConfigurado || usuario?.rol !== 'dueno') return null
+
+  // Renombrar tienda
+  const handleRenombrar = async (tiendaId: string) => {
+    if (!editNombre.trim()) return
+    setGuardando(true)
+    setError(null)
+    try {
+      await renombrarTienda(tiendaId, editNombre)
+      setTodasLasTiendas(
+        todasLasTiendas.map((t) =>
+          t.id === tiendaId ? { ...t, nombre: editNombre.trim() } : t
+        )
+      )
+      setEditandoId(null)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Error al renombrar')
+    } finally {
+      setGuardando(false)
+    }
+  }
+
+  // Crear tienda nueva
+  const handleCrearTienda = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!nuevaNombre.trim() || !usuario) return
+    setCreando(true)
+    setError(null)
+    try {
+      const nueva = await crearTiendaNueva(nuevaNombre, usuario.id)
+      setTodasLasTiendas([...todasLasTiendas, nueva])
+      setNuevaNombre('')
+      setMostrarNueva(false)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Error al crear tienda')
+    } finally {
+      setCreando(false)
+    }
+  }
+
+  return (
+    <section>
+      <p className="text-xs font-semibold text-suave uppercase tracking-wider mb-3 flex items-center gap-1.5">
+        <Store size={13} />
+        Mis tiendas
+      </p>
+
+      <div className="bg-fondo rounded-xl border border-borde overflow-hidden">
+        {/* Lista de tiendas */}
+        {todasLasTiendas.map((tienda) => {
+          const esActiva  = tienda.id === usuario?.tiendaId
+          const editando  = editandoId === tienda.id
+
+          return (
+            <div key={tienda.id} className="flex items-center gap-2 px-3 py-2.5 border-b last:border-0 border-borde/40">
+              <div className={[
+                'w-7 h-7 rounded-lg flex items-center justify-center shrink-0',
+                esActiva ? 'bg-primario text-white' : 'bg-gray-100 text-suave',
+              ].join(' ')}>
+                <Store size={13} />
+              </div>
+
+              {editando ? (
+                <input
+                  autoFocus
+                  type="text"
+                  value={editNombre}
+                  onChange={(e) => setEditNombre(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') void handleRenombrar(tienda.id)
+                    if (e.key === 'Escape') setEditandoId(null)
+                  }}
+                  className="flex-1 h-8 px-2 border border-primario/40 rounded-lg text-sm text-texto
+                             focus:outline-none focus:ring-1 focus:ring-primario/40"
+                />
+              ) : (
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-texto truncate">{tienda.nombre}</p>
+                  {esActiva && (
+                    <p className="text-[10px] font-bold text-primario">Activa</p>
+                  )}
+                </div>
+              )}
+
+              {editando ? (
+                <div className="flex gap-1">
+                  <button
+                    type="button"
+                    onClick={() => void handleRenombrar(tienda.id)}
+                    disabled={guardando || !editNombre.trim()}
+                    className="h-7 px-2 bg-primario text-white rounded-lg text-xs font-semibold
+                               hover:bg-primario-hover disabled:opacity-40 transition-colors"
+                  >
+                    {guardando ? '…' : 'OK'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setEditandoId(null)}
+                    className="h-7 px-2 border border-borde text-suave rounded-lg text-xs hover:bg-gray-50"
+                  >
+                    ✕
+                  </button>
+                </div>
+              ) : (
+                <div className="flex gap-1">
+                  <button
+                    type="button"
+                    onClick={() => { setEditandoId(tienda.id); setEditNombre(tienda.nombre) }}
+                    className="w-7 h-7 flex items-center justify-center rounded-lg text-suave
+                               hover:bg-white hover:text-texto transition-colors"
+                    title="Renombrar"
+                  >
+                    <Pencil size={12} />
+                  </button>
+                  {!esActiva && (
+                    <button
+                      type="button"
+                      onClick={async () => { await cambiarTiendaActiva(tienda); onClose() }}
+                      className="h-7 px-2 bg-primario/10 text-primario rounded-lg text-[10px] font-bold
+                                 hover:bg-primario/15 transition-colors"
+                    >
+                      Ir
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+          )
+        })}
+
+        {/* Agregar tienda nueva */}
+        {mostrarNueva ? (
+          <form onSubmit={handleCrearTienda} className="flex items-center gap-2 px-3 py-2.5">
+            <input
+              autoFocus
+              type="text"
+              value={nuevaNombre}
+              onChange={(e) => setNuevaNombre(e.target.value)}
+              placeholder="Nombre de la nueva tienda…"
+              maxLength={60}
+              required
+              className="flex-1 h-8 px-2 border border-primario/40 rounded-lg text-sm text-texto
+                         focus:outline-none focus:ring-1 focus:ring-primario/40"
+            />
+            <button
+              type="submit"
+              disabled={creando || !nuevaNombre.trim()}
+              className="h-8 px-3 bg-primario text-white rounded-lg text-xs font-semibold
+                         hover:bg-primario-hover disabled:opacity-40 transition-colors"
+            >
+              {creando ? '…' : 'Crear'}
+            </button>
+            <button
+              type="button"
+              onClick={() => { setMostrarNueva(false); setNuevaNombre('') }}
+              className="h-8 px-2 border border-borde text-suave rounded-lg text-xs hover:bg-gray-50"
+            >
+              ✕
+            </button>
+          </form>
+        ) : (
+          <button
+            type="button"
+            onClick={() => setMostrarNueva(true)}
+            className="w-full flex items-center gap-2 px-3 py-2.5 text-sm text-primario
+                       hover:bg-primario/5 transition-colors font-medium"
+          >
+            <Plus size={14} />
+            Agregar tienda nueva
+          </button>
+        )}
+      </div>
+
+      {error && (
+        <p className="mt-2 text-xs text-peligro">{error}</p>
       )}
     </section>
   )
@@ -633,6 +833,9 @@ export function ConfigModal({ onClose, onReiniciarTour }: ConfigModalProps) {
 
             {/* Equipo (solo dueño + Supabase configurado) */}
             <SeccionEquipo />
+
+            {/* Mis tiendas (solo dueño + Supabase configurado) */}
+            <SeccionMisTiendas onClose={onClose} />
 
             {/* Impresora Bluetooth (solo dueño) */}
             <SeccionImpresora />

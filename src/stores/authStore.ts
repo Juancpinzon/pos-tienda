@@ -4,36 +4,48 @@ import { persist } from 'zustand/middleware'
 
 export type RolUsuario = 'dueno' | 'empleado'
 
-export interface UsuarioAuth {
-  id: string           // UUID de auth.users
-  email: string
+export interface TiendaResumen {
+  id:     string
   nombre: string
-  rol: RolUsuario
-  tiendaId: string     // UUID de la tienda
+}
+
+export interface UsuarioAuth {
+  id:           string       // UUID de auth.users
+  email:        string
+  nombre:       string
+  rol:          RolUsuario
+  tiendaId:     string       // UUID de la tienda ACTIVA
   nombreTienda: string
 }
 
 interface AuthState {
-  usuario: UsuarioAuth | null
-  isLoading: boolean
-  setUsuario: (u: UsuarioAuth | null) => void
-  setIsLoading: (v: boolean) => void
-  cerrarSesion: () => void
+  usuario:           UsuarioAuth  | null
+  todasLasTiendas:   TiendaResumen[]  // Tiendas del dueño (vacío si empleado o sin Supabase)
+  isLoading:         boolean
+  setUsuario:        (u: UsuarioAuth | null) => void
+  setTodasLasTiendas:(tiendas: TiendaResumen[]) => void
+  setIsLoading:      (v: boolean) => void
+  cerrarSesion:      () => void
 }
 
 export const useAuthStore = create<AuthState>()(
   persist(
     (set) => ({
-      usuario: null,
-      isLoading: true,
-      setUsuario: (usuario) => set({ usuario, isLoading: false }),
-      setIsLoading: (isLoading) => set({ isLoading }),
-      cerrarSesion: () => set({ usuario: null, isLoading: false }),
+      usuario:           null,
+      todasLasTiendas:   [],
+      isLoading:         true,
+      setUsuario:        (usuario)          => set({ usuario, isLoading: false }),
+      setTodasLasTiendas:(todasLasTiendas)  => set({ todasLasTiendas }),
+      setIsLoading:      (isLoading)        => set({ isLoading }),
+      cerrarSesion:      ()                 => set({ usuario: null, todasLasTiendas: [], isLoading: false }),
     }),
     {
       name: 'pos-auth',
-      // Solo persistir el usuario, no el loading state
-      partialize: (state) => ({ usuario: state.usuario }),
+      // Persistir usuario y tiendas para mostrar selector sin esperar carga
+      partialize: (state) => ({
+        usuario:         state.usuario,
+        todasLasTiendas: state.todasLasTiendas,
+      }),
     }
   )
 )
@@ -42,7 +54,7 @@ export const useAuthStore = create<AuthState>()(
 
 /** Rutas permitidas para cada rol */
 export const RUTAS_POR_ROL: Record<RolUsuario, string[]> = {
-  dueno:    ['/', '/fiados', '/productos', '/inventario', '/proveedores', '/caja', '/reportes'],
+  dueno:    ['/', '/fiados', '/productos', '/inventario', '/proveedores', '/caja', '/reportes', '/multi-tienda'],
   empleado: ['/', '/fiados'],
 }
 

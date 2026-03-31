@@ -1,6 +1,6 @@
-import { useState, useEffect } from 'react'
-import { BrowserRouter, Routes, Route, NavLink, Navigate, useLocation } from 'react-router-dom'
-import { ShoppingCart, BookOpen, Package, DollarSign, BarChart2, AlertCircle, Settings, Truck, Archive, LogOut, RefreshCw, Moon, Sun } from 'lucide-react'
+import { useState, useEffect, useRef } from 'react'
+import { BrowserRouter, Routes, Route, NavLink, Navigate, useLocation, useNavigate } from 'react-router-dom'
+import { ShoppingCart, BookOpen, Package, DollarSign, BarChart2, AlertCircle, Settings, Truck, Archive, LogOut, RefreshCw, Moon, Sun, Store, ChevronDown } from 'lucide-react'
 import { useThemeStore, esModoOscuroActivo } from './stores/themeStore'
 import { useSeed } from './hooks/useSeed'
 import { useSesionActual, useResumenCaja } from './hooks/useCaja'
@@ -18,12 +18,14 @@ import CajaPage from './pages/CajaPage'
 import ReportesPage from './pages/ReportesPage'
 import ProveedoresPage from './pages/ProveedoresPage'
 import InventarioPage from './pages/InventarioPage'
+import DashboardMultitienda from './pages/DashboardMultitienda'
 import LoginPage from './pages/LoginPage'
 import RegisterPage from './pages/RegisterPage'
 import { formatCOP } from './utils/moneda'
-import { useAuthStore, puedeAcceder } from './stores/authStore'
+import { useAuthStore, puedeAcceder, type TiendaResumen } from './stores/authStore'
 import { supabase, supabaseConfigurado } from './lib/supabase'
 import { startAutoSync, stopAutoSync, pullFromSupabase } from './lib/sync'
+import { cargarTiendasDueno, registrarPropietarioTienda, cambiarTiendaActiva } from './hooks/useTiendasDueno'
 
 // ─── Pantallas de carga / error ───────────────────────────────────────────────
 
@@ -73,6 +75,84 @@ function IndicadorSync() {
   )
 }
 
+// ─── Selector de tienda (multi-tienda) ───────────────────────────────────────
+
+function SelectorTienda() {
+  const usuario         = useAuthStore((s) => s.usuario)
+  const todasLasTiendas = useAuthStore((s) => s.todasLasTiendas)
+  const navigate        = useNavigate()
+  const [abierto, setAbierto] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+
+  // Cerrar al hacer clic fuera
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setAbierto(false)
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [])
+
+  // Solo mostrar si hay 2+ tiendas
+  if (todasLasTiendas.length < 2) return null
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        type="button"
+        onClick={() => setAbierto((v) => !v)}
+        className="flex items-center gap-1 h-7 px-2 rounded-lg
+                   bg-white/15 text-white text-xs font-semibold
+                   hover:bg-white/25 transition-colors"
+        title="Cambiar tienda"
+      >
+        <Store size={12} />
+        <ChevronDown size={11} className={`transition-transform ${abierto ? 'rotate-180' : ''}`} />
+      </button>
+
+      {abierto && (
+        <div className="absolute top-9 left-0 w-52 bg-white rounded-xl shadow-xl border border-borde z-50 overflow-hidden">
+          <div className="px-3 py-2 border-b border-borde/50">
+            <p className="text-[10px] font-bold text-suave uppercase tracking-wider">Mis tiendas</p>
+          </div>
+          {todasLasTiendas.map((t) => {
+            const esActiva = t.id === usuario?.tiendaId
+            return (
+              <button
+                key={t.id}
+                type="button"
+                onClick={async () => {
+                  setAbierto(false)
+                  if (!esActiva) await cambiarTiendaActiva(t)
+                }}
+                className={[
+                  'w-full flex items-center gap-2.5 px-3 py-2.5 text-left text-sm transition-colors',
+                  esActiva
+                    ? 'bg-primario/8 text-primario font-semibold'
+                    : 'text-texto hover:bg-fondo',
+                ].join(' ')}
+              >
+                <Store size={14} className="shrink-0" />
+                <span className="flex-1 truncate">{t.nombre}</span>
+                {esActiva && <span className="text-[10px] font-bold text-primario">ACTIVA</span>}
+              </button>
+            )
+          })}
+          <div className="border-t border-borde/50 px-3 py-2">
+            <button
+              type="button"
+              onClick={() => { setAbierto(false); navigate('/multi-tienda') }}
+              className="w-full text-xs text-primario font-semibold hover:underline text-left"
+            >
+              Ver dashboard multi-tienda →
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ─── Header con totales del día ───────────────────────────────────────────────
 
 function HeaderDia({ onAbrirConfig }: { onAbrirConfig: () => void }) {
@@ -80,6 +160,7 @@ function HeaderDia({ onAbrirConfig }: { onAbrirConfig: () => void }) {
   const resumen       = useResumenCaja(sesion?.id)
   const config        = useConfig()
   const usuario       = useAuthStore((s) => s.usuario)
+  const todasLasTiendas = useAuthStore((s) => s.todasLasTiendas)
   const cerrarSesion  = useAuthStore((s) => s.cerrarSesion)
   const sinCaja       = sesion === null
   const esDueno       = !usuario || usuario.rol === 'dueno'
@@ -96,27 +177,31 @@ function HeaderDia({ onAbrirConfig }: { onAbrirConfig: () => void }) {
 
   return (
     <header className="h-11 bg-primario flex items-center justify-between px-3 shrink-0">
-      {/* Nombre tienda — solo dueño puede abrir config */}
-      {esDueno ? (
-        <button
-          type="button"
-          onClick={onAbrirConfig}
-          className="flex items-center gap-2 hover:opacity-80 transition-opacity"
-          title="Configuración de la tienda"
-        >
-          <span className="text-white text-base leading-none">🏪</span>
-          <span className="text-white font-display font-bold text-sm truncate max-w-[100px] sm:max-w-none">
-            {nombreTienda}
-          </span>
-        </button>
-      ) : (
-        <div className="flex items-center gap-2">
-          <span className="text-white text-base leading-none">🏪</span>
-          <span className="text-white font-display font-bold text-sm truncate max-w-[100px] sm:max-w-none">
-            {nombreTienda}
-          </span>
-        </div>
-      )}
+      {/* Nombre tienda + selector multi-tienda */}
+      <div className="flex items-center gap-2">
+        {esDueno ? (
+          <button
+            type="button"
+            onClick={onAbrirConfig}
+            className="flex items-center gap-2 hover:opacity-80 transition-opacity"
+            title="Configuración de la tienda"
+          >
+            <span className="text-white text-base leading-none">🏪</span>
+            <span className="text-white font-display font-bold text-sm truncate max-w-[80px] sm:max-w-[140px]">
+              {nombreTienda}
+            </span>
+          </button>
+        ) : (
+          <div className="flex items-center gap-2">
+            <span className="text-white text-base leading-none">🏪</span>
+            <span className="text-white font-display font-bold text-sm truncate max-w-[80px] sm:max-w-[140px]">
+              {nombreTienda}
+            </span>
+          </div>
+        )}
+        {/* Selector: solo si el dueño tiene 2+ tiendas */}
+        {esDueno && todasLasTiendas.length >= 2 && <SelectorTienda />}
+      </div>
 
       <div className="flex items-center gap-2">
         {/* Badge de rol — más visible */}
@@ -211,10 +296,11 @@ function RutaProtegida({ children }: { children: React.ReactNode }) {
 
 export default function App() {
   const { estado, error, primerUso } = useSeed()
-  const usuario    = useAuthStore((s) => s.usuario)
-  const isLoading  = useAuthStore((s) => s.isLoading)
-  const setUsuario = useAuthStore((s) => s.setUsuario)
-  const setIsLoading = useAuthStore((s) => s.setIsLoading)
+  const usuario            = useAuthStore((s) => s.usuario)
+  const isLoading          = useAuthStore((s) => s.isLoading)
+  const setUsuario         = useAuthStore((s) => s.setUsuario)
+  const setTodasLasTiendas = useAuthStore((s) => s.setTodasLasTiendas)
+  const setIsLoading       = useAuthStore((s) => s.setIsLoading)
 
   const [vistaAuth, setVistaAuth] = useState<'login' | 'registro'>('login')
 
@@ -239,20 +325,29 @@ export default function App() {
         .single()
 
       if (perfil) {
-        setUsuario({
-          id:           perfil.id,
-          email:        perfil.email,
-          nombre:       perfil.nombre,
+        const usuarioAuth = {
+          id:           perfil.id as string,
+          email:        perfil.email as string,
+          nombre:       perfil.nombre as string,
           rol:          perfil.rol as 'dueno' | 'empleado',
-          tiendaId:     perfil.tienda_id,
+          tiendaId:     perfil.tienda_id as string,
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           nombreTienda: (perfil.tiendas as any)?.nombre ?? 'Mi Tienda',
-        })
+        }
+        setUsuario(usuarioAuth)
+
+        // Dueño: asegurar propietarios_tienda + cargar todas las tiendas
+        if (usuarioAuth.rol === 'dueno') {
+          void registrarPropietarioTienda(usuarioAuth.id, usuarioAuth.tiendaId)
+          cargarTiendasDueno(usuarioAuth.id).then((tiendas) => {
+            if (tiendas.length > 0) setTodasLasTiendas(tiendas)
+          })
+        }
       } else {
         setIsLoading(false)
       }
     })
-  }, [setUsuario, setIsLoading])
+  }, [setUsuario, setIsLoading, setTodasLasTiendas])
 
   // Iniciar/parar auto-sync según usuario
   useEffect(() => {
@@ -330,15 +425,22 @@ function AppLayout({ primerUso }: { primerUso: boolean }) {
     setSincronizando(false)
   }
 
+  const todasLasTiendas = useAuthStore((s) => s.todasLasTiendas)
+  const tieneMultitienda = supabaseConfigurado && todasLasTiendas.length >= 2
+
   // Items de navegación filtrados según el rol
   const navItemsTodos = [
-    { to: '/',            icon: ShoppingCart, label: 'POS',       badge: false,        tourId: undefined,    roles: ['dueno', 'empleado'] },
-    { to: '/fiados',      icon: BookOpen,     label: 'Fiados',    badge: false,        tourId: 'nav-fiados', roles: ['dueno', 'empleado'] },
-    { to: '/productos',   icon: Package,      label: 'Productos', badge: hayBajoStock, tourId: undefined,    roles: ['dueno']             },
-    { to: '/inventario',  icon: Archive,      label: 'Stock',     badge: hayBajoStock, tourId: undefined,    roles: ['dueno']             },
-    { to: '/proveedores', icon: Truck,        label: 'Proveed.',  badge: false,        tourId: undefined,    roles: ['dueno']             },
-    { to: '/caja',        icon: DollarSign,   label: 'Caja',      badge: sinCaja,      tourId: 'nav-caja',   roles: ['dueno']             },
-    { to: '/reportes',    icon: BarChart2,    label: 'Reportes',  badge: false,        tourId: undefined,    roles: ['dueno']             },
+    { to: '/',              icon: ShoppingCart, label: 'POS',       badge: false,           tourId: undefined,    roles: ['dueno', 'empleado'] },
+    { to: '/fiados',        icon: BookOpen,     label: 'Fiados',    badge: false,           tourId: 'nav-fiados', roles: ['dueno', 'empleado'] },
+    { to: '/productos',     icon: Package,      label: 'Productos', badge: hayBajoStock,    tourId: undefined,    roles: ['dueno']             },
+    { to: '/inventario',    icon: Archive,      label: 'Stock',     badge: hayBajoStock,    tourId: undefined,    roles: ['dueno']             },
+    { to: '/proveedores',   icon: Truck,        label: 'Proveed.',  badge: false,           tourId: undefined,    roles: ['dueno']             },
+    { to: '/caja',          icon: DollarSign,   label: 'Caja',      badge: sinCaja,         tourId: 'nav-caja',   roles: ['dueno']             },
+    { to: '/reportes',      icon: BarChart2,    label: 'Reportes',  badge: false,           tourId: undefined,    roles: ['dueno']             },
+    // Multi-tienda: solo si el dueño tiene 2+ tiendas en Supabase
+    ...(tieneMultitienda
+      ? [{ to: '/multi-tienda', icon: Store, label: 'Tiendas', badge: false, tourId: undefined, roles: ['dueno'] }]
+      : []),
   ]
 
   const navItems = navItemsTodos.filter((item) => item.roles.includes(rol))
@@ -399,7 +501,8 @@ function AppLayout({ primerUso }: { primerUso: boolean }) {
             <Route path="/inventario"  element={<RutaProtegida><InventarioPage /></RutaProtegida>}                    />
             <Route path="/proveedores" element={<RutaProtegida><ProveedoresPage /></RutaProtegida>}                   />
             <Route path="/caja"        element={<RutaProtegida><CajaPage /></RutaProtegida>}                          />
-            <Route path="/reportes"    element={<RutaProtegida><ReportesPage /></RutaProtegida>}                      />
+            <Route path="/reportes"      element={<RutaProtegida><ReportesPage /></RutaProtegida>}                  />
+            <Route path="/multi-tienda" element={<RutaProtegida><DashboardMultitienda /></RutaProtegida>}             />
           </Routes>
         </main>
       </div>

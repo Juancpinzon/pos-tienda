@@ -449,3 +449,64 @@ CREATE POLICY "mapeos_sku: solo su tienda"
   ));
 
 CREATE INDEX idx_mapeos_sku_tienda ON mapeos_sku (tienda_id, nombre_proveedor);
+
+-- ═══════════════════════════════════════════════════════════════════════════
+--  Fase 18 — Multi-tienda
+--  Un dueño puede ser propietario de N tiendas.
+--  La tabla propietarios_tienda es la fuente de verdad.
+-- ═══════════════════════════════════════════════════════════════════════════
+
+CREATE TABLE IF NOT EXISTS propietarios_tienda (
+  usuario_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
+  tienda_id  UUID REFERENCES tiendas(id)    ON DELETE CASCADE,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  PRIMARY KEY (usuario_id, tienda_id)
+);
+
+ALTER TABLE propietarios_tienda ENABLE ROW LEVEL SECURITY;
+
+-- Un dueño solo ve sus propias relaciones
+CREATE POLICY "propietarios_select" ON propietarios_tienda
+  FOR SELECT USING (usuario_id = auth.uid());
+
+-- Solo puede crear relaciones propias
+CREATE POLICY "propietarios_insert" ON propietarios_tienda
+  FOR INSERT TO authenticated WITH CHECK (usuario_id = auth.uid());
+
+-- Puede borrar sus propias relaciones (ej. ceder tienda)
+CREATE POLICY "propietarios_delete" ON propietarios_tienda
+  FOR DELETE USING (usuario_id = auth.uid());
+
+-- ─── Función helper: devuelve TODOS los tienda_ids accesibles al usuario ───────
+-- Empleados: solo su tienda_id del registro de usuarios
+-- Dueños con multi-tienda: todas sus tiendas vía propietarios_tienda
+
+CREATE OR REPLACE FUNCTION get_tiendas_accesibles()
+RETURNS SETOF UUID AS $$
+  SELECT tienda_id FROM propietarios_tienda WHERE usuario_id = auth.uid()
+  UNION
+  SELECT tienda_id FROM usuarios WHERE id = auth.uid()
+$$ LANGUAGE sql SECURITY DEFINER STABLE;
+
+-- ─── Políticas de LECTURA cross-tienda (aditivas a las existentes) ────────────
+-- Estas políticas permiten que un dueño con varias tiendas lea datos
+-- de todas ellas. Son SELECT-only; las escrituras siguen restringidas
+-- a la tienda activa (get_tienda_id() en las políticas existentes).
+
+CREATE POLICY "tiendas_propietario_read" ON tiendas
+  FOR SELECT USING (id IN (SELECT get_tiendas_accesibles()));
+
+CREATE POLICY "ventas_propietario_read" ON ventas
+  FOR SELECT USING (tienda_id IN (SELECT get_tiendas_accesibles()));
+
+CREATE POLICY "sesiones_caja_propietario_read" ON sesiones_caja
+  FOR SELECT USING (tienda_id IN (SELECT get_tiendas_accesibles()));
+
+CREATE POLICY "clientes_propietario_read" ON clientes
+  FOR SELECT USING (tienda_id IN (SELECT get_tiendas_accesibles()));
+
+-- ─── Migración: poblar propietarios_tienda para dueños existentes ────────────
+-- Ejecutar una sola vez en producción.
+INSERT INTO propietarios_tienda (usuario_id, tienda_id)
+  SELECT id, tienda_id FROM usuarios WHERE rol = 'dueno'
+ON CONFLICT DO NOTHING;
