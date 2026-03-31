@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { X, Banknote, BookOpen, Smartphone, CheckCircle2, AlertCircle, MessageCircle, ShoppingCart } from 'lucide-react'
+import { X, Banknote, BookOpen, Smartphone, CheckCircle2, AlertCircle, MessageCircle, ShoppingCart, Printer, Settings } from 'lucide-react'
 import { db } from '../../db/database'
 import { useVentaStore, selectTotal } from '../../stores/ventaStore'
 import { TecladoNumerico } from '../shared/TecladoNumerico'
@@ -9,6 +9,13 @@ import { formatCOP, parsearEntero } from '../../utils/moneda'
 import { generarRecibo, compartirPorWhatsApp } from '../../utils/impresion'
 import { obtenerConfig } from '../../hooks/useConfig'
 import { registrarSalida, verificarStockInsuficiente } from '../../hooks/useStock'
+import {
+  bluetoothDisponible,
+  obtenerNombreImpresora,
+  impresoraConectada,
+  conectarImpresora,
+  imprimirRecibo,
+} from '../../lib/impresora'
 import type { Venta, DetalleVenta } from '../../db/schema'
 
 type MetodoPago = 'efectivo' | 'fiado' | 'transferencia'
@@ -171,6 +178,8 @@ function TabTransferencia({
 
 // ─── Pantalla de éxito ────────────────────────────────────────────────────────
 
+type EstadoImpresion = 'idle' | 'conectando' | 'imprimiendo' | 'ok' | 'error'
+
 function PantallaExito({
   venta,
   detalles,
@@ -180,20 +189,67 @@ function PantallaExito({
   detalles: DetalleVenta[]
   onNuevaVenta: () => void
 }) {
-  const [compartiendo, setCompartiendo] = useState(false)
+  const [compartiendo,      setCompartiendo]      = useState(false)
+  const [estadoImpresion,   setEstadoImpresion]   = useState<EstadoImpresion>('idle')
+  const [errorImpresion,    setErrorImpresion]     = useState<string | null>(null)
+  // Nombre de la impresora — refresca si cambia durante la sesión
+  const [nombreImpresora,   setNombreImpresora]   = useState<string | null>(
+    () => obtenerNombreImpresora()
+  )
+
+  const cambio = venta.cambio ?? 0
+
+  // ── WhatsApp ───────────────────────────────────────────────────────────────
 
   const handleCompartir = async () => {
     setCompartiendo(true)
     try {
       const config = await obtenerConfig()
-      const texto = generarRecibo(venta, detalles, config)
-      compartirPorWhatsApp(texto)
+      compartirPorWhatsApp(generarRecibo(venta, detalles, config))
     } finally {
       setCompartiendo(false)
     }
   }
 
-  const cambio = venta.cambio ?? 0
+  // ── Impresión Bluetooth ───────────────────────────────────────────────────
+
+  const handleImprimir = async () => {
+    setErrorImpresion(null)
+
+    // Si no está conectada, intentar conectar primero
+    if (!impresoraConectada()) {
+      setEstadoImpresion('conectando')
+      try {
+        const { nombre } = await conectarImpresora()
+        setNombreImpresora(nombre)
+      } catch (err) {
+        setErrorImpresion(err instanceof Error ? err.message : 'No se pudo conectar')
+        setEstadoImpresion('error')
+        return
+      }
+    }
+
+    setEstadoImpresion('imprimiendo')
+    try {
+      const config = await obtenerConfig()
+      await imprimirRecibo(venta, detalles, config)
+      setEstadoImpresion('ok')
+    } catch (err) {
+      setErrorImpresion(err instanceof Error ? err.message : 'Error al imprimir')
+      setEstadoImpresion('error')
+    }
+  }
+
+  // Etiqueta dinámica del botón de impresión
+  const labelImprimir = () => {
+    if (estadoImpresion === 'conectando')  return 'Conectando…'
+    if (estadoImpresion === 'imprimiendo') return 'Imprimiendo…'
+    if (estadoImpresion === 'ok')          return '¡Recibo impreso!'
+    if (nombreImpresora)                   return 'Imprimir recibo'
+    return 'Conectar impresora'
+  }
+
+  const ocupado = estadoImpresion === 'conectando' || estadoImpresion === 'imprimiendo'
 
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60">
@@ -205,35 +261,81 @@ function PantallaExito({
           <p className="font-display font-bold text-2xl text-white">¡Cobrado!</p>
           <p className="moneda font-bold text-3xl text-white">{formatCOP(venta.total)}</p>
           {venta.tipoPago === 'efectivo' && cambio > 0 && (
-            <p className="text-white/80 text-sm font-medium">
-              Cambio: {formatCOP(cambio)}
-            </p>
+            <p className="text-white/80 text-sm font-medium">Cambio: {formatCOP(cambio)}</p>
           )}
           {venta.tipoPago === 'fiado' && (
             <p className="text-white/80 text-sm font-medium">Anotado a fiado</p>
           )}
           {venta.tipoPago === 'transferencia' && (
-            <p className="text-white/80 text-sm font-medium">
-              {venta.notas ?? 'Transferencia'}
-            </p>
+            <p className="text-white/80 text-sm font-medium">{venta.notas ?? 'Transferencia'}</p>
           )}
         </div>
 
         {/* Acciones */}
         <div className="w-full p-5 flex flex-col gap-3">
+
+          {/* Botón de impresión — solo si Web Bluetooth disponible */}
+          {bluetoothDisponible() ? (
+            <div className="flex flex-col gap-1.5">
+              <button
+                type="button"
+                onClick={handleImprimir}
+                disabled={ocupado || estadoImpresion === 'ok'}
+                className={[
+                  'w-full h-12 rounded-xl font-semibold flex items-center justify-center gap-2',
+                  'active:scale-95 transition-all disabled:cursor-not-allowed',
+                  estadoImpresion === 'ok'
+                    ? 'bg-exito/10 text-exito border border-exito/30'
+                    : 'bg-gray-900 text-white hover:bg-gray-800 disabled:opacity-50',
+                ].join(' ')}
+              >
+                {ocupado ? (
+                  <div className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />
+                ) : estadoImpresion === 'ok' ? (
+                  <CheckCircle2 size={16} />
+                ) : nombreImpresora ? (
+                  <Printer size={18} />
+                ) : (
+                  <Settings size={18} />
+                )}
+                {labelImprimir()}
+              </button>
+              {/* Nombre de impresora conectada */}
+              {nombreImpresora && estadoImpresion !== 'ok' && (
+                <p className="text-center text-xs text-suave">🖨️ {nombreImpresora}</p>
+              )}
+              {/* Error de impresión */}
+              {estadoImpresion === 'error' && errorImpresion && (
+                <p className="text-center text-xs text-peligro leading-snug px-1">
+                  {errorImpresion}
+                </p>
+              )}
+            </div>
+          ) : (
+            /* Mensaje iOS / navegador incompatible */
+            <div className="flex items-start gap-2 bg-gray-50 border border-borde rounded-xl px-3 py-2.5">
+              <Printer size={15} className="text-suave shrink-0 mt-0.5" />
+              <p className="text-xs text-suave leading-relaxed">
+                La impresión Bluetooth funciona en Chrome para Android.
+                En iPhone use el botón de WhatsApp.
+              </p>
+            </div>
+          )}
+
+          {/* WhatsApp — siempre disponible */}
           <button
             type="button"
             onClick={handleCompartir}
             disabled={compartiendo}
             className="w-full h-12 bg-[#25D366] text-white rounded-xl font-semibold
                        flex items-center justify-center gap-2
-                       hover:opacity-90 active:scale-95 transition-all
-                       disabled:opacity-50"
+                       hover:opacity-90 active:scale-95 transition-all disabled:opacity-50"
           >
             <MessageCircle size={18} />
-            {compartiendo ? 'Generando recibo…' : 'Compartir recibo por WhatsApp'}
+            {compartiendo ? 'Generando recibo…' : 'Compartir por WhatsApp'}
           </button>
 
+          {/* Nueva venta */}
           <button
             type="button"
             onClick={onNuevaVenta}
