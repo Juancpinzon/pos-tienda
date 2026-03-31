@@ -12,6 +12,11 @@ export const CONFIG_DEFAULTS: Omit<ConfigTienda, 'id'> = {
   permitirStockNegativo: true,
   limiteFiadoPorDefecto: 0,
   tieneDatafono: false,
+  notificacionesActivas: false,
+  notifFiado: true,
+  notifStock: true,
+  notifCaja: false,
+  horaCaja: '07:00',
 }
 
 /**

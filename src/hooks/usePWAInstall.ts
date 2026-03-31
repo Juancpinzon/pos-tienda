@@ -1,4 +1,5 @@
-// Hook para detectar el evento de instalación PWA y mostrar el banner
+// Hook para detectar el evento de instalación PWA y mostrar el banner.
+// En entorno Capacitor (app nativa) este hook no tiene efecto.
 import { useState, useEffect } from 'react'
 
 interface BeforeInstallPromptEvent extends Event {

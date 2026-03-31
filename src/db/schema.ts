@@ -114,6 +114,12 @@ export interface ConfigTienda {
   limiteFiadoPorDefecto: number   // COP. 0 = sin límite
   tourCompletado?: boolean        // true = el tendero ya vio el tour de onboarding
   tieneDatafono?: boolean         // true = mostrar opción Tarjeta en el cobro
+  // ── Notificaciones push (Fase 22) ──────────────────────────────────────────
+  notificacionesActivas?: boolean // Master toggle de notificaciones
+  notifFiado?: boolean            // Recordatorios de mora de fiado
+  notifStock?: boolean            // Alertas de productos agotados
+  notifCaja?: boolean             // Recordatorio de apertura de caja
+  horaCaja?: string               // Hora configurada para el recordatorio, ej "07:00"
 }
 
 // ─── Módulo de Proveedores y Compras (v2) ─────────────────────────────────────

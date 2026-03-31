@@ -1,0 +1,293 @@
+// Gestión de notificaciones push y recordatorios de negocio
+// Fase 22 — notificaciones in-app (cuando la PWA está abierta o en segundo plano)
+//
+// ARQUITECTURA:
+//   • Notification API nativa del navegador (no requiere servidor)
+//   • showNotification vía ServiceWorkerRegistration para compatibilidad con
+//     PWA instalada en Android aunque el tab esté en segundo plano
+//   • Rate limiting con localStorage para no spamear al dueño
+//   • push_subscriptions en Supabase guardado para push desde servidor (fase futura)
+
+import { db } from '../db/database'
+import { obtenerConfig } from '../hooks/useConfig'
+import { supabase, supabaseConfigurado } from './supabase'
+import { useAuthStore } from '../stores/authStore'
+
+// ─── Rate limiting ────────────────────────────────────────────────────────────
+
+const PFX = 'pos_notif_last_'
+
+const INTERVALO: Record<string, number> = {
+  fiado: 4  * 60 * 60 * 1000,   // máximo una vez cada 4h
+  stock: 24 * 60 * 60 * 1000,   // máximo una vez al día
+  caja:  24 * 60 * 60 * 1000,   // máximo una vez al día
+}
+
+function puedeEnviar(tipo: string): boolean {
+  const raw = localStorage.getItem(PFX + tipo)
+  if (!raw) return true
+  return Date.now() - parseInt(raw, 10) > (INTERVALO[tipo] ?? 3_600_000)
+}
+
+function marcarEnviado(tipo: string): void {
+  localStorage.setItem(PFX + tipo, Date.now().toString())
+}
+
+// ─── Motor de notificación ────────────────────────────────────────────────────
+
+function formatCOPLocal(monto: number): string {
+  return new Intl.NumberFormat('es-CO', {
+    style: 'currency',
+    currency: 'COP',
+    maximumFractionDigits: 0,
+  }).format(monto)
+}
+
+/**
+ * Muestra una notificación nativa. Usa el Service Worker si está disponible
+ * (permite notificaciones cuando el tab está en segundo plano en PWA instalada).
+ * En caso contrario, usa new Notification() directo.
+ */
+async function mostrarNotificacion(
+  titulo: string,
+  cuerpo: string,
+  rutaDestino?: string,
+): Promise<void> {
+  if (!('Notification' in window) || Notification.permission !== 'granted') return
+
+  const opciones: NotificationOptions = {
+    body: cuerpo,
+    icon: '/icons/icon-192.png',
+    badge: '/icons/icon-192.png',
+    tag: titulo,            // evita notificaciones duplicadas con el mismo título
+    requireInteraction: false,
+    // data se usa en el handler de click del service worker
+    data: { url: rutaDestino ?? '/' },
+  }
+
+  try {
+    if ('serviceWorker' in navigator) {
+      const reg = await navigator.serviceWorker.ready
+      await reg.showNotification(titulo, opciones)
+    } else {
+      const n = new Notification(titulo, opciones)
+      if (rutaDestino) {
+        n.onclick = () => {
+          window.focus()
+          window.location.pathname = rutaDestino
+        }
+      }
+    }
+  } catch {
+    // Fallback directo si el SW falla
+    const n = new Notification(titulo, opciones)
+    if (rutaDestino) {
+      n.onclick = () => { window.focus(); window.location.pathname = rutaDestino }
+    }
+  }
+}
+
+// ─── Checks de negocio ────────────────────────────────────────────────────────
+
+async function checkMoraFiado(): Promise<void> {
+  if (!puedeEnviar('fiado')) return
+  const config = await obtenerConfig()
+  if (!config.notifFiado) return
+
+  const ahora = Date.now()
+  const DIAS_MORA = 7
+
+  const clientes = await db.clientes
+    .filter((c) => c.activo && c.totalDeuda > 0 && !!c.ultimoMovimiento)
+    .toArray()
+
+  const enMora = clientes.filter((c) => {
+    if (!c.ultimoMovimiento) return false
+    return (ahora - c.ultimoMovimiento.getTime()) / 86_400_000 >= DIAS_MORA
+  })
+
+  if (enMora.length === 0) return
+
+  // Ordenar por mayor deuda
+  enMora.sort((a, b) => b.totalDeuda - a.totalDeuda)
+  const principal = enMora[0]
+  const dias = Math.floor((ahora - principal.ultimoMovimiento!.getTime()) / 86_400_000)
+
+  // Umbral 7, 15, 30 días — mostrar mensaje apropiado
+  const etiquetaDias = dias >= 30 ? '¡30+ días!' : dias >= 15 ? '15 días' : `${dias} días`
+
+  const titulo =
+    enMora.length === 1 ? '💜 Fiado pendiente' : `💜 ${enMora.length} clientes con fiado`
+
+  const cuerpo =
+    enMora.length === 1
+      ? `${principal.nombre} lleva ${etiquetaDias} sin abonar — debe ${formatCOPLocal(principal.totalDeuda)}`
+      : `${principal.nombre} (+${enMora.length - 1} más) llevan +${DIAS_MORA} días sin abonar`
+
+  await mostrarNotificacion(titulo, cuerpo, '/fiados')
+  marcarEnviado('fiado')
+}
+
+async function checkProductosAgotados(): Promise<void> {
+  if (!puedeEnviar('stock')) return
+  const config = await obtenerConfig()
+  if (!config.notifStock) return
+
+  const agotados = await db.productos
+    .filter(
+      (p) =>
+        p.activo &&
+        p.stockActual !== undefined &&
+        p.stockActual !== null &&
+        p.stockActual <= 0,
+    )
+    .toArray()
+
+  if (agotados.length === 0) return
+
+  const nombres = agotados
+    .slice(0, 2)
+    .map((p) => p.nombre)
+    .join(', ')
+
+  const titulo = `📦 ${agotados.length} producto${agotados.length > 1 ? 's' : ''} agotado${agotados.length > 1 ? 's' : ''}`
+  const cuerpo = `Revise la lista de pedido: ${nombres}${agotados.length > 2 ? '…' : ''}`
+
+  await mostrarNotificacion(titulo, cuerpo, '/pedido')
+  marcarEnviado('stock')
+}
+
+async function checkAperturaCaja(): Promise<void> {
+  if (!puedeEnviar('caja')) return
+  const config = await obtenerConfig()
+  if (!config.notifCaja) return
+
+  const sesionAbierta = await db.sesionCaja.where('estado').equals('abierta').first()
+  if (sesionAbierta) return
+
+  await mostrarNotificacion(
+    '💰 Recuerde abrir la caja',
+    'Todavía no hay caja abierta para comenzar el día',
+    '/caja',
+  )
+  marcarEnviado('caja')
+}
+
+// ─── Scheduler principal ──────────────────────────────────────────────────────
+
+let cajaTimerId: ReturnType<typeof setTimeout> | null = null
+
+function programarRecuerdoCaja(horaCaja: string): void {
+  if (cajaTimerId !== null) clearTimeout(cajaTimerId)
+
+  const [h, m] = horaCaja.split(':').map(Number)
+  const objetivo = new Date()
+  objetivo.setHours(h, m, 0, 0)
+  // Si la hora ya pasó hoy, programar para mañana
+  if (objetivo.getTime() <= Date.now()) {
+    objetivo.setDate(objetivo.getDate() + 1)
+  }
+
+  cajaTimerId = setTimeout(async () => {
+    await checkAperturaCaja()
+    // Re-programar para mañana a la misma hora
+    programarRecuerdoCaja(horaCaja)
+  }, objetivo.getTime() - Date.now())
+}
+
+let intervalId: ReturnType<typeof setInterval> | null = null
+let startupTimerId: ReturnType<typeof setTimeout> | null = null
+
+/**
+ * Inicia el scheduler de recordatorios. Llama esto al montar la app.
+ * Retorna una función de limpieza para el useEffect.
+ */
+export function iniciarScheduler(): () => void {
+  // Limpiar instancias previas
+  if (intervalId !== null) clearInterval(intervalId)
+  if (startupTimerId !== null) clearTimeout(startupTimerId)
+  if (cajaTimerId !== null) clearTimeout(cajaTimerId)
+
+  // Chequeo inicial con delay de 30 s para no interrumpir el arranque
+  startupTimerId = setTimeout(async () => {
+    const config = await obtenerConfig()
+    if (!config.notificacionesActivas || Notification.permission !== 'granted') return
+    await checkMoraFiado()
+    await checkProductosAgotados()
+  }, 30_000)
+
+  // Chequeo periódico cada 4 horas mientras la app está abierta
+  intervalId = setInterval(async () => {
+    const config = await obtenerConfig()
+    if (!config.notificacionesActivas || Notification.permission !== 'granted') return
+    await checkMoraFiado()
+    await checkProductosAgotados()
+  }, 4 * 60 * 60 * 1000)
+
+  // Recordatorio de apertura de caja a la hora configurada
+  obtenerConfig().then((config) => {
+    if (config.notificacionesActivas && config.notifCaja && config.horaCaja) {
+      programarRecuerdoCaja(config.horaCaja)
+    }
+  })
+
+  return () => {
+    if (intervalId !== null) clearInterval(intervalId)
+    if (startupTimerId !== null) clearTimeout(startupTimerId)
+    if (cajaTimerId !== null) clearTimeout(cajaTimerId)
+  }
+}
+
+// ─── API pública ──────────────────────────────────────────────────────────────
+
+/**
+ * Solicita permiso de notificaciones al navegador.
+ * Si se concede y Supabase está configurado, guarda la suscripción
+ * en push_subscriptions para uso futuro con push desde servidor.
+ */
+export async function solicitarPermiso(): Promise<NotificationPermission> {
+  if (!('Notification' in window)) return 'denied'
+  const permiso = await Notification.requestPermission()
+
+  if (permiso === 'granted' && supabaseConfigurado) {
+    const usuario = useAuthStore.getState().usuario
+    if (usuario) {
+      try {
+        await supabase.from('push_subscriptions').upsert(
+          {
+            usuario_id: usuario.id,
+            tienda_id: usuario.tiendaId,
+            // endpoint 'local:...' marca que aún no hay push real (solo in-app)
+            endpoint: `local:${navigator.userAgent.slice(0, 100)}`,
+            keys: {},
+            activo: true,
+            updated_at: new Date().toISOString(),
+          },
+          { onConflict: 'usuario_id' },
+        )
+      } catch {
+        // Supabase puede no estar disponible — no bloquear la UI
+      }
+    }
+  }
+
+  return permiso
+}
+
+/**
+ * Envía una notificación de prueba inmediatamente.
+ * Lanza Error si no hay permiso.
+ */
+export async function enviarNotificacionPrueba(): Promise<void> {
+  if (!('Notification' in window)) {
+    throw new Error('Tu navegador no soporta notificaciones')
+  }
+  if (Notification.permission !== 'granted') {
+    throw new Error('Concede el permiso de notificaciones primero')
+  }
+  await mostrarNotificacion(
+    '🏪 POS Tienda — Prueba',
+    'Las notificaciones están funcionando correctamente ✓',
+    '/',
+  )
+}

@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
-import { X, Store, Phone, MapPin, FileText, Receipt, BookOpen, Users, Send, CheckCircle, UserX, Loader2, Sun, Moon, Monitor, Printer, Bluetooth, BluetoothOff, CheckCircle2, Plus, Pencil } from 'lucide-react'
+import { X, Store, Phone, MapPin, FileText, Receipt, BookOpen, Users, Send, CheckCircle, UserX, Loader2, Sun, Moon, Monitor, Printer, Bluetooth, BluetoothOff, CheckCircle2, Plus, Pencil, Bell, BellOff } from 'lucide-react'
 import { useConfig, guardarConfig } from '../../hooks/useConfig'
 import { supabase, supabaseConfigurado } from '../../lib/supabase'
 import { useAuthStore } from '../../stores/authStore'
@@ -21,6 +21,10 @@ import {
   renombrarTienda,
   cambiarTiendaActiva,
 } from '../../hooks/useTiendasDueno'
+import {
+  solicitarPermiso,
+  enviarNotificacionPrueba,
+} from '../../lib/notificaciones'
 
 // ─── Schema ───────────────────────────────────────────────────────────────────
 
@@ -33,6 +37,12 @@ const ConfigSchema = z.object({
   permitirStockNegativo: z.boolean(),
   limiteFiadoPorDefecto: z.coerce.number().min(0),
   tieneDatafono: z.boolean(),
+  // Notificaciones (Fase 22)
+  notificacionesActivas: z.boolean(),
+  notifFiado: z.boolean(),
+  notifStock: z.boolean(),
+  notifCaja: z.boolean(),
+  horaCaja: z.string().optional(),
 })
 
 type FormData = z.infer<typeof ConfigSchema>
