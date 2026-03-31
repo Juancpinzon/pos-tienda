@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { X, Banknote, BookOpen, Smartphone, CheckCircle2, AlertCircle, MessageCircle, ShoppingCart, Printer, Settings } from 'lucide-react'
+import { X, Banknote, BookOpen, Smartphone, CheckCircle2, AlertCircle, MessageCircle, ShoppingCart, Printer, Settings, CreditCard } from 'lucide-react'
 import { db } from '../../db/database'
 import { useVentaStore, selectTotal } from '../../stores/ventaStore'
 import { TecladoNumerico } from '../shared/TecladoNumerico'
@@ -18,8 +18,9 @@ import {
 } from '../../lib/impresora'
 import type { Venta, DetalleVenta } from '../../db/schema'
 
-type MetodoPago = 'efectivo' | 'fiado' | 'transferencia'
+type MetodoPago = 'efectivo' | 'fiado' | 'transferencia' | 'tarjeta'
 type PlataformaTransferencia = 'Nequi' | 'Daviplata' | 'Dale'
+type SubtipoTarjeta = 'debito' | 'credito'
 type EstadoModal = 'seleccion' | 'confirmando' | 'exito' | 'error'
 
 const PLATAFORMAS: { id: PlataformaTransferencia; emoji: string }[] = [
@@ -176,6 +177,47 @@ function TabTransferencia({
   )
 }
 
+// ─── Tab Tarjeta ──────────────────────────────────────────────────────────────
+
+function TabTarjeta({
+  subtipo,
+  onSubtipoChange,
+}: {
+  subtipo: SubtipoTarjeta | null
+  onSubtipoChange: (s: SubtipoTarjeta) => void
+}) {
+  return (
+    <div className="flex flex-col gap-4">
+      <p className="text-sm text-suave text-center">¿Débito o crédito?</p>
+      <div className="grid grid-cols-2 gap-3">
+        {([
+          { id: 'debito'  as SubtipoTarjeta, label: 'Débito',  desc: 'Pago directo de cuenta' },
+          { id: 'credito' as SubtipoTarjeta, label: 'Crédito', desc: 'Pago con cupo de crédito' },
+        ]).map(({ id, label, desc }) => (
+          <button
+            key={id}
+            type="button"
+            onClick={() => onSubtipoChange(id)}
+            className={[
+              'flex flex-col items-center justify-center gap-2 h-24 rounded-xl border-2 font-semibold text-sm transition-all active:scale-95',
+              subtipo === id
+                ? 'border-acento bg-acento/8 text-texto shadow-sm'
+                : 'border-borde text-suave hover:border-gray-300 hover:text-texto',
+            ].join(' ')}
+          >
+            <CreditCard size={24} className={subtipo === id ? 'text-acento' : 'text-suave'} />
+            <span>{label}</span>
+            <span className="text-[10px] font-normal text-suave leading-tight text-center px-1">{desc}</span>
+          </button>
+        ))}
+      </div>
+      {!subtipo && (
+        <p className="text-xs text-suave text-center">Selecciona el tipo de tarjeta para continuar</p>
+      )}
+    </div>
+  )
+}
+
 // ─── Pantalla de éxito ────────────────────────────────────────────────────────
 
 type EstadoImpresion = 'idle' | 'conectando' | 'imprimiendo' | 'ok' | 'error'
@@ -268,6 +310,11 @@ function PantallaExito({
           )}
           {venta.tipoPago === 'transferencia' && (
             <p className="text-white/80 text-sm font-medium">{venta.notas ?? 'Transferencia'}</p>
+          )}
+          {venta.tipoPago === 'tarjeta' && (
+            <p className="text-white/80 text-sm font-medium">
+              💳 Tarjeta {venta.subtipoTarjeta === 'debito' ? 'débito' : 'crédito'}
+            </p>
           )}
         </div>
 
@@ -363,6 +410,8 @@ export function ModalCobro({ onClose }: ModalCobroProps) {
   const [billete, setBillete] = useState('')
   const [clienteFiado, setClienteFiado] = useState<ClienteFiado | null>(null)
   const [plataforma, setPlataforma] = useState<PlataformaTransferencia | null>(null)
+  const [subtipoTarjeta, setSubtipoTarjeta] = useState<SubtipoTarjeta | null>(null)
+  const [tieneDatafono, setTieneDatafono] = useState(false)
   const [estado, setEstado] = useState<EstadoModal>('seleccion')
   const [mensajeError, setMensajeError] = useState('')
 
@@ -373,8 +422,13 @@ export function ModalCobro({ onClose }: ModalCobroProps) {
   const [ventaGuardada, setVentaGuardada] = useState<Venta | null>(null)
   const [detallesGuardados, setDetallesGuardados] = useState<DetalleVenta[]>([])
 
-  // Resetear plataforma al cambiar método de pago
-  useEffect(() => { setPlataforma(null) }, [metodo])
+  // Leer config una sola vez al montar
+  useEffect(() => {
+    obtenerConfig().then((cfg) => setTieneDatafono(cfg.tieneDatafono ?? false))
+  }, [])
+
+  // Resetear sub-selecciones al cambiar método de pago
+  useEffect(() => { setPlataforma(null); setSubtipoTarjeta(null) }, [metodo])
 
   // Verificar stock cuando cambian los ítems
   useEffect(() => {
@@ -389,6 +443,7 @@ export function ModalCobro({ onClose }: ModalCobroProps) {
     if (metodo === 'efectivo') return parsearEntero(billete) >= total
     if (metodo === 'fiado') return (clienteFiado?.nombre?.trim()?.length ?? 0) >= 2
     if (metodo === 'transferencia') return plataforma !== null
+    if (metodo === 'tarjeta') return subtipoTarjeta !== null
     return true
   }
 
@@ -450,6 +505,7 @@ export function ModalCobro({ onClose }: ModalCobroProps) {
             descuento: 0,
             total,
             tipoPago: metodo,
+            subtipoTarjeta: metodo === 'tarjeta' && subtipoTarjeta ? subtipoTarjeta : undefined,
             efectivoRecibido: recibido,
             cambio: recibido !== undefined ? recibido - total : undefined,
             estado: 'completada',
@@ -514,6 +570,7 @@ export function ModalCobro({ onClose }: ModalCobroProps) {
         descuento: 0,
         total,
         tipoPago: metodo,
+        subtipoTarjeta: metodo === 'tarjeta' && subtipoTarjeta ? subtipoTarjeta : undefined,
         efectivoRecibido: recibido,
         cambio: recibido !== undefined ? recibido - total : undefined,
         notas: metodo === 'transferencia' && plataforma ? plataforma : undefined,
@@ -562,9 +619,10 @@ export function ModalCobro({ onClose }: ModalCobroProps) {
   // ── Modal de cobro ─────────────────────────────────────────────────────────
 
   const METODOS = [
-    { id: 'efectivo'      as MetodoPago, icon: Banknote,   label: 'Efectivo',      color: 'text-exito'    },
-    { id: 'fiado'         as MetodoPago, icon: BookOpen,   label: 'Fiado',         color: 'text-fiado'    },
-    { id: 'transferencia' as MetodoPago, icon: Smartphone, label: 'Transferencia', color: 'text-primario' },
+    { id: 'efectivo'      as MetodoPago, icon: Banknote,    label: 'Efectivo',      color: 'text-exito'    },
+    { id: 'fiado'         as MetodoPago, icon: BookOpen,    label: 'Fiado',         color: 'text-fiado'    },
+    { id: 'transferencia' as MetodoPago, icon: Smartphone,  label: 'Transf.',       color: 'text-primario' },
+    ...(tieneDatafono ? [{ id: 'tarjeta' as MetodoPago, icon: CreditCard, label: 'Tarjeta', color: 'text-texto' }] : []),
   ]
 
   return (
@@ -615,6 +673,9 @@ export function ModalCobro({ onClose }: ModalCobroProps) {
           )}
           {metodo === 'transferencia' && (
             <TabTransferencia plataforma={plataforma} onPlataformaChange={setPlataforma} />
+          )}
+          {metodo === 'tarjeta' && (
+            <TabTarjeta subtipo={subtipoTarjeta} onSubtipoChange={setSubtipoTarjeta} />
           )}
         </div>
 

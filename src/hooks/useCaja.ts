@@ -14,9 +14,17 @@ export interface ResumenCaja {
   totalEfectivo: number
   totalFiado: number
   totalTransferencia: number
+  totalTarjeta: number
+  totalTarjetaDebito: number
+  totalTarjetaCredito: number
   totalGastos: number
   cantidadVentas: number
-  efectivoEsperado: number   // montoApertura + totalEfectivo - totalGastos
+  // Cobros de deudas fiado recibidos hoy (dinero real que entró)
+  cobrosfiado: number
+  cobrosFiadoEfectivo: number
+  cobrosFiadoTransferencia: number
+  cobrosFiadoTarjeta: number
+  efectivoEsperado: number   // montoApertura + totalEfectivo + cobrosFiadoEfectivo - totalGastos
   gastos: GastoCaja[]
   ultimasVentas: UltimaVenta[]
 }
@@ -91,6 +99,12 @@ export function useResumenCaja(sesionId: number | undefined) {
         .where('sesionCajaId').equals(sesionId)
         .toArray()
 
+      // Cobros de deuda fiado asociados a esta sesión
+      const pagosfiado = await db.movimientosFiado
+        .where('sesionCajaId').equals(sesionId)
+        .filter((m) => m.tipo === 'pago')
+        .toArray()
+
       const totalVentas = ventas.reduce((s, v) => s + v.total, 0)
       const totalEfectivo = ventas
         .filter((v) => v.tipoPago === 'efectivo')
@@ -101,8 +115,31 @@ export function useResumenCaja(sesionId: number | undefined) {
       const totalTransferencia = ventas
         .filter((v) => v.tipoPago === 'transferencia')
         .reduce((s, v) => s + v.total, 0)
+      const totalTarjeta = ventas
+        .filter((v) => v.tipoPago === 'tarjeta')
+        .reduce((s, v) => s + v.total, 0)
+      const totalTarjetaDebito = ventas
+        .filter((v) => v.tipoPago === 'tarjeta' && v.subtipoTarjeta === 'debito')
+        .reduce((s, v) => s + v.total, 0)
+      const totalTarjetaCredito = ventas
+        .filter((v) => v.tipoPago === 'tarjeta' && v.subtipoTarjeta === 'credito')
+        .reduce((s, v) => s + v.total, 0)
       const totalGastos = gastos.reduce((s, g) => s + g.monto, 0)
-      const efectivoEsperado = sesion.montoApertura + totalEfectivo - totalGastos
+
+      // Desglose de cobros fiado por canal
+      const FORMAS_TRANSFERENCIA = ['Nequi', 'Daviplata', 'Dale']
+      const cobrosfiado = pagosfiado.reduce((s, m) => s + m.monto, 0)
+      const cobrosFiadoEfectivo = pagosfiado
+        .filter((m) => !m.formaCobro || m.formaCobro === 'efectivo')
+        .reduce((s, m) => s + m.monto, 0)
+      const cobrosFiadoTransferencia = pagosfiado
+        .filter((m) => m.formaCobro && FORMAS_TRANSFERENCIA.includes(m.formaCobro))
+        .reduce((s, m) => s + m.monto, 0)
+      const cobrosFiadoTarjeta = pagosfiado
+        .filter((m) => m.formaCobro && m.formaCobro.startsWith('tarjeta_'))
+        .reduce((s, m) => s + m.monto, 0)
+
+      const efectivoEsperado = sesion.montoApertura + totalEfectivo + cobrosFiadoEfectivo - totalGastos
 
       // Últimas 10 ventas con conteo de ítems
       const ultimasVentas = await Promise.all(
@@ -129,8 +166,15 @@ export function useResumenCaja(sesionId: number | undefined) {
         totalEfectivo,
         totalFiado,
         totalTransferencia,
+        totalTarjeta,
+        totalTarjetaDebito,
+        totalTarjetaCredito,
         totalGastos,
         cantidadVentas: ventas.length,
+        cobrosfiado,
+        cobrosFiadoEfectivo,
+        cobrosFiadoTransferencia,
+        cobrosFiadoTarjeta,
         efectivoEsperado,
         gastos,
         ultimasVentas,
@@ -216,6 +260,12 @@ export async function cerrarCaja(
     .where('sesionCajaId').equals(sesionId)
     .toArray()
 
+  const pagosfiado = await db.movimientosFiado
+    .where('sesionCajaId').equals(sesionId)
+    .filter((m) => m.tipo === 'pago' && (!m.formaCobro || m.formaCobro === 'efectivo'))
+    .toArray()
+  const cobrosFiadoEfectivo = pagosfiado.reduce((s, m) => s + m.monto, 0)
+
   const totalVentas = ventas.reduce((s, v) => s + v.total, 0)
   const totalEfectivo = ventas
     .filter((v) => v.tipoPago === 'efectivo')
@@ -229,7 +279,7 @@ export async function cerrarCaja(
     estado: 'cerrada',
     montoCierre,
     totalVentas,
-    totalEfectivo,
+    totalEfectivo: totalEfectivo + cobrosFiadoEfectivo,
     totalFiado,
     totalGastos,
     cerradaEn: new Date(),

@@ -133,7 +133,8 @@ export async function crearCliente(
 export async function registrarPago(
   clienteId: number,
   monto: number,
-  sesionCajaId?: number
+  sesionCajaId?: number,
+  formaCobro?: string
 ): Promise<void> {
   const ahora = new Date()
   await db.transaction('rw', [db.movimientosFiado, db.clientes], async () => {
@@ -142,6 +143,7 @@ export async function registrarPago(
       tipo: 'pago',
       monto,
       descripcion: `Pago de deuda — ${formatCOP(monto)}`,
+      formaCobro,
       creadoEn: ahora,
       sesionCajaId,
     })

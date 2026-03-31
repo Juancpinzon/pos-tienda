@@ -58,7 +58,8 @@ export interface Venta {
   subtotal: number
   descuento: number
   total: number
-  tipoPago: 'efectivo' | 'fiado' | 'transferencia' | 'mixto'
+  tipoPago: 'efectivo' | 'fiado' | 'transferencia' | 'tarjeta' | 'mixto'
+  subtipoTarjeta?: 'debito' | 'credito'   // Solo cuando tipoPago='tarjeta'
   efectivoRecibido?: number
   cambio?: number
   estado: 'completada' | 'anulada'
@@ -86,6 +87,7 @@ export interface MovimientoFiado {
   tipo: 'cargo' | 'pago'
   monto: number
   descripcion: string
+  formaCobro?: string      // 'efectivo' | 'Nequi' | 'Daviplata' | 'Dale' | 'tarjeta_debito' | 'tarjeta_credito'
   creadoEn: Date
   sesionCajaId?: number
 }
@@ -111,6 +113,7 @@ export interface ConfigTienda {
   permitirStockNegativo: boolean
   limiteFiadoPorDefecto: number   // COP. 0 = sin límite
   tourCompletado?: boolean        // true = el tendero ya vio el tour de onboarding
+  tieneDatafono?: boolean         // true = mostrar opción Tarjeta en el cobro
 }
 
 // ─── Módulo de Proveedores y Compras (v2) ─────────────────────────────────────

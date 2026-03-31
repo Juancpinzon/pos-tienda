@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import {
   Plus, Wallet, ShoppingBag, TrendingDown,
-  Smartphone, Banknote, BookOpen, Lock, ChevronDown, Truck,
+  Smartphone, Banknote, BookOpen, Lock, ChevronDown, Truck, CreditCard,
 } from 'lucide-react'
 import { TecladoNumerico } from '../components/shared/TecladoNumerico'
 import { CerrarCaja } from '../components/caja/CerrarCaja'
@@ -204,21 +204,51 @@ export default function CajaPage() {
 
                 {/* Desglose por método de pago — siempre visible para el tendero */}
                 <div className="divide-y divide-borde/30">
+
+                  {/* ── Efectivo ventas ── */}
                   <FilaDesglose
                     icon={<Banknote size={14} />}
-                    label="💵 Efectivo"
+                    label="💵 Ventas efectivo"
                     valor={resumen.totalEfectivo}
                     color="text-exito"
                     siempre
                   />
+
+                  {/* ── Cobros fiado ── */}
+                  {resumen.cobrosfiado > 0 && (
+                    <FilaDesglose
+                      icon={<BookOpen size={14} />}
+                      label="💜 Cobros fiado (efectivo)"
+                      valor={resumen.cobrosFiadoEfectivo}
+                      color="text-fiado"
+                    />
+                  )}
+                  {resumen.cobrosFiadoTransferencia > 0 && (
+                    <FilaDesglose
+                      icon={<Smartphone size={14} />}
+                      label="💜 Cobros fiado (transf.)"
+                      valor={resumen.cobrosFiadoTransferencia}
+                      color="text-fiado"
+                    />
+                  )}
+                  {resumen.cobrosFiadoTarjeta > 0 && (
+                    <FilaDesglose
+                      icon={<CreditCard size={14} />}
+                      label="💜 Cobros fiado (tarjeta)"
+                      valor={resumen.cobrosFiadoTarjeta}
+                      color="text-fiado"
+                    />
+                  )}
+
+                  {/* ── Transferencias ventas ── */}
                   <FilaDesglose
                     icon={<Smartphone size={14} />}
-                    label="📱 Transferencias"
+                    label="📱 Transferencias ventas"
                     valor={resumen.totalTransferencia}
                     color="text-primario"
                     siempre
                   />
-                  {/* Sub-filas por plataforma — solo si hay ventas con plataforma registrada */}
+                  {/* Sub-filas por plataforma */}
                   {desglosePlatformas && resumen.totalTransferencia > 0 && (
                     <>
                       {desglosePlatformas.nequi > 0 && (
@@ -241,13 +271,41 @@ export default function CajaPage() {
                       )}
                     </>
                   )}
+
+                  {/* ── Tarjeta ── */}
+                  {resumen.totalTarjeta > 0 && (
+                    <>
+                      <FilaDesglose
+                        icon={<CreditCard size={14} />}
+                        label="💳 Tarjeta (total)"
+                        valor={resumen.totalTarjeta}
+                        color="text-texto"
+                      />
+                      {resumen.totalTarjetaDebito > 0 && (
+                        <div className="flex items-center justify-between px-4 py-1.5 pl-12 bg-fondo/60">
+                          <span className="text-xs text-suave">💳 Débito</span>
+                          <span className="moneda text-xs text-suave font-medium">{formatCOP(resumen.totalTarjetaDebito)}</span>
+                        </div>
+                      )}
+                      {resumen.totalTarjetaCredito > 0 && (
+                        <div className="flex items-center justify-between px-4 py-1.5 pl-12 bg-fondo/60">
+                          <span className="text-xs text-suave">💳 Crédito</span>
+                          <span className="moneda text-xs text-suave font-medium">{formatCOP(resumen.totalTarjetaCredito)}</span>
+                        </div>
+                      )}
+                    </>
+                  )}
+
+                  {/* ── Fiado (ventas a crédito) ── */}
                   <FilaDesglose
                     icon={<BookOpen size={14} />}
-                    label="📒 Fiado"
+                    label="📒 Ventas a fiado"
                     valor={resumen.totalFiado}
                     color="text-fiado"
                     siempre
                   />
+
+                  {/* ── Gastos ── */}
                   <FilaDesglose
                     icon={<TrendingDown size={14} />}
                     label="Gastos del día"
@@ -257,13 +315,15 @@ export default function CajaPage() {
                   />
                 </div>
 
-                {/* Efectivo esperado en caja (solo efectivo físico, sin transferencias) */}
+                {/* Efectivo esperado en caja */}
                 <div className="px-4 py-3 bg-exito/5 border-t border-exito/20">
                   <div className="flex items-center justify-between">
                     <div>
-                      <span className="text-sm font-medium text-texto">Efectivo esperado en caja</span>
+                      <span className="text-sm font-medium text-texto">💵 Total efectivo esperado</span>
                       <p className="text-xs text-suave mt-0.5">
-                        Apertura {formatCOP(sesion.montoApertura)} + ventas efectivo
+                        Apertura {formatCOP(sesion.montoApertura)}
+                        {' '}+ ventas efectivo
+                        {resumen.cobrosFiadoEfectivo > 0 && ` + cobros fiado ${formatCOP(resumen.cobrosFiadoEfectivo)}`}
                         {resumen.totalGastos > 0 && ` − gastos ${formatCOP(resumen.totalGastos)}`}
                       </p>
                     </div>

@@ -11,6 +11,7 @@ export const CONFIG_DEFAULTS: Omit<ConfigTienda, 'id'> = {
   impuestoIVA: 0,
   permitirStockNegativo: true,
   limiteFiadoPorDefecto: 0,
+  tieneDatafono: false,
 }
 
 /**

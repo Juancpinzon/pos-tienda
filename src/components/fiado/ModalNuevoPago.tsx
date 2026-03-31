@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { X, CheckCircle2, AlertCircle } from 'lucide-react'
 import { TecladoNumerico } from '../shared/TecladoNumerico'
 import { registrarPago } from '../../hooks/useFiados'
+import { obtenerSesionActiva } from '../../hooks/useCaja'
 import { formatCOP, parsearEntero } from '../../utils/moneda'
 import type { Cliente } from '../../db/schema'
 
@@ -11,9 +12,20 @@ interface ModalNuevoPagoProps {
 }
 
 type Estado = 'ingresando' | 'guardando' | 'exito' | 'error'
+type FormaCobro = 'efectivo' | 'Nequi' | 'Daviplata' | 'Dale' | 'tarjeta_debito' | 'tarjeta_credito'
+
+const FORMAS_COBRO: { id: FormaCobro; label: string; emoji: string }[] = [
+  { id: 'efectivo',       label: 'Efectivo',       emoji: '💵' },
+  { id: 'Nequi',         label: 'Nequi',          emoji: '🟣' },
+  { id: 'Daviplata',     label: 'Daviplata',      emoji: '🔵' },
+  { id: 'Dale',          label: 'Dale',           emoji: '🟡' },
+  { id: 'tarjeta_debito',  label: 'T. Débito',    emoji: '💳' },
+  { id: 'tarjeta_credito', label: 'T. Crédito',   emoji: '💳' },
+]
 
 export function ModalNuevoPago({ cliente, onClose }: ModalNuevoPagoProps) {
   const [monto, setMonto] = useState('')
+  const [formaCobro, setFormaCobro] = useState<FormaCobro>('efectivo')
   const [estado, setEstado] = useState<Estado>('ingresando')
   const [mensajeError, setMensajeError] = useState('')
 
@@ -31,7 +43,8 @@ export function ModalNuevoPago({ cliente, onClose }: ModalNuevoPagoProps) {
     if (montoNumero <= 0) return
     setEstado('guardando')
     try {
-      await registrarPago(cliente.id!, montoNumero)
+      const sesion = await obtenerSesionActiva()
+      await registrarPago(cliente.id!, montoNumero, sesion?.id, formaCobro)
       setEstado('exito')
       setTimeout(onClose, 1200)
     } catch (err) {
@@ -145,6 +158,29 @@ export function ModalNuevoPago({ cliente, onClose }: ModalNuevoPagoProps) {
               ✓ Cancela la deuda completa
             </p>
           )}
+
+          {/* Forma de cobro */}
+          <div>
+            <p className="text-xs text-suave font-medium mb-2">¿Cómo te pagó?</p>
+            <div className="grid grid-cols-3 gap-2">
+              {FORMAS_COBRO.map(({ id, label, emoji }) => (
+                <button
+                  key={id}
+                  type="button"
+                  onClick={() => setFormaCobro(id)}
+                  className={[
+                    'flex flex-col items-center gap-0.5 py-2 px-1 rounded-xl border text-xs font-medium transition-all',
+                    formaCobro === id
+                      ? 'bg-primario/10 text-primario border-primario/40'
+                      : 'bg-white text-suave border-borde hover:border-gray-300',
+                  ].join(' ')}
+                >
+                  <span className="text-base">{emoji}</span>
+                  <span className="leading-tight text-center">{label}</span>
+                </button>
+              ))}
+            </div>
+          </div>
         </div>
 
         {/* Confirmar */}

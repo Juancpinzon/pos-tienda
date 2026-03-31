@@ -32,6 +32,7 @@ const ConfigSchema = z.object({
   mensajeRecibo: z.string().max(120).optional().transform((v) => v?.trim() || undefined),
   permitirStockNegativo: z.boolean(),
   limiteFiadoPorDefecto: z.coerce.number().min(0),
+  tieneDatafono: z.boolean(),
 })
 
 type FormData = z.infer<typeof ConfigSchema>
@@ -728,10 +729,12 @@ export function ConfigModal({ onClose, onReiniciarTour }: ConfigModalProps) {
       nombreTienda: 'Mi Tienda',
       permitirStockNegativo: true,
       limiteFiadoPorDefecto: 0,
+      tieneDatafono: false,
     },
   })
 
   const permitirStockNegativo = watch('permitirStockNegativo')
+  const tieneDatafono = watch('tieneDatafono')
 
   // Poblar el formulario cuando se carga la config
   useEffect(() => {
@@ -744,6 +747,7 @@ export function ConfigModal({ onClose, onReiniciarTour }: ConfigModalProps) {
         mensajeRecibo: config.mensajeRecibo ?? '',
         permitirStockNegativo: config.permitirStockNegativo,
         limiteFiadoPorDefecto: config.limiteFiadoPorDefecto,
+        tieneDatafono: config.tieneDatafono ?? false,
       })
     }
   }, [config, reset])
@@ -893,6 +897,27 @@ export function ConfigModal({ onClose, onReiniciarTour }: ConfigModalProps) {
                     <span className={[
                       'absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform',
                       permitirStockNegativo ? 'translate-x-5' : 'translate-x-0.5',
+                    ].join(' ')} />
+                  </button>
+                </div>
+
+                {/* Toggle datáfono */}
+                <div className="flex items-center justify-between p-3 bg-fondo rounded-xl border border-borde">
+                  <div>
+                    <p className="text-sm font-medium text-texto">Tiene datáfono</p>
+                    <p className="text-xs text-suave">Muestra la opción "Tarjeta" al cobrar</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setValue('tieneDatafono', !tieneDatafono, { shouldDirty: true })}
+                    className={[
+                      'relative w-11 h-6 rounded-full transition-colors shrink-0',
+                      tieneDatafono ? 'bg-primario' : 'bg-gray-200',
+                    ].join(' ')}
+                  >
+                    <span className={[
+                      'absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform',
+                      tieneDatafono ? 'translate-x-5' : 'translate-x-0.5',
                     ].join(' ')} />
                   </button>
                 </div>
