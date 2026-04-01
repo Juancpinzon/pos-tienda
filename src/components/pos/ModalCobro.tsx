@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { X, Banknote, BookOpen, Smartphone, CheckCircle2, AlertCircle, MessageCircle, ShoppingCart, Printer, Settings, CreditCard } from 'lucide-react'
+import { X, Banknote, BookOpen, Smartphone, CheckCircle2, AlertCircle, MessageCircle, ShoppingCart, Printer, Settings, CreditCard, FileText } from 'lucide-react'
 import { db } from '../../db/database'
 import { useVentaStore, selectTotal } from '../../stores/ventaStore'
 import { TecladoNumerico } from '../shared/TecladoNumerico'
@@ -17,6 +17,8 @@ import {
   imprimirRecibo,
 } from '../../lib/impresora'
 import type { Venta, DetalleVenta } from '../../db/schema'
+import { ModalNotaVenta } from './ModalNotaVenta'
+import { siguienteConsecutivo } from '../../lib/notaVenta'
 
 type MetodoPago = 'efectivo' | 'fiado' | 'transferencia' | 'tarjeta'
 type PlataformaTransferencia = 'Nequi' | 'Daviplata' | 'Dale'
@@ -225,15 +227,20 @@ type EstadoImpresion = 'idle' | 'conectando' | 'imprimiendo' | 'ok' | 'error'
 function PantallaExito({
   venta,
   detalles,
+  consecutivoNota,
+  nombreCliente,
   onNuevaVenta,
 }: {
   venta: Venta
   detalles: DetalleVenta[]
+  consecutivoNota: string
+  nombreCliente?: string
   onNuevaVenta: () => void
 }) {
   const [compartiendo,      setCompartiendo]      = useState(false)
   const [estadoImpresion,   setEstadoImpresion]   = useState<EstadoImpresion>('idle')
   const [errorImpresion,    setErrorImpresion]     = useState<string | null>(null)
+  const [mostrarNota,       setMostrarNota]        = useState(false)
   // Nombre de la impresora — refresca si cambia durante la sesión
   const [nombreImpresora,   setNombreImpresora]   = useState<string | null>(
     () => obtenerNombreImpresora()
@@ -294,6 +301,7 @@ function PantallaExito({
   const ocupado = estadoImpresion === 'conectando' || estadoImpresion === 'imprimiendo'
 
   return (
+    <>
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60">
       <div className="bg-white w-full sm:max-w-sm rounded-t-2xl sm:rounded-2xl shadow-2xl flex flex-col items-center gap-0 overflow-hidden">
 
@@ -321,6 +329,18 @@ function PantallaExito({
         {/* Acciones */}
         <div className="w-full p-5 flex flex-col gap-3">
 
+          {/* Nota de venta — siempre disponible */}
+          <button
+            type="button"
+            onClick={() => setMostrarNota(true)}
+            className="w-full h-11 bg-primario/8 text-primario border border-primario/25
+                       rounded-xl font-semibold text-sm flex items-center justify-center gap-2
+                       hover:bg-primario/12 active:scale-95 transition-all"
+          >
+            <FileText size={16} />
+            📄 Ver nota de venta ({consecutivoNota})
+          </button>
+
           {/* Botón de impresión — solo si Web Bluetooth disponible */}
           {bluetoothDisponible() ? (
             <div className="flex flex-col gap-1.5">
@@ -329,7 +349,7 @@ function PantallaExito({
                 onClick={handleImprimir}
                 disabled={ocupado || estadoImpresion === 'ok'}
                 className={[
-                  'w-full h-12 rounded-xl font-semibold flex items-center justify-center gap-2',
+                  'w-full h-11 rounded-xl font-semibold flex items-center justify-center gap-2',
                   'active:scale-95 transition-all disabled:cursor-not-allowed',
                   estadoImpresion === 'ok'
                     ? 'bg-exito/10 text-exito border border-exito/30'
@@ -374,11 +394,11 @@ function PantallaExito({
             type="button"
             onClick={handleCompartir}
             disabled={compartiendo}
-            className="w-full h-12 bg-[#25D366] text-white rounded-xl font-semibold
+            className="w-full h-11 bg-[#25D366] text-white rounded-xl font-semibold text-sm
                        flex items-center justify-center gap-2
                        hover:opacity-90 active:scale-95 transition-all disabled:opacity-50"
           >
-            <MessageCircle size={18} />
+            <MessageCircle size={16} />
             {compartiendo ? 'Generando recibo…' : 'Compartir por WhatsApp'}
           </button>
 
@@ -396,6 +416,18 @@ function PantallaExito({
         </div>
       </div>
     </div>
+
+    {/* Modal Nota de Venta */}
+    {mostrarNota && (
+      <ModalNotaVenta
+        venta={venta}
+        detalles={detalles}
+        nombreCliente={nombreCliente}
+        consecutivoExistente={consecutivoNota}
+        onClose={() => setMostrarNota(false)}
+      />
+    )}
+    </>
   )
 }
 
@@ -421,6 +453,8 @@ export function ModalCobro({ onClose }: ModalCobroProps) {
   // Para la pantalla de éxito necesitamos la venta guardada y sus detalles
   const [ventaGuardada, setVentaGuardada] = useState<Venta | null>(null)
   const [detallesGuardados, setDetallesGuardados] = useState<DetalleVenta[]>([])
+  const [consecutivoNota, setConsecutivoNota] = useState('')
+  const [nombreClienteGuardado, setNombreClienteGuardado] = useState<string | undefined>(undefined)
 
   // Leer config una sola vez al montar
   useEffect(() => {
@@ -577,6 +611,13 @@ export function ModalCobro({ onClose }: ModalCobroProps) {
         estado: 'completada',
         creadaEn: ahora,
       })
+      // Generar consecutivo de nota de venta
+      const { codigo: codNota } = await siguienteConsecutivo()
+      setConsecutivoNota(codNota)
+      setNombreClienteGuardado(
+        metodo === 'fiado' && clienteFiado ? clienteFiado.nombre.trim() : undefined
+      )
+
       setDetallesGuardados(detallesSnapshot.map((d, i) => ({ ...d, id: i, ventaId })))
 
       limpiarCarrito()
@@ -594,6 +635,8 @@ export function ModalCobro({ onClose }: ModalCobroProps) {
       <PantallaExito
         venta={ventaGuardada}
         detalles={detallesGuardados}
+        consecutivoNota={consecutivoNota}
+        nombreCliente={nombreClienteGuardado}
         onNuevaVenta={onClose}
       />
     )

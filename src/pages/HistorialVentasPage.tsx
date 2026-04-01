@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react'
 import {
   X, Search, ChevronDown, CheckCircle2, XCircle, Ban,
-  ShoppingBag, Banknote, Smartphone, BookOpen, CreditCard, Clock,
+  ShoppingBag, Banknote, Smartphone, BookOpen, CreditCard, Clock, FileText,
 } from 'lucide-react'
 import { formatCOP, parsearEntero } from '../utils/moneda'
 import { useAuthStore } from '../stores/authStore'
@@ -13,6 +13,8 @@ import {
   type PeriodoHistorial,
 } from '../hooks/useVentas'
 import type { Venta } from '../db/schema'
+import { ModalNotaVenta } from '../components/pos/ModalNotaVenta'
+import { obtenerConsecutivoParaVenta } from '../components/pos/ModalNotaVenta'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -126,6 +128,8 @@ function ModalDetalleVenta({
   const [confirmarAnular, setConfirmarAnular] = useState(false)
   const [anulando, setAnulando] = useState(false)
   const [errorAnular, setErrorAnular] = useState<string | null>(null)
+  const [mostrarNota, setMostrarNota] = useState(false)
+  const [consecutivoNota, setConsecutivoNota] = useState<string | undefined>(undefined)
 
   const handleAnular = async () => {
     setAnulando(true)
@@ -138,6 +142,14 @@ function ModalDetalleVenta({
       setAnulando(false)
       setConfirmarAnular(false)
     }
+  }
+
+  const handleVerNota = async () => {
+    if (!venta.id) return
+    // Genera el consecutivo estable basado en el id (no incrementa el contador)
+    const cod = await obtenerConsecutivoParaVenta(venta.id)
+    setConsecutivoNota(cod)
+    setMostrarNota(true)
   }
 
   return (
@@ -244,21 +256,35 @@ function ModalDetalleVenta({
             )}
           </div>
 
-          {/* Footer — botón anular solo para dueño en ventas completadas */}
-          {esDueno && venta.estado === 'completada' && (
-            <div className="p-4 border-t border-borde shrink-0">
+          {/* Footer — botones de acción */}
+          <div className="p-4 border-t border-borde shrink-0 flex flex-col gap-2">
+
+            {/* Botón nota de venta — siempre visible */}
+            <button
+              type="button"
+              onClick={handleVerNota}
+              className="w-full h-11 bg-primario/8 text-primario border border-primario/25
+                         rounded-xl font-semibold text-sm flex items-center justify-center gap-2
+                         hover:bg-primario/12 active:scale-95 transition-all"
+            >
+              <FileText size={15} />
+              📄 Nota de venta
+            </button>
+
+            {/* Botón anular — solo duéño en ventas completadas */}
+            {esDueno && venta.estado === 'completada' && (
               <button
                 type="button"
                 onClick={() => setConfirmarAnular(true)}
-                className="w-full h-12 border-2 border-peligro/40 text-peligro rounded-xl
+                className="w-full h-11 border-2 border-peligro/40 text-peligro rounded-xl
                            font-semibold text-sm flex items-center justify-center gap-2
                            hover:bg-peligro/5 active:scale-95 transition-all"
               >
                 <Ban size={16} />
                 Anular venta
               </button>
-            </div>
-          )}
+            )}
+          </div>
         </div>
       </div>
 
@@ -268,6 +294,16 @@ function ModalDetalleVenta({
           onConfirmar={handleAnular}
           onCancelar={() => setConfirmarAnular(false)}
           anulando={anulando}
+        />
+      )}
+
+      {mostrarNota && (
+        <ModalNotaVenta
+          venta={venta}
+          detalles={detalles}
+          nombreCliente={nombreCliente}
+          consecutivoExistente={consecutivoNota}
+          onClose={() => setMostrarNota(false)}
         />
       )}
     </>

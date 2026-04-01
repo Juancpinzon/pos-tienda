@@ -181,6 +181,19 @@ export interface MapeoSKU {
   actualizadoEn: Date
 }
 
+// ─── Módulo de Nota de Venta — Régimen Simple (v5) ──────────────────────────
+
+export interface ConfigFiscal {
+  id?: number              // Siempre 1 (singleton)
+  ultimoConsecutivo: number  // Se incrementa con cada nota generada
+  prefijo: string            // 'NV' por defecto
+  // Campos para futura facturación electrónica DIAN:
+  resolucionDIAN?: string   // Ej: "18764000001" (cuando sea obligatorio)
+  rangoDesde?: number
+  rangoHasta?: number
+  vigenciaHasta?: Date
+}
+
 // ─── Módulo de Control de Stock (v3) ─────────────────────────────────────────
 
 export interface MovimientoStock {

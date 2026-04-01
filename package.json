@@ -26,6 +26,8 @@
     "clsx": "^2.1.1",
     "dexie": "^4.0.10",
     "dexie-react-hooks": "^1.1.7",
+    "html2canvas": "^1.4.1",
+    "jspdf": "^4.2.1",
     "lucide-react": "^0.474.0",
     "numeral": "^2.0.6",
     "react": "^18.3.1",

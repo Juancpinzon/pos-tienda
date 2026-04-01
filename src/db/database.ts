@@ -15,6 +15,7 @@ import type {
   PagoProveedor,
   MovimientoStock,
   MapeoSKU,
+  ConfigFiscal,
 } from './schema'
 
 // Singleton de Dexie — única instancia para toda la aplicación
@@ -37,6 +38,8 @@ class POSDatabase extends Dexie {
   movimientosStock!: EntityTable<MovimientoStock, 'id'>
   // v4 — mapeo de SKUs de proveedor
   mapeosSKU!: EntityTable<MapeoSKU, 'id'>
+  // v5 — facturación régimen simple
+  configFiscal!: EntityTable<ConfigFiscal, 'id'>
 
   constructor() {
     super('POSTienda')
@@ -73,6 +76,11 @@ class POSDatabase extends Dexie {
     this.version(4).stores({
       mapeosSKU: '++id, nombreProveedor, productoId, vecesUsado',
     })
+
+    // Versión 5: tabla de configuración fiscal (régimen simple / consecutivo NV)
+    this.version(5).stores({
+      configFiscal: '++id',
+    })
   }
 }
 
@@ -96,4 +104,5 @@ export type {
   PagoProveedor,
   MovimientoStock,
   MapeoSKU,
+  ConfigFiscal,
 }

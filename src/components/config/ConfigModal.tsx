@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
-import { X, Store, Phone, MapPin, FileText, Receipt, BookOpen, Users, Send, CheckCircle, UserX, Loader2, Sun, Moon, Monitor, Printer, Bluetooth, BluetoothOff, CheckCircle2, Plus, Pencil, Bell, BellOff } from 'lucide-react'
+import { X, Store, Phone, MapPin, FileText, Receipt, BookOpen, Users, Send, CheckCircle, UserX, Loader2, Sun, Moon, Monitor, Printer, Bluetooth, BluetoothOff, CheckCircle2, Plus, Pencil, Bell, BellOff, ShieldCheck } from 'lucide-react'
 import { useConfig, guardarConfig } from '../../hooks/useConfig'
 import { supabase, supabaseConfigurado } from '../../lib/supabase'
 import { useAuthStore } from '../../stores/authStore'
@@ -25,6 +25,7 @@ import {
   solicitarPermiso,
   enviarNotificacionPrueba,
 } from '../../lib/notificaciones'
+import { db } from '../../db/database'
 
 // ─── Schema ───────────────────────────────────────────────────────────────────
 
@@ -944,6 +945,135 @@ function SeccionTema() {
   )
 }
 
+// ─── Sección de Facturación — Régimen Simple ─────────────────────────────────
+
+function SeccionFacturacion() {
+  const [prefijo,      setPrefijo]      = useState('NV')
+  const [consecutivo, setConsecutivo]  = useState<number>(0)
+  const [guardando,   setGuardando]    = useState(false)
+  const [ok,          setOk]           = useState(false)
+  const [error,       setError]        = useState<string | null>(null)
+
+  // Cargar configuración fiscal al montar
+  useEffect(() => {
+    db.configFiscal.get(1).then((cfg) => {
+      if (cfg) {
+        setPrefijo(cfg.prefijo)
+        setConsecutivo(cfg.ultimoConsecutivo)
+      }
+    }).catch(() => { /* tabla nueva, sin datos */ })
+  }, [])
+
+  const guardarFiscal = async () => {
+    setGuardando(true)
+    setError(null)
+    try {
+      const existente = await db.configFiscal.get(1)
+      if (existente) {
+        await db.configFiscal.update(1, { prefijo: prefijo.trim().toUpperCase() || 'NV' })
+      } else {
+        await db.configFiscal.put({
+          id: 1,
+          ultimoConsecutivo: 0,
+          prefijo: prefijo.trim().toUpperCase() || 'NV',
+        })
+      }
+      setOk(true)
+      setTimeout(() => setOk(false), 2500)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Error al guardar')
+    } finally {
+      setGuardando(false)
+    }
+  }
+
+  return (
+    <section>
+      <p className="text-xs font-semibold text-suave uppercase tracking-wider mb-3 flex items-center gap-1.5">
+        <ShieldCheck size={13} />
+        Facturación
+      </p>
+
+      {/* Aviso régimen simple */}
+      <div className="mb-3 bg-amber-50 border border-amber-200 rounded-xl p-3 flex items-start gap-2.5">
+        <span className="text-lg leading-none">🟡</span>
+        <div>
+          <p className="text-xs font-semibold text-amber-800">Régimen Simple — Exento de facturación electrónica</p>
+          <p className="text-[11px] text-amber-700 mt-0.5 leading-snug">
+            Las notas de venta son documentos equivalentes válidos para soportar transacciones mientras no estés obligado a factura electrónica DIAN.
+          </p>
+        </div>
+      </div>
+
+      <div className="bg-fondo rounded-xl border border-borde p-4 flex flex-col gap-3">
+
+        {/* Prefijo del consecutivo */}
+        <div className="flex items-center gap-3">
+          <div className="flex-1">
+            <label className="text-sm font-medium text-texto flex items-center gap-1.5">
+              <FileText size={14} className="text-suave" />
+              Prefijo de nota
+            </label>
+            <p className="text-xs text-suave mt-0.5">Ej: NV, FV, RV</p>
+          </div>
+          <input
+            type="text"
+            value={prefijo}
+            onChange={(e) => setPrefijo(e.target.value.toUpperCase().slice(0, 4))}
+            maxLength={4}
+            placeholder="NV"
+            className="w-20 h-10 px-3 border border-borde rounded-xl text-sm font-mono
+                       font-bold text-texto text-center
+                       focus:outline-none focus:ring-2 focus:ring-primario/40 focus:border-primario"
+          />
+        </div>
+
+        {/* Último consecutivo */}
+        <div className="flex items-center justify-between p-3 bg-white border border-borde/60 rounded-xl">
+          <div>
+            <p className="text-sm font-medium text-texto">Próxima nota</p>
+            <p className="text-xs text-suave">Se asigna al generar nueva nota de venta</p>
+          </div>
+          <span className="font-mono font-bold text-primario text-base">
+            {prefijo}-{String(consecutivo + 1).padStart(4, '0')}
+          </span>
+        </div>
+
+        {/* Último usado */}
+        <div className="flex items-center justify-between px-3 py-2">
+          <p className="text-xs text-suave">Consecutivo más alto emitido:</p>
+          <span className="text-xs font-mono font-semibold text-texto">
+            {consecutivo === 0 ? 'Ninguno aún' : `${prefijo}-${String(consecutivo).padStart(4, '0')}`}
+          </span>
+        </div>
+
+        {/* Botón guardar */}
+        <button
+          type="button"
+          onClick={guardarFiscal}
+          disabled={guardando}
+          className="h-10 bg-primario text-white rounded-xl text-sm font-semibold
+                     flex items-center justify-center gap-2
+                     hover:bg-primario-hover active:scale-95 transition-all
+                     disabled:opacity-40 disabled:cursor-not-allowed"
+        >
+          {guardando ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle2 size={14} />}
+          {guardando ? 'Guardando…' : 'Guardar configuración fiscal'}
+        </button>
+
+        {ok && (
+          <p className="text-xs text-exito flex items-center gap-1.5 justify-center">
+            <CheckCircle2 size={13} /> Configuración guardada
+          </p>
+        )}
+        {error && (
+          <p className="text-xs text-peligro text-center">{error}</p>
+        )}
+      </div>
+    </section>
+  )
+}
+
 // ─── Props del modal ──────────────────────────────────────────────────────────
 
 interface ConfigModalProps {
@@ -1106,6 +1236,9 @@ export function ConfigModal({ onClose, onReiniciarTour }: ConfigModalProps) {
               setValue={setValue as (field: string, value: unknown, opts?: { shouldDirty: boolean }) => void}
               register={register as (name: string) => object}
             />
+
+            {/* Facturación — Régimen Simple */}
+            <SeccionFacturacion />
 
             {/* Apariencia — selector de tema */}
             <SeccionTema />
