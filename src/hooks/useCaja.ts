@@ -104,9 +104,9 @@ export function useResumenCaja(sesionId: number | undefined) {
         .toArray()
 
       // Cobros de deuda fiado asociados a esta sesión
+      // NOTA: sesionCajaId no está indexado en Dexie — usar .filter() en lugar de .where()
       const pagosfiado = await db.movimientosFiado
-        .where('sesionCajaId').equals(sesionId)
-        .filter((m) => m.tipo === 'pago')
+        .filter((m) => m.sesionCajaId === sesionId && m.tipo === 'pago')
         .toArray()
 
       const totalVentas = ventas.reduce((s, v) => s + v.total, 0)
@@ -268,9 +268,9 @@ export async function cerrarCaja(
     .where('sesionCajaId').equals(sesionId)
     .toArray()
 
+  // NOTA: sesionCajaId no está indexado — usar .filter() en lugar de .where()
   const pagosfiado = await db.movimientosFiado
-    .where('sesionCajaId').equals(sesionId)
-    .filter((m) => m.tipo === 'pago' && (!m.formaCobro || m.formaCobro === 'efectivo'))
+    .filter((m) => m.sesionCajaId === sesionId && m.tipo === 'pago' && (!m.formaCobro || m.formaCobro === 'efectivo'))
     .toArray()
   const cobrosFiadoEfectivo = pagosfiado.reduce((s, m) => s + m.monto, 0)
 

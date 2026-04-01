@@ -48,6 +48,10 @@ export default function ReportesPage() {
     // Anuladas
     totalAnulado: number
     cantidadAnuladas: number
+    // Cobros de cartera fiado recibidos en el período
+    cobrosfiado: number
+    cobrosFiadoEfectivo: number
+    cobrosFiadoTransferencia: number
   }
   type TopProducto = { nombre: string; cantidad: number; monto: number }
   type MargenPeriodo = { margen: number; conConoce: number; sinConoce: number } | null
@@ -72,8 +76,22 @@ export default function ReportesPage() {
       const totalAnulado    = anuladas.reduce((s, v) => s + v.total, 0)
       const cantidadAnuladas = anuladas.length
 
+      // Cobros de cartera fiado en el período (creadoEn está indexado)
+      const pagosCartera = await db.movimientosFiado
+        .where('creadoEn').aboveOrEqual(inicio)
+        .filter((m) => m.tipo === 'pago')
+        .toArray()
+      const FORMAS_TRANS = ['Nequi', 'Daviplata', 'Dale']
+      const cobrosfiado = pagosCartera.reduce((s, m) => s + m.monto, 0)
+      const cobrosFiadoEfectivo = pagosCartera
+        .filter((m) => !m.formaCobro || m.formaCobro === 'efectivo')
+        .reduce((s, m) => s + m.monto, 0)
+      const cobrosFiadoTransferencia = pagosCartera
+        .filter((m) => m.formaCobro !== undefined && FORMAS_TRANS.includes(m.formaCobro))
+        .reduce((s, m) => s + m.monto, 0)
+
       if (ventas.length === 0) {
-        return { ventas: [], totalVendido: 0, cantidadVentas: 0, ticketPromedio: 0, totalEfectivo: 0, totalTransferencia: 0, totalNequi: 0, totalDaviplata: 0, totalDale: 0, totalFiado: 0, totalAnulado, cantidadAnuladas }
+        return { ventas: [], totalVendido: 0, cantidadVentas: 0, ticketPromedio: 0, totalEfectivo: 0, totalTransferencia: 0, totalNequi: 0, totalDaviplata: 0, totalDale: 0, totalFiado: 0, totalAnulado, cantidadAnuladas, cobrosfiado, cobrosFiadoEfectivo, cobrosFiadoTransferencia }
       }
 
       const totalVendido       = ventas.reduce((s, v) => s + v.total, 0)
@@ -86,7 +104,7 @@ export default function ReportesPage() {
       const totalFiado         = ventas.filter((v) => v.tipoPago === 'fiado').reduce((s, v) => s + v.total, 0)
       const ticketPromedio     = Math.round(totalVendido / ventas.length)
 
-      return { ventas, totalVendido, cantidadVentas: ventas.length, ticketPromedio, totalEfectivo, totalTransferencia, totalNequi, totalDaviplata, totalDale, totalFiado, totalAnulado, cantidadAnuladas }
+      return { ventas, totalVendido, cantidadVentas: ventas.length, ticketPromedio, totalEfectivo, totalTransferencia, totalNequi, totalDaviplata, totalDale, totalFiado, totalAnulado, cantidadAnuladas, cobrosfiado, cobrosFiadoEfectivo, cobrosFiadoTransferencia }
     }).subscribe({
       next: setDatos,
       error: (err) => {
@@ -299,6 +317,24 @@ export default function ReportesPage() {
                   />
                   <SubMetrica emoji="📒" label="Fiado"          valor={datos.totalFiado}         color="text-fiado"   />
                 </div>
+
+                {/* Cobros de cartera fiado — solo si hay abonos en el período */}
+                {datos.cobrosfiado > 0 && (
+                  <div className="border-t border-fiado/20 pt-2 flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-1.5 min-w-0">
+                      <span>💜</span>
+                      <span className="text-xs text-suave">Cobros de cartera</span>
+                      {datos.cobrosFiadoEfectivo > 0 && datos.cobrosFiadoTransferencia > 0 && (
+                        <span className="text-[10px] text-suave/60 ml-1">
+                          ({formatCOP(datos.cobrosFiadoEfectivo)} efectivo · {formatCOP(datos.cobrosFiadoTransferencia)} transf.)
+                        </span>
+                      )}
+                    </div>
+                    <span className="moneda font-bold text-sm text-fiado shrink-0">
+                      {formatCOP(datos.cobrosfiado)}
+                    </span>
+                  </div>
+                )}
               </div>
 
               {/* ── Ticket promedio y ventas ── */}
