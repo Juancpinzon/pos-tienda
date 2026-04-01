@@ -38,6 +38,8 @@ interface FormProductoProps {
   producto?: Producto | null
   /** Nombre precompletado (cuando viene de un producto fantasma) */
   nombrePreset?: string
+  /** Código de barras precompletado (cuando viene del escáner en POSPage) */
+  codigoBarrasPreset?: string
   onClose: () => void
   onGuardado?: (id: number) => void
 }
@@ -79,7 +81,7 @@ const SELECT_CLS =
 
 // ─── Componente principal ─────────────────────────────────────────────────────
 
-export function FormProducto({ producto, nombrePreset, onClose, onGuardado }: FormProductoProps) {
+export function FormProducto({ producto, nombrePreset, codigoBarrasPreset, onClose, onGuardado }: FormProductoProps) {
   const categorias = useCategorias()
   const esEdicion = producto !== null && producto !== undefined
 
@@ -131,10 +133,11 @@ export function FormProducto({ producto, nombrePreset, onClose, onGuardado }: Fo
         stockActual: producto.stockActual !== undefined ? String(producto.stockActual) : '',
         stockMinimo: producto.stockMinimo !== undefined ? String(producto.stockMinimo) : '',
       })
-    } else if (nombrePreset) {
-      setValue('nombre', nombrePreset)
+    } else {
+      if (nombrePreset) setValue('nombre', nombrePreset)
+      if (codigoBarrasPreset) setValue('codigoBarras', codigoBarrasPreset)
     }
-  }, [producto, nombrePreset, reset, setValue])
+  }, [producto, nombrePreset, codigoBarrasPreset, reset, setValue])
 
   const onSubmit = async (data: FormData) => {
     const productoData = {

@@ -1,5 +1,6 @@
 import { useState, useMemo, useEffect } from 'react'
 import { Search, Plus, Ghost, Pencil, Power, ChevronDown, ChevronRight, Link2, Trash2 } from 'lucide-react'
+import { useSearchParams } from 'react-router-dom'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { db } from '../db/database'
 import { listarMapeos, eliminarMapeo, actualizarMapeo } from '../lib/mapeoSKU'
@@ -145,9 +146,24 @@ export default function ProductosPage() {
   const [mostrarForm, setMostrarForm] = useState(false)
   const [productoEditar, setProductoEditar] = useState<Producto | null | undefined>(undefined)
   const [nombrePreset, setNombrePreset] = useState<string | undefined>()
+  const [codigoBarrasPreset, setCodigoBarrasPreset] = useState<string | undefined>()
 
   // Fantasmas expandido
   const [fantasmasAbierto, setFantasmasAbierto] = useState(true)
+
+  // Auto-abrir formulario de nuevo producto si viene del escáner (?nuevo=1&codigoBarras=XXX)
+  const [searchParams, setSearchParams] = useSearchParams()
+  useEffect(() => {
+    if (searchParams.get('nuevo') === '1') {
+      const cb = searchParams.get('codigoBarras') ?? undefined
+      setProductoEditar(null)
+      setNombrePreset(undefined)
+      setCodigoBarrasPreset(cb)
+      setMostrarForm(true)
+      // Limpiar los query params para que no se re-abra al navegar
+      setSearchParams({}, { replace: true })
+    }
+  }, []) // solo al montar
 
   // ── Datos ──────────────────────────────────────────────────────────────────
   const categorias = useCategorias()
@@ -190,9 +206,10 @@ export default function ProductosPage() {
 
   // ── Handlers ───────────────────────────────────────────────────────────────
 
-  const abrirNuevo = (presetNombre?: string) => {
+  const abrirNuevo = (presetNombre?: string, presetCodigo?: string) => {
     setProductoEditar(null)
     setNombrePreset(presetNombre)
+    setCodigoBarrasPreset(presetCodigo)
     setMostrarForm(true)
   }
 
@@ -206,6 +223,7 @@ export default function ProductosPage() {
     setMostrarForm(false)
     setProductoEditar(undefined)
     setNombrePreset(undefined)
+    setCodigoBarrasPreset(undefined)
   }
 
   // ── Fila de producto ───────────────────────────────────────────────────────
@@ -454,6 +472,7 @@ export default function ProductosPage() {
         <FormProducto
           producto={productoEditar}
           nombrePreset={nombrePreset}
+          codigoBarrasPreset={codigoBarrasPreset}
           onClose={cerrarForm}
         />
       )}

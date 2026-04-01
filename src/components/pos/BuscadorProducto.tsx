@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { Search, Ghost, X, ScanBarcode } from 'lucide-react'
+import { Search, Ghost, X, ScanBarcode, PackagePlus } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
 import { db } from '../../db/database'
 import type { Producto } from '../../db/schema'
 import { useVentaStore } from '../../stores/ventaStore'
@@ -13,6 +14,7 @@ type ResultadoScan =
   | null
 
 export function BuscadorProducto() {
+  const navigate = useNavigate()
   const [query, setQuery] = useState('')
   const [resultados, setResultados] = useState<Producto[]>([])
   const [abierto, setAbierto] = useState(false)
@@ -178,11 +180,23 @@ export function BuscadorProducto() {
       {resultadoScan?.tipo === 'no_encontrado' && (
         <div className="absolute top-full left-0 right-0 z-50 mt-1
                         bg-white border border-advertencia/50 rounded-xl shadow-lg p-4">
-          <p className="text-sm font-semibold text-advertencia mb-1">
-            Código <span className="font-mono">{resultadoScan.codigo}</span> no registrado
-          </p>
-          <p className="text-xs text-suave mb-3">¿Qué desea hacer?</p>
-          <div className="flex gap-2">
+          <div className="flex items-start justify-between gap-2 mb-3">
+            <div>
+              <p className="text-sm font-semibold text-advertencia leading-snug">
+                Código no registrado
+              </p>
+              <p className="text-xs text-suave font-mono mt-0.5">{resultadoScan.codigo}</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setResultadoScan(null)}
+              className="shrink-0 text-suave hover:text-texto"
+            >
+              <X size={16} />
+            </button>
+          </div>
+          <div className="flex flex-col gap-2">
+            {/* Opción 1: vender ahora sin registrar */}
             <button
               type="button"
               onClick={() => {
@@ -190,19 +204,26 @@ export function BuscadorProducto() {
                 setResultadoScan(null)
                 setMostrarFantasma(true)
               }}
-              className="flex-1 h-10 rounded-xl border border-acento/40 text-acento
-                         text-sm font-semibold hover:bg-acento/5 transition-colors"
+              className="w-full h-11 rounded-xl border border-acento/40 text-acento
+                         text-sm font-semibold hover:bg-acento/5 active:scale-95 transition-all
+                         flex items-center justify-center gap-2"
             >
-              <Ghost size={14} className="inline mr-1.5" />
+              <Ghost size={15} />
               Vender sin registrar
             </button>
+            {/* Opción 2: ir a crear producto con el código pre-llenado */}
             <button
               type="button"
-              onClick={() => setResultadoScan(null)}
-              className="h-10 px-4 rounded-xl border border-borde text-suave
-                         text-sm hover:bg-fondo transition-colors"
+              onClick={() => {
+                setResultadoScan(null)
+                navigate(`/productos?nuevo=1&codigoBarras=${encodeURIComponent(resultadoScan.codigo)}`)
+              }}
+              className="w-full h-11 rounded-xl border border-primario/30 text-primario
+                         text-sm font-semibold hover:bg-primario/5 active:scale-95 transition-all
+                         flex items-center justify-center gap-2"
             >
-              Cancelar
+              <PackagePlus size={15} />
+              Crear producto con este código
             </button>
           </div>
         </div>

@@ -10,6 +10,11 @@
 //   - Si el usuario niega la cámara → estado 'denegado' con mensaje claro
 //   - Si el dispositivo no tiene cámara → estado 'sin_camara'
 //   - HTTPS requerido en producción (Vercel lo provee automáticamente)
+//
+// BUG FIX (2026-04): La versión anterior usaba `decodeOnceFromVideoElement()` que
+// NO existe en @zxing/library v0.21.x — lanzaba TypeError en cada frame, era capturado
+// silenciosamente y el escáner nunca disparaba. Fix: usar `decodeFromVideoDevice()`
+// que es el método oficial para escaneo continuo desde cámara.
 
 import { useEffect, useRef, useState } from 'react'
 import { X, Camera, CameraOff, Loader2 } from 'lucide-react'
@@ -24,8 +29,8 @@ export interface EscanerCodigoBarrasProps {
 export function EscanerCodigoBarras({ onCodigoDetectado, onClose }: EscanerCodigoBarrasProps) {
   const videoRef  = useRef<HTMLVideoElement>(null)
   const readerRef = useRef<import('@zxing/library').BrowserMultiFormatReader | null>(null)
-  const [estado, setEstado]     = useState<EstadoEscaner>('iniciando')
-  const [ultimoCodigo, setUltimoCodigo] = useState<string | null>(null)
+  const [estado, setEstado]           = useState<EstadoEscaner>('iniciando')
+  const [codigoDetectado, setCodigoDetectado] = useState(false)
 
   useEffect(() => {
     let activo = true
@@ -34,87 +39,86 @@ export function EscanerCodigoBarras({ onCodigoDetectado, onClose }: EscanerCodig
       try {
         // Importar dinámicamente para no bloquear el bundle principal
         const { BrowserMultiFormatReader, NotFoundException } = await import('@zxing/library')
-
         if (!activo) return
 
-        const reader = new BrowserMultiFormatReader()
-        readerRef.current = reader
-
-        // Pedir acceso a la cámara trasera preferentemente
-        const constraints: MediaStreamConstraints = {
-          video: { facingMode: { ideal: 'environment' } },
-        }
-
-        // Verificar que el navegador soporte getUserMedia
+        // Verificar soporte de cámara
         if (!navigator.mediaDevices?.getUserMedia) {
           setEstado('sin_camara')
           return
         }
 
-        let stream: MediaStream
+        const reader = new BrowserMultiFormatReader()
+        readerRef.current = reader
+
+        // Obtener la lista de cámaras y preferir la trasera (environment)
+        let deviceId: string | null = null
         try {
-          stream = await navigator.mediaDevices.getUserMedia(constraints)
-        } catch (err: unknown) {
-          if (!activo) return
-          const name = err instanceof Error ? err.name : ''
-          if (name === 'NotAllowedError' || name === 'PermissionDeniedError') {
-            setEstado('denegado')
-          } else if (name === 'NotFoundError' || name === 'DevicesNotFoundError') {
+          const devices = await reader.listVideoInputDevices()
+          if (devices.length === 0) {
             setEstado('sin_camara')
-          } else {
-            setEstado('error')
+            return
           }
-          return
+          // Buscar cámara trasera por etiqueta común
+          const trasera = devices.find((d) =>
+            /back|rear|environment|trasera/i.test(d.label)
+          )
+          deviceId = (trasera ?? devices[devices.length - 1]).deviceId
+        } catch {
+          // Si listVideoInputDevices falla, dejar deviceId=null y que ZXing elija
         }
 
-        if (!activo) {
-          stream.getTracks().forEach((t) => t.stop())
-          return
-        }
-
-        if (videoRef.current) {
-          videoRef.current.srcObject = stream
-          await videoRef.current.play()
-        }
-
+        if (!activo) return
         setEstado('escaneando')
 
-        // Decodificar frame a frame
-        const decode = async () => {
-          if (!activo || !videoRef.current) return
-
-          try {
-            const result = await reader.decodeOnceFromVideoElement(videoRef.current)
-
+        // decodeFromVideoDevice gestiona TODO el ciclo:
+        //   - getUserMedia con el deviceId indicado
+        //   - Adjunta el stream al elemento <video>
+        //   - Decodifica frame a frame en un canvas interno
+        //   - Llama al callback con el resultado (o el error de cada frame)
+        //
+        // Importante: NO usar decodeOnceFromVideoElement — ese método no existe en v0.21.x.
+        await reader.decodeFromVideoDevice(
+          deviceId,
+          videoRef.current!,
+          (result, err) => {
             if (!activo) return
 
-            const codigo = result.getText()
-            setUltimoCodigo(codigo)
+            if (result) {
+              const codigo = result.getText()
+              if (!codigo) return
 
-            // Vibración háptica al detectar (si el dispositivo lo soporta)
-            if (navigator.vibrate) navigator.vibrate(200)
+              // Prevenir disparos múltiples en el mismo frame
+              if (codigoDetectado) return
+              setCodigoDetectado(true)
 
-            // Parar el stream antes de notificar al padre
-            stream.getTracks().forEach((t) => t.stop())
-            onCodigoDetectado(codigo)
+              // Vibración háptica (si el dispositivo lo soporta)
+              if (navigator.vibrate) navigator.vibrate(200)
 
-          } catch (err) {
-            if (!activo) return
-            // NotFoundException = no hay código en el frame — reintentar
-            if (err instanceof NotFoundException) {
-              setTimeout(decode, 150)
+              // Detener el escáner antes de notificar al padre
+              reader.reset()
+              onCodigoDetectado(codigo)
+              return
             }
-            // Cualquier otro error: reintentar silenciosamente
-            else {
-              setTimeout(decode, 300)
+
+            // NotFoundException = no hay código visible en el frame — completamente normal
+            // Cualquier otro error: loguear pero NO detener el escáner
+            if (err && !(err instanceof NotFoundException)) {
+              console.warn('[EscanerCodigoBarras] frame error:', err.message ?? err)
             }
           }
+        )
+
+      } catch (err: unknown) {
+        if (!activo) return
+        const name = err instanceof Error ? err.name : ''
+        if (name === 'NotAllowedError' || name === 'PermissionDeniedError') {
+          setEstado('denegado')
+        } else if (name === 'NotFoundError' || name === 'DevicesNotFoundError') {
+          setEstado('sin_camara')
+        } else {
+          console.error('[EscanerCodigoBarras]', err)
+          setEstado('error')
         }
-
-        decode()
-
-      } catch {
-        if (activo) setEstado('error')
       }
     }
 
@@ -122,15 +126,11 @@ export function EscanerCodigoBarras({ onCodigoDetectado, onClose }: EscanerCodig
 
     return () => {
       activo = false
-      // Detener el stream y liberar la cámara
-      if (videoRef.current?.srcObject) {
-        const stream = videoRef.current.srcObject as MediaStream
-        stream.getTracks().forEach((t) => t.stop())
-        videoRef.current.srcObject = null
-      }
+      // reset() detiene el stream de cámara y libera todos los recursos internos de ZXing
       readerRef.current?.reset()
+      readerRef.current = null
     }
-  }, [onCodigoDetectado])
+  }, [onCodigoDetectado]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Cerrar con Escape ──────────────────────────────────────────────────────
   useEffect(() => {
@@ -161,7 +161,7 @@ export function EscanerCodigoBarras({ onCodigoDetectado, onClose }: EscanerCodig
       {/* ── Visor de la cámara (80% de altura) ── */}
       <div className="flex-1 relative overflow-hidden">
 
-        {/* Video */}
+        {/* Video — ZXing adjunta el srcObject aquí al iniciar */}
         <video
           ref={videoRef}
           playsInline
@@ -186,7 +186,7 @@ export function EscanerCodigoBarras({ onCodigoDetectado, onClose }: EscanerCodig
                 <div>
                   <p className="text-white font-bold text-lg mb-2">Permiso de cámara denegado</p>
                   <p className="text-white/70 text-sm leading-relaxed">
-                    Para escanear códigos de barras, usted debe permitir el acceso
+                    Para escanear códigos de barras, debe permitir el acceso
                     a la cámara en la configuración de su navegador.
                   </p>
                   <p className="text-white/50 text-xs mt-3">
@@ -293,15 +293,15 @@ export function EscanerCodigoBarras({ onCodigoDetectado, onClose }: EscanerCodig
             {/* Ayuda textual */}
             <div className="absolute bottom-0 left-0 right-0 pb-4 flex justify-center pointer-events-none">
               <p className="text-white/80 text-sm font-medium bg-black/50 px-4 py-2 rounded-full">
-                Apunte la cámara al código de barras
+                {codigoDetectado ? '✓ Código detectado…' : 'Apunte la cámara al código de barras'}
               </p>
             </div>
           </>
         )}
 
-        {/* Flash de éxito al detectar */}
-        {ultimoCodigo && (
-          <div className="absolute inset-0 bg-white/20 pointer-events-none animate-pulse" />
+        {/* Flash verde al detectar */}
+        {codigoDetectado && (
+          <div className="absolute inset-0 bg-exito/20 pointer-events-none animate-pulse" />
         )}
       </div>
     </div>
