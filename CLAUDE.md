@@ -34,7 +34,7 @@ Registrar un fiado debe ser tan rápido como cobrar en efectivo.
 NO se piden documentos, correos ni datos formales. Solo el nombre del cliente.
 
 ### 3. Offline primero, siempre
-Todo funciona sin internet. La sincronización es un bonus, no un requisito.
+Todo funciona sin internet. La sincronización con Supabase es un bonus, no un requisito.
 Usar IndexedDB (Dexie.js) como fuente de verdad local.
 
 ### 4. Interfaz para manos, no para ratones
@@ -56,85 +56,109 @@ El porcentaje de utilidad por defecto es **30%**.
 
 ---
 
-## 🛠️ Stack Tecnológico
+## 🛠️ Stack Tecnológico Actual
 
 | Capa | Tecnología | Razón |
 |------|-----------|-------|
 | Frontend framework | React 18 + TypeScript | Ecosistema, velocidad de desarrollo |
 | Styling | Tailwind CSS v3 | Clases utilitarias, consistencia |
-| Componentes UI | shadcn/ui | Accesibles, customizables, sin overhead |
+| Componentes UI | shadcn/ui + base-ui | Accesibles, customizables, sin overhead |
 | Base de datos local | Dexie.js (wrapper de IndexedDB) | Offline-first, queries rápidas, sin servidor |
 | Estado global | Zustand | Liviano, simple, predecible |
 | Formularios | react-hook-form + Zod | Validación tipo-segura |
 | Build tool | Vite | Velocidad de desarrollo |
 | Instalación como app | PWA (Vite PWA plugin) | Se instala como app nativa desde el navegador |
+| App nativa Android | Capacitor | APK desde mismo código React |
 | Icons | Lucide React | Consistentes, ligeros |
 | Números/moneda | numeral.js | Formateo de pesos colombianos |
+| Sincronización nube | Supabase (PostgreSQL + Auth) | Multi-usuario, backup, sync entre dispositivos |
+| Lector de barras | @zxing/library | Escaneo por cámara del celular |
+| Bluetooth | @capacitor-community/bluetooth-le | Impresoras térmicas ESC/POS |
+| Push notifications | @capacitor/push-notifications | Alertas de stock, recordatorios |
 
-**NO usar:** Supabase, Firebase, ni ningún servicio en la nube. Todo es local.
+**Deploy:** Vercel — push a `main` = deploy automático
+**Repositorio:** github.com/Juancpinzon/pos-tienda
+**URL producción:** pos-tienda-ten.vercel.app
 
 ---
 
-## 📁 Estructura del Proyecto
+## 📁 Estructura del Proyecto (Estado Actual)
 
 ```
 pos-tienda/
 ├── public/
-│   ├── manifest.json          # PWA manifest
-│   └── icons/                 # Iconos para instalar app
+│   ├── manifest.json              # PWA manifest
+│   └── icons/                     # Iconos para instalar app
 ├── src/
 │   ├── db/
-│   │   ├── schema.ts          # Definición de tablas Dexie
-│   │   ├── database.ts        # Instancia singleton de Dexie
-│   │   └── seed.ts            # Carga inicial de 400 productos
+│   │   ├── schema.ts              # Definición de tablas Dexie
+│   │   ├── database.ts            # Instancia singleton de Dexie
+│   │   └── seed.ts                # Carga inicial de 400 productos
 │   ├── stores/
-│   │   ├── ventaStore.ts      # Estado de la venta activa
-│   │   ├── cajaStore.ts       # Estado de la sesión de caja
-│   │   └── uiStore.ts         # Estado de modales y navegación
+│   │   ├── ventaStore.ts          # Estado de la venta activa
+│   │   ├── cajaStore.ts           # Estado de la sesión de caja
+│   │   ├── uiStore.ts             # Estado de modales y navegación
+│   │   ├── authStore.ts           # Autenticación y perfiles (Supabase)
+│   │   └── themeStore.ts          # Modo oscuro/claro/sistema
 │   ├── hooks/
-│   │   ├── useProductos.ts    # Búsqueda y CRUD de productos
-│   │   ├── useFiados.ts       # Gestión de cartera
-│   │   ├── useVentas.ts       # Registro de transacciones
-│   │   └── useCaja.ts         # Sesiones de caja
+│   │   ├── useProductos.ts        # Búsqueda y CRUD de productos
+│   │   ├── useFiados.ts           # Gestión de cartera
+│   │   ├── useVentas.ts           # Registro de transacciones
+│   │   ├── useCaja.ts             # Sesiones de caja
+│   │   ├── useStock.ts            # Control de stock y alertas
+│   │   ├── useProveedores.ts      # Gestión de proveedores y compras
+│   │   ├── useConfig.ts           # Configuración de la tienda
+│   │   ├── useSeed.ts             # Poblar DB en primer uso
+│   │   ├── useSyncStatus.ts       # Estado de sincronización Supabase
+│   │   ├── useTiendasDueno.ts     # Multi-tienda (cargar/cambiar tiendas)
+│   │   ├── useOnboarding.ts       # Tour guiado para nuevos usuarios
+│   │   ├── usePWAInstall.ts       # Prompt de instalación PWA
+│   │   ├── useCapacitor.ts        # Detección nativo vs. web (Fase 23)
+│   │   ├── usePushNotifications.ts # Push dual: nativo + web (Fase 22-23)
+│   │   └── useBluetooth.ts        # BLE dual: nativo + web (Fase 23)
+│   ├── lib/
+│   │   ├── supabase.ts            # Cliente Supabase + flag supabaseConfigurado
+│   │   ├── sync.ts                # Auto-sync bidireccional con Supabase
+│   │   └── notificaciones.ts      # Lógica de notificaciones
 │   ├── components/
-│   │   ├── pos/               # Pantalla principal de venta
-│   │   │   ├── BuscadorProducto.tsx
-│   │   │   ├── GridProductosRapidos.tsx
-│   │   │   ├── LineaVenta.tsx
-│   │   │   ├── ResumenVenta.tsx
-│   │   │   └── ModalCobro.tsx
-│   │   ├── fiado/             # Módulo de cartera
-│   │   │   ├── ListaClientes.tsx
-│   │   │   ├── CuentaCliente.tsx
-│   │   │   └── ModalNuevoPago.tsx
-│   │   ├── productos/         # Gestión de inventario
-│   │   │   ├── ListaProductos.tsx
-│   │   │   ├── FormProducto.tsx
-│   │   │   └── CategoriaChip.tsx
-│   │   ├── caja/              # Sesiones de caja
-│   │   │   ├── AbrirCaja.tsx
-│   │   │   ├── CerrarCaja.tsx
-│   │   │   └── ResumenCaja.tsx
-│   │   └── shared/            # Componentes reutilizables
-│   │       ├── TecladoNumerico.tsx
-│   │       ├── ConfirmDialog.tsx
-│   │       └── MonedaDisplay.tsx
+│   │   ├── pos/                   # Pantalla principal de venta
+│   │   ├── fiado/                 # Módulo de cartera
+│   │   ├── productos/             # Gestión de inventario
+│   │   ├── proveedores/           # Módulo de proveedores
+│   │   ├── stock/                 # Alertas y control de stock
+│   │   ├── reportes/              # Gráficos y reportes
+│   │   ├── caja/                  # Sesiones de caja
+│   │   ├── config/                # ConfigModal + ajustes de tienda
+│   │   ├── onboarding/            # TourOverlay para nuevos usuarios
+│   │   └── shared/                # Componentes reutilizables
 │   ├── pages/
-│   │   ├── POSPage.tsx        # Pantalla principal (ruta /)
-│   │   ├── FiadosPage.tsx     # Cartera de clientes (ruta /fiados)
-│   │   ├── ProductosPage.tsx  # Gestión de productos (ruta /productos)
-│   │   ├── CajaPage.tsx       # Resumen de caja (ruta /caja)
-│   │   └── ReportesPage.tsx   # Reportes básicos (ruta /reportes)
+│   │   ├── POSPage.tsx            # Pantalla principal (ruta /)
+│   │   ├── FiadosPage.tsx         # Cartera de clientes (/fiados)
+│   │   ├── ProductosPage.tsx      # Gestión de productos (/productos)
+│   │   ├── InventarioPage.tsx     # Control de stock (/inventario)
+│   │   ├── ProveedoresPage.tsx    # Proveedores y compras (/proveedores)
+│   │   ├── CajaPage.tsx           # Resumen de caja (/caja)
+│   │   ├── ReportesPage.tsx       # Reportes del negocio (/reportes)
+│   │   ├── HistorialVentasPage.tsx# Historial de ventas (/historial)
+│   │   ├── ListaPedidoPage.tsx    # Lista de pedido a proveedor (/pedido)
+│   │   ├── DashboardMultitienda.tsx # Vista general multi-tienda (/multi-tienda)
+│   │   ├── LoginPage.tsx          # Login Supabase (/login)
+│   │   └── RegisterPage.tsx       # Registro de tienda (/registro)
 │   ├── types/
-│   │   └── index.ts           # Todos los tipos TypeScript
+│   │   └── index.ts               # Todos los tipos TypeScript
 │   ├── utils/
-│   │   ├── moneda.ts          # Formateo de pesos COP
-│   │   ├── fecha.ts           # Utilidades de fecha
-│   │   └── impresion.ts       # Generador de recibos (texto plano)
-│   ├── App.tsx
+│   │   ├── moneda.ts              # formatCOP() — SIEMPRE usar esto
+│   │   ├── fecha.ts               # Utilidades de fecha
+│   │   └── impresion.ts           # Generador de recibos ESC/POS
+│   ├── App.tsx                    # Routing, layout, auth gate
 │   ├── main.tsx
 │   └── index.css
-├── CLAUDE.md                  # Este archivo
+├── android/                       # Proyecto Android (Capacitor, Fase 23)
+├── docs/
+│   └── fase-23-play-store.md      # Guía publicación Play Store
+├── capacitor.config.ts            # Configuración Capacitor (Fase 23)
+├── supabase/                      # Edge functions y migraciones
+├── CLAUDE.md                      # Este archivo
 ├── package.json
 ├── vite.config.ts
 ├── tailwind.config.ts
@@ -258,7 +282,7 @@ export interface ConfigTienda {
   limiteFiadoPorDefecto: number;   // COP. 0 = sin límite por defecto
 }
 
-// ─── Módulo de Proveedores y Compras (v2) ─────────────────────────────────────
+// ─── Módulo de Proveedores y Compras ──────────────────────────────────────────
 
 export interface Proveedor {
   id?: number;
@@ -311,7 +335,7 @@ export interface PagoProveedor {
 ### Flujo 1: Venta Normal (< 30 segundos)
 
 ```
-1. Tendero busca producto (por nombre o código de barras)
+1. Tendero busca producto (por nombre o código de barras con la cámara)
    → Si no existe: opción "Vender como fantasma" con precio manual
 2. Selecciona cantidad
    → Opción de fraccionado si el producto es por peso/gramo
@@ -374,6 +398,16 @@ CIERRE:
 5. Genera resumen del día
 ```
 
+### Flujo 6: Multi-Tienda (Dueño con 2+ locales)
+
+```
+1. Dueño inicia sesión con Supabase Auth
+2. Sistema detecta sus tiendas en propietarios_tienda
+3. Selector en el header permite cambiar entre tiendas
+4. Cada tienda tiene su propia DB local en Dexie
+5. Dashboard multi-tienda muestra resumen consolidado
+```
+
 ---
 
 ## 🎨 Sistema de Diseño
@@ -382,11 +416,11 @@ CIERRE:
 
 ```css
 /* Colores principales - inspirados en la tienda de barrio */
---color-primario: #2D6A4F;        /* Verde tienda */
---color-primario-hover: #1B4332;
+--color-primario: #1E3A5F;        /* Azul oscuro (actualizado) */
+--color-primario-hover: #162d4a;
 --color-acento: #F77F00;          /* Naranja cálido */
 --color-acento-hover: #D62828;
---color-fondo: #FAFAF7;           /* Blanco cálido */
+--color-fondo: #F8F9FA;           /* Blanco casi blanco */
 --color-superficie: #FFFFFF;
 --color-borde: #E8E8E0;
 --color-texto: #1A1A1A;
@@ -399,7 +433,7 @@ CIERRE:
 
 ### Tipografía
 
-- **Display/Títulos**: `font-family: 'Nunito', sans-serif` — redondeado, amigable
+- **Display/Títulos**: `font-family: 'Geist Variable', sans-serif` — moderna y legible
 - **Cuerpo**: `font-family: 'Inter', sans-serif` — legible en pantallas pequeñas
 - **Números/Moneda**: `font-family: 'JetBrains Mono', monospace` — alineación de decimales
 
@@ -417,204 +451,153 @@ CIERRE:
 
 ---
 
-## 📦 Seed Data — 400 Productos Iniciales
+## 🖥️ Pantallas y Navegación (Estado Actual)
 
-El archivo `src/db/seed.ts` debe contener una carga inicial de productos comunes.
+### Rutas disponibles
 
-### Categorías a incluir:
+| Ruta | Página | Roles |
+|------|--------|-------|
+| `/` | POSPage — POS principal | dueño, empleado |
+| `/fiados` | FiadosPage — Cartera de clientes | dueño, empleado |
+| `/productos` | ProductosPage — CRUD de productos | dueño |
+| `/inventario` | InventarioPage — Stock y alertas | dueño |
+| `/proveedores` | ProveedoresPage — Compras a proveedores | dueño |
+| `/caja` | CajaPage — Apertura/cierre de caja | dueño |
+| `/reportes` | ReportesPage — Métricas del negocio | dueño |
+| `/historial` | HistorialVentasPage — Todas las ventas | dueño, empleado |
+| `/pedido` | ListaPedidoPage — Lista de pedido a proveedor | dueño |
+| `/multi-tienda` | DashboardMultitienda — Vista consolidada | dueño (+2 tiendas) |
 
-| ID | Nombre | Emoji |
-|----|--------|-------|
-| 1 | Lácteos | 🥛 |
-| 2 | Carnes y Embutidos | 🥩 |
-| 3 | Panadería | 🍞 |
-| 4 | Granos y Harinas | 🌾 |
-| 5 | Bebidas | 🥤 |
-| 6 | Snacks y Dulces | 🍬 |
-| 7 | Aseo Personal | 🧴 |
-| 8 | Aseo Hogar | 🧹 |
-| 9 | Frutas y Verduras | 🥬 |
-| 10 | Cigarrillos | 🚬 |
-| 11 | Enlatados | 🥫 |
-| 12 | Condimentos | 🧂 |
-| 13 | Varios | 📦 |
+### Sistema de roles
 
-### Muestra de productos por categoría (el seed completa 400):
+- **dueño**: Acceso total. Ve configuración, reportes, proveedores, inventario.
+- **empleado**: Solo puede vender y ver fiados e historial. No ve caja ni reportes.
+- Sin Supabase configurado: acceso total sin autenticación (modo offline puro).
+
+---
+
+## ⚙️ Variables de Entorno
+
+```env
+# Supabase (opcional — sin esto la app funciona 100% offline)
+VITE_SUPABASE_URL=https://xxxx.supabase.co
+VITE_SUPABASE_ANON_KEY=eyJ...
+
+# Anthropic (para features de IA futuras)
+VITE_ANTHROPIC_API_KEY=sk-ant-...
+```
+
+Si `VITE_SUPABASE_URL` no está configurado, `supabaseConfigurado = false` y la app salta el auth gate.
+
+---
+
+## 📱 Capacitor Android (Fase 23)
+
+El directorio `android/` contiene el proyecto nativo generado por Capacitor.
 
 ```typescript
-// Lácteos
-{ nombre: 'Leche Entera 1L', categoriaId: 1, precio: 4200, unidad: 'unidad' },
-{ nombre: 'Leche Deslactosada 1L', categoriaId: 1, precio: 4600, unidad: 'unidad' },
-{ nombre: 'Kumis 200ml', categoriaId: 1, precio: 2100, unidad: 'unidad' },
-{ nombre: 'Yogurt Natural 200g', categoriaId: 1, precio: 2500, unidad: 'unidad' },
-{ nombre: 'Queso Campesino (x100g)', categoriaId: 1, precio: 3200, unidad: 'gramo' },
-{ nombre: 'Queso Doble Crema (x100g)', categoriaId: 1, precio: 3800, unidad: 'gramo' },
-{ nombre: 'Mantequilla 125g', categoriaId: 1, precio: 5200, unidad: 'unidad' },
-
-// Panadería
-{ nombre: 'Pan Tajado Bimbo', categoriaId: 3, precio: 7500, unidad: 'unidad' },
-{ nombre: 'Mogolla', categoriaId: 3, precio: 500, unidad: 'unidad' },
-{ nombre: 'Almojábana', categoriaId: 3, precio: 1500, unidad: 'unidad' },
-{ nombre: 'Pandequeso', categoriaId: 3, precio: 1200, unidad: 'unidad' },
-
-// Granos
-{ nombre: 'Arroz Diana 500g', categoriaId: 4, precio: 3200, unidad: 'unidad' },
-{ nombre: 'Arroz Diana 1kg', categoriaId: 4, precio: 5800, unidad: 'unidad' },
-{ nombre: 'Frijol Bola Roja 500g', categoriaId: 4, precio: 4500, unidad: 'unidad' },
-{ nombre: 'Lenteja 500g', categoriaId: 4, precio: 3800, unidad: 'unidad' },
-{ nombre: 'Harina de Trigo 1kg', categoriaId: 4, precio: 4200, unidad: 'unidad' },
-{ nombre: 'Azúcar 1kg', categoriaId: 4, precio: 4800, unidad: 'unidad' },
-
-// Bebidas
-{ nombre: 'Gaseosa Coca-Cola 400ml', categoriaId: 5, precio: 3200, unidad: 'unidad' },
-{ nombre: 'Agua Cristal 600ml', categoriaId: 5, precio: 2000, unidad: 'unidad' },
-{ nombre: 'Postobón Manzana 400ml', categoriaId: 5, precio: 2800, unidad: 'unidad' },
-{ nombre: 'Jugo Hit 330ml', categoriaId: 5, precio: 2500, unidad: 'unidad' },
-
-// ... completar hasta 400 productos en seed.ts
+// capacitor.config.ts
+{
+  appId: 'com.postienda.app',
+  appName: 'POS Tienda',
+  webDir: 'dist',
+  server: { androidScheme: 'https' }
+}
 ```
+
+### Comandos Capacitor
+
+```bash
+# Después de cada cambio en el código React:
+npm run build
+npx cap sync android
+
+# Abrir en Android Studio:
+npx cap open android
+```
+
+Ver guía completa de publicación en `docs/fase-23-play-store.md`.
 
 ---
 
-## 🖥️ Pantallas y Navegación
+## 🚀 Fases Completadas
 
-### Layout principal (PWA)
+### Fase 0: Scaffolding ✅
+- Vite + React + TypeScript + Tailwind + shadcn/ui + PWA
 
-```
-┌─────────────────────────────────────────────────────┐
-│  [🏪 Logo/Nombre Tienda]        [Caja: $45.200] 💰  │
-├──────────┬──────────────────────────────────────────┤
-│          │                                          │
-│  Nav     │   CONTENIDO PRINCIPAL                    │
-│  lateral │                                          │
-│  (íconos)│                                          │
-│          │                                          │
-│  🏪 POS  │                                          │
-│  📒 Fiado│                                          │
-│  📦 Prod │                                          │
-│  💰 Caja │                                          │
-│  📊 Rep  │                                          │
-│          │                                          │
-└──────────┴──────────────────────────────────────────┘
-```
+### Fase 1: Base de Datos ✅
+- Dexie singleton, schema completo, seed de 400 productos
 
-### Pantalla POS (pantalla principal)
+### Fase 2: POS Core ✅
+- BuscadorProducto, GridProductosRapidos, ventaStore, ModalCobro, TecladoNumerico
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│  [🔍 Buscar producto o código...]              [+ Fantasma]  │
-├──────────────────────────────┬──────────────────────────────┤
-│                              │                              │
-│  GRID PRODUCTOS RÁPIDOS      │  CARRITO DE VENTA            │
-│  (los más vendidos)          │                              │
-│  ┌────────┐ ┌────────┐       │  Leche Entera 1L             │
-│  │  🥛    │ │  🍞    │       │  1 x $4.200         $4.200  │
-│  │ Leche  │ │  Pan   │       │  ─────────────────────────  │
-│  │ $4.200 │ │  $500  │       │  Mogolla                     │
-│  └────────┘ └────────┘       │  2 x $500           $1.000  │
-│  ┌────────┐ ┌────────┐       │  ─────────────────────────  │
-│  │  🥚    │ │  🧴    │       │                              │
-│  │ Huevo  │ │Shampo  │       │                              │
-│  │  $700  │ │$5.900  │       │  ─────────────────────────  │
-│  └────────┘ └────────┘       │  TOTAL:           $5.200    │
-│                              │                              │
-│  [Ver más productos...]      │  [🗑️ Limpiar]  [💰 COBRAR]  │
-└──────────────────────────────┴──────────────────────────────┘
-```
+### Fase 3: Fiados ✅
+- useFiados, ListaClientes, CuentaCliente, ModalNuevoPago
 
----
+### Fase 4: Gestión de Productos ✅
+- useProductos, ListaProductos, FormProducto con fórmula de margen correcta
 
-## ⚙️ Configuración Vite + PWA
+### Fase 5: Caja y Reportes ✅
+- useCaja, AbrirCaja, CerrarCaja, ResumenCaja, ReportesPage con métricas
 
-```typescript
-// vite.config.ts
-import { defineConfig } from 'vite'
-import react from '@vitejs/plugin-react'
-import { VitePWA } from 'vite-plugin-pwa'
+### Fase 6: Pulido PWA ✅
+- ConfigModal (nombre tienda, NIT, mensaje recibo), generador de recibos, instalación PWA
 
-export default defineConfig({
-  plugins: [
-    react(),
-    VitePWA({
-      registerType: 'autoUpdate',
-      manifest: {
-        name: 'POS Tienda',
-        short_name: 'POS',
-        description: 'Punto de Venta para Tienda de Barrio',
-        theme_color: '#2D6A4F',
-        background_color: '#FAFAF7',
-        display: 'standalone',
-        orientation: 'portrait',
-        icons: [
-          { src: '/icons/icon-192.png', sizes: '192x192', type: 'image/png' },
-          { src: '/icons/icon-512.png', sizes: '512x512', type: 'image/png' }
-        ]
-      },
-      workbox: {
-        globPatterns: ['**/*.{js,css,html,ico,png,svg}'],
-        runtimeCaching: [
-          {
-            urlPattern: /^https:\/\/fonts\.googleapis\.com\/.*/i,
-            handler: 'CacheFirst',
-          }
-        ]
-      }
-    })
-  ]
-})
-```
+### Fase 7: Módulo de Proveedores ✅
+- useProveedores, ProveedoresPage, NuevaCompraModal, historial de compras y pagos
 
----
+### Fase 8: Control de Stock ✅
+- useStock, InventarioPage, alertas de stock mínimo, badge en navegación
 
-## 🚀 Orden de Construcción para Claude Code
+### Fase 9: Modo Oscuro ✅
+- themeStore (claro/oscuro/sistema), toggle en header, persistido en localStorage
 
-Construir exactamente en este orden. Cada fase debe funcionar antes de pasar a la siguiente.
+### Fase 10: Lector de Código de Barras ✅
+- @zxing/library integrado en BuscadorProducto, escaneo por cámara del celular
 
-### Fase 0: Scaffolding (30 min)
-- [ ] `npm create vite@latest pos-tienda -- --template react-ts`
-- [ ] Instalar dependencias: `dexie dexie-react-hooks zustand react-hook-form zod numeral react-router-dom lucide-react`
-- [ ] Instalar dev: `vite-plugin-pwa @types/numeral`
-- [ ] Configurar Tailwind + shadcn/ui
-- [ ] Configurar `vite.config.ts` con PWA
-- [ ] Crear estructura de carpetas completa
+### Fase 11: Lista de Pedido ✅
+- ListaPedidoPage auto-genera la lista de reabastecimiento según stock bajo
 
-### Fase 1: Base de Datos (1h)
-- [ ] Implementar `src/db/schema.ts` con todas las interfaces
-- [ ] Implementar `src/db/database.ts` con Dexie singleton
-- [ ] Implementar `src/db/seed.ts` con 400 productos
-- [ ] Escribir hook `useSeed()` para poblar DB en primer uso
+### Fase 12: Historial de Ventas ✅
+- HistorialVentasPage con filtros por fecha, anulación de ventas
 
-### Fase 2: POS Core (2h)
-- [ ] `BuscadorProducto.tsx` con debounce y búsqueda por nombre/código
-- [ ] `GridProductosRapidos.tsx` con los 12 más vendidos
-- [ ] `ventaStore.ts` (Zustand): estado del carrito
-- [ ] `LineaVenta.tsx` con controles de cantidad y eliminar
-- [ ] `ResumenVenta.tsx` con total formateado
-- [ ] `ModalCobro.tsx` con opciones Efectivo/Fiado/Transferencia
-- [ ] `TecladoNumerico.tsx` para ingresar billetes y cambio
+### Fase 13: Supabase Auth ✅
+- LoginPage, RegisterPage, authStore, roles dueño/empleado, guard de rutas
 
-### Fase 3: Fiados (1.5h)
-- [ ] `useFiados.ts` hook con CRUD completo
-- [ ] `ListaClientes.tsx` con búsqueda y deuda total
-- [ ] `CuentaCliente.tsx` con historial de movimientos
-- [ ] `ModalNuevoPago.tsx` para abonar a deuda
+### Fase 14: Sincronización Supabase ✅
+- lib/sync.ts, startAutoSync/stopAutoSync, pullFromSupabase, IndicadorSync en header
 
-### Fase 4: Gestión de Productos (1h)
-- [ ] `useProductos.ts` hook con CRUD completo
-- [ ] `ListaProductos.tsx` con filtro por categoría
-- [ ] `FormProducto.tsx` para crear/editar producto
+### Fase 15: Multi-Tienda ✅
+- useTiendasDueno, DashboardMultitienda, SelectorTienda en header
 
-### Fase 5: Caja y Reportes (1h)
-- [ ] `useCaja.ts` hook para sesiones de caja
-- [ ] `AbrirCaja.tsx` y `CerrarCaja.tsx`
-- [ ] `ResumenCaja.tsx` con totales del día
-- [ ] `ReportesPage.tsx` con ventas por día y productos más vendidos
+### Fase 16: Onboarding / Tour ✅
+- useOnboarding, TourOverlay con data-tour attributes, tour interactivo para nuevos usuarios
 
-### Fase 6: Pulido (30 min)
-- [ ] Configuración de la tienda (nombre, NIT, mensaje recibo)
-- [ ] Generador de recibo en texto (para imprimir o compartir por WhatsApp)
-- [ ] Modo oscuro opcional
-- [ ] Icono e instalación PWA
+### Fase 17: Configuración Avanzada ✅
+- ConfigModal extendida: logo tienda, footer recibo, límite de fiado por defecto
+
+### Fase 18: Reportes Avanzados ✅
+- Gráficos de ventas por día, productos más vendidos, margen de utilidad
+
+### Fase 19: Gestos y UX Móvil ✅
+- BannerInstalacion, pull-to-refresh, navegación optimizada para celular
+
+### Fase 20: Gestión de Empleados ✅
+- Invitar empleados vía Supabase, asignación de roles, acceso restringido
+
+### Fase 21: Lista de Pedido Avanzada ✅
+- Generación automática de pedido por proveedor, compartir por WhatsApp
+
+### Fase 22: Notificaciones Push 🔄 (En progreso)
+- usePushNotifications.ts creado con soporte dual nativo/web
+- Pendiente: integración completa con alertas de stock y recordatorios de fiado
+
+### Fase 23: Capacitor Android ✅
+- capacitor.config.ts, android/ generado y sincronizado
+- useCapacitor.ts: detección de plataforma nativa vs. web
+- usePushNotifications.ts: dual @capacitor/push-notifications + Web Push API
+- useBluetooth.ts: dual @capacitor-community/bluetooth-le + Web Bluetooth API
+- docs/fase-23-play-store.md: guía de publicación en Play Store
 
 ---
 
@@ -628,6 +611,8 @@ Construir exactamente en este orden. Cada fase debe funcionar antes de pasar a l
 6. **Estado de venta**: SIEMPRE a través de `ventaStore`. Nunca estado local para el carrito.
 7. **Sin confirms del browser**: Para confirmaciones destructivas, usar el componente `ConfirmDialog`.
 8. **Sin alerts del browser**: Para notificaciones, usar toast (sonner o react-hot-toast).
+9. **Capacitor**: Usar `useCapacitor()` antes de llamar cualquier API nativa. Nunca asumir que el plugin existe sin verificar.
+10. **Offline first**: Cualquier nueva funcionalidad debe funcionar sin internet. Supabase es opcional siempre.
 
 ---
 
@@ -645,20 +630,28 @@ npm run build
 
 # Preview del build (simula instalación PWA)
 npm run preview
+
+# Sincronizar con Android después de cambios
+npx cap sync android
+
+# Abrir en Android Studio
+npx cap open android
+
+# Deploy: push a main = Vercel deploy automático
+git add . && git commit -m "mensaje" && git push origin main
 ```
 
 ---
 
-## 🔮 Roadmap Futuro (No construir ahora)
+## 🔮 Roadmap (Pendiente)
 
-- Sincronización con servidor para respaldo en la nube
-- Lector de código de barras con cámara del celular
-- Integración con impresoras térmicas Bluetooth
-- Módulo de proveedores y órdenes de compra
-- Multi-tienda (para el tendero que tiene 2 locales)
-- App móvil nativa (si la PWA no es suficiente)
+- Completar Fase 22: integración completa de notificaciones push (alertas de stock mínimo, recordatorios de fiado vencido)
+- Integración con impresoras térmicas Bluetooth (usar `useBluetooth.ts` ya creado)
+- Publicar en Google Play Store (ver `docs/fase-23-play-store.md`)
+- IA conversacional para análisis de ventas (usar VITE_ANTHROPIC_API_KEY)
+- Facturación electrónica DIAN
 
 ---
 
 *Este documento es la fuente de verdad del proyecto.*
-*Versión: 1.0 — Creado con Claude Sonnet para Juan Camilo*
+*Versión: 2.0 — Actualizado Marzo 2026 — Juan Camilo Pinzón*
