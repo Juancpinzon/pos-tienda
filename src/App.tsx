@@ -28,6 +28,7 @@ import { useAuthStore, puedeAcceder, type TiendaResumen } from './stores/authSto
 import { supabase, supabaseConfigurado } from './lib/supabase'
 import { startAutoSync, stopAutoSync, pullFromSupabase } from './lib/sync'
 import { cargarTiendasDueno, registrarPropietarioTienda, cambiarTiendaActiva } from './hooks/useTiendasDueno'
+import { iniciarScheduler } from './lib/notificaciones'
 
 // ─── Pantallas de carga / error ───────────────────────────────────────────────
 
@@ -358,6 +359,13 @@ export default function App() {
     }
     return () => stopAutoSync()
   }, [usuario?.tiendaId])
+
+  // Iniciar scheduler de notificaciones (solo cuando hay usuario autenticado o modo local)
+  useEffect(() => {
+    if (!isLoading) {
+      return iniciarScheduler()
+    }
+  }, [isLoading])
 
   // ── Carga de DB local
   if (estado === 'verificando' || estado === 'cargando') {

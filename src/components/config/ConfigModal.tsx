@@ -675,6 +675,234 @@ function SeccionImpresora() {
   )
 }
 
+// ─── Sección de notificaciones (solo dueño) ───────────────────────────────────
+
+interface SeccionNotificacionesProps {
+  notificacionesActivas: boolean
+  notifFiado: boolean
+  notifStock: boolean
+  notifCaja: boolean
+  horaCaja: string | undefined
+  setValue: (field: string, value: unknown, opts?: { shouldDirty: boolean }) => void
+  register: (name: string) => object
+}
+
+function SeccionNotificaciones({
+  notificacionesActivas,
+  notifFiado,
+  notifStock,
+  notifCaja,
+  horaCaja,
+  setValue,
+}: SeccionNotificacionesProps) {
+  const usuario = useAuthStore((s) => s.usuario)
+  const [permiso, setPermiso] = useState<NotificationPermission>(() =>
+    'Notification' in window ? Notification.permission : 'denied',
+  )
+  const [estadoPrueba, setEstadoPrueba] = useState<'idle' | 'ok' | 'error'>('idle')
+  const [msgPrueba, setMsgPrueba] = useState<string | null>(null)
+  const [activando, setActivando] = useState(false)
+
+  // Solo visible para dueño
+  if (usuario?.rol !== 'dueno') return null
+
+  const soportado = 'Notification' in window
+
+  const handleToggleMaster = async () => {
+    if (!notificacionesActivas) {
+      // Activar: pedir permiso si no se ha dado
+      if (permiso !== 'granted') {
+        setActivando(true)
+        const p = await solicitarPermiso()
+        setPermiso(p)
+        setActivando(false)
+        if (p !== 'granted') return
+      }
+      setValue('notificacionesActivas', true, { shouldDirty: true })
+    } else {
+      setValue('notificacionesActivas', false, { shouldDirty: true })
+    }
+  }
+
+  const handlePrueba = async () => {
+    try {
+      await enviarNotificacionPrueba()
+      setEstadoPrueba('ok')
+      setMsgPrueba('Notificación enviada ✓')
+    } catch (err) {
+      setEstadoPrueba('error')
+      setMsgPrueba(err instanceof Error ? err.message : 'Error')
+    }
+    setTimeout(() => { setEstadoPrueba('idle'); setMsgPrueba(null) }, 4000)
+  }
+
+  const toggleRow = (
+    label: string,
+    desc: string,
+    field: string,
+    value: boolean,
+    disabled = false,
+  ) => (
+    <div
+      className={[
+        'flex items-center justify-between p-3 bg-fondo rounded-xl border border-borde',
+        disabled ? 'opacity-40' : '',
+      ].join(' ')}
+    >
+      <div>
+        <p className="text-sm font-medium text-texto">{label}</p>
+        <p className="text-xs text-suave">{desc}</p>
+      </div>
+      <button
+        type="button"
+        disabled={disabled}
+        onClick={() => setValue(field, !value, { shouldDirty: true })}
+        className={[
+          'relative w-11 h-6 rounded-full transition-colors shrink-0',
+          value ? 'bg-primario' : 'bg-gray-200',
+        ].join(' ')}
+      >
+        <span
+          className={[
+            'absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform',
+            value ? 'translate-x-5' : 'translate-x-0.5',
+          ].join(' ')}
+        />
+      </button>
+    </div>
+  )
+
+  return (
+    <section>
+      <p className="text-xs font-semibold text-suave uppercase tracking-wider mb-3 flex items-center gap-1.5">
+        <Bell size={13} />
+        Notificaciones
+      </p>
+
+      {!soportado ? (
+        <div className="bg-fondo rounded-xl border border-borde p-4 flex items-start gap-3">
+          <BellOff size={18} className="text-suave shrink-0 mt-0.5" />
+          <p className="text-sm text-suave leading-relaxed">
+            Tu navegador no soporta notificaciones. Usa{' '}
+            <span className="font-semibold text-texto">Chrome o Edge</span> con la app instalada.
+          </p>
+        </div>
+      ) : (
+        <div className="flex flex-col gap-3">
+
+          {/* Toggle maestro */}
+          <div className="flex items-center justify-between p-3 bg-fondo rounded-xl border border-borde">
+            <div>
+              <p className="text-sm font-medium text-texto">Activar notificaciones</p>
+              <p className="text-xs text-suave">
+                {permiso === 'denied'
+                  ? 'Bloqueadas en el navegador — actívalas en Ajustes del sitio'
+                  : permiso === 'granted'
+                  ? 'Permiso concedido'
+                  : 'Se pedirá permiso al activar'}
+              </p>
+            </div>
+            <button
+              type="button"
+              disabled={activando || permiso === 'denied'}
+              onClick={handleToggleMaster}
+              className={[
+                'relative w-11 h-6 rounded-full transition-colors shrink-0',
+                notificacionesActivas && permiso === 'granted' ? 'bg-primario' : 'bg-gray-200',
+                permiso === 'denied' ? 'cursor-not-allowed opacity-40' : '',
+              ].join(' ')}
+            >
+              {activando ? (
+                <Loader2 size={12} className="absolute inset-0 m-auto animate-spin text-suave" />
+              ) : (
+                <span
+                  className={[
+                    'absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform',
+                    notificacionesActivas && permiso === 'granted'
+                      ? 'translate-x-5'
+                      : 'translate-x-0.5',
+                  ].join(' ')}
+                />
+              )}
+            </button>
+          </div>
+
+          {/* Toggles por tipo (solo si activas + permiso) */}
+          {notificacionesActivas && permiso === 'granted' && (
+            <>
+              {toggleRow(
+                '💜 Recordatorios de fiado',
+                'Avisa cuando un cliente lleva +7 días sin abonar',
+                'notifFiado',
+                notifFiado,
+              )}
+              {toggleRow(
+                '📦 Alertas de stock',
+                'Avisa una vez al día si hay productos agotados',
+                'notifStock',
+                notifStock,
+              )}
+              {toggleRow(
+                '💰 Recordatorio apertura de caja',
+                'Avisa si no has abierto la caja a la hora configurada',
+                'notifCaja',
+                notifCaja,
+              )}
+
+              {/* Hora de apertura (solo si notifCaja activo) */}
+              {notifCaja && (
+                <div className="flex items-center justify-between px-3 py-2.5 bg-fondo rounded-xl border border-borde">
+                  <p className="text-sm font-medium text-texto">Hora de apertura habitual</p>
+                  <input
+                    type="time"
+                    defaultValue="07:00"
+                    onChange={(e) => setValue('horaCaja', e.target.value, { shouldDirty: true })}
+                    className="h-9 px-2 border border-borde rounded-lg text-sm text-texto
+                               focus:outline-none focus:ring-2 focus:ring-primario/40"
+                  />
+                </div>
+              )}
+
+              {/* Botón prueba */}
+              <button
+                type="button"
+                onClick={handlePrueba}
+                className="w-full h-10 bg-primario/10 text-primario border border-primario/25
+                           rounded-xl text-sm font-semibold flex items-center justify-center gap-2
+                           hover:bg-primario/15 active:scale-95 transition-all"
+              >
+                <Bell size={15} />
+                Enviar notificación de prueba
+              </button>
+
+              {/* Resultado prueba */}
+              {msgPrueba && (
+                <div
+                  className={[
+                    'px-3 py-2 rounded-lg text-xs flex items-center gap-2',
+                    estadoPrueba === 'error'
+                      ? 'bg-peligro/8 text-peligro border border-peligro/20'
+                      : 'bg-exito/8 text-exito border border-exito/20',
+                  ].join(' ')}
+                >
+                  {estadoPrueba === 'error' ? <BellOff size={13} /> : <CheckCircle2 size={13} />}
+                  {msgPrueba}
+                </div>
+              )}
+
+              {/* Nota iOS */}
+              <p className="text-[11px] text-suave/70 leading-snug px-1">
+                En iPhone requiere iOS 16.4+ con la app instalada como PWA. En Android funciona con
+                Chrome.
+              </p>
+            </>
+          )}
+        </div>
+      )}
+    </section>
+  )
+}
+
 // ─── Selector de tema ─────────────────────────────────────────────────────────
 
 const OPCIONES_TEMA: { id: Tema; label: string; icon: typeof Sun; desc: string }[] = [
@@ -740,11 +968,20 @@ export function ConfigModal({ onClose, onReiniciarTour }: ConfigModalProps) {
       permitirStockNegativo: true,
       limiteFiadoPorDefecto: 0,
       tieneDatafono: false,
+      notificacionesActivas: false,
+      notifFiado: true,
+      notifStock: true,
+      notifCaja: false,
+      horaCaja: '07:00',
     },
   })
 
   const permitirStockNegativo = watch('permitirStockNegativo')
   const tieneDatafono = watch('tieneDatafono')
+  const notificacionesActivas = watch('notificacionesActivas')
+  const notifFiado = watch('notifFiado')
+  const notifStock = watch('notifStock')
+  const notifCaja = watch('notifCaja')
 
   // Poblar el formulario cuando se carga la config
   useEffect(() => {
@@ -758,6 +995,11 @@ export function ConfigModal({ onClose, onReiniciarTour }: ConfigModalProps) {
         permitirStockNegativo: config.permitirStockNegativo,
         limiteFiadoPorDefecto: config.limiteFiadoPorDefecto,
         tieneDatafono: config.tieneDatafono ?? false,
+        notificacionesActivas: config.notificacionesActivas ?? false,
+        notifFiado: config.notifFiado ?? true,
+        notifStock: config.notifStock ?? true,
+        notifCaja: config.notifCaja ?? false,
+        horaCaja: config.horaCaja ?? '07:00',
       })
     }
   }, [config, reset])
@@ -853,6 +1095,17 @@ export function ConfigModal({ onClose, onReiniciarTour }: ConfigModalProps) {
 
             {/* Impresora Bluetooth (solo dueño) */}
             <SeccionImpresora />
+
+            {/* Notificaciones push (solo dueño) */}
+            <SeccionNotificaciones
+              notificacionesActivas={notificacionesActivas ?? false}
+              notifFiado={notifFiado ?? true}
+              notifStock={notifStock ?? true}
+              notifCaja={notifCaja ?? false}
+              horaCaja={watch('horaCaja')}
+              setValue={setValue as (field: string, value: unknown, opts?: { shouldDirty: boolean }) => void}
+              register={register as (name: string) => object}
+            />
 
             {/* Apariencia — selector de tema */}
             <SeccionTema />

@@ -510,3 +510,41 @@ CREATE POLICY "clientes_propietario_read" ON clientes
 INSERT INTO propietarios_tienda (usuario_id, tienda_id)
   SELECT id, tienda_id FROM usuarios WHERE rol = 'dueno'
 ON CONFLICT DO NOTHING;
+
+-- ═══════════════════════════════════════════════════════════════════════════
+--  Fase 22 — Notificaciones Push
+--  Guarda el endpoint y las llaves de cada suscripción Web Push por usuario.
+--  En la fase actual se guarda 'local:...' como endpoint (notificaciones
+--  in-app). Cuando se implemente la Edge Function de push desde servidor
+--  se reemplazará con el endpoint real del navegador.
+-- ═══════════════════════════════════════════════════════════════════════════
+
+CREATE TABLE IF NOT EXISTS push_subscriptions (
+  id          BIGSERIAL    PRIMARY KEY,
+  usuario_id  UUID         NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  tienda_id   UUID         NOT NULL REFERENCES tiendas(id)   ON DELETE CASCADE,
+  endpoint    TEXT         NOT NULL,
+  keys        JSONB        NOT NULL DEFAULT '{}',
+  activo      BOOLEAN      NOT NULL DEFAULT TRUE,
+  created_at  TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+  updated_at  TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+  UNIQUE (usuario_id)       -- un registro por usuario; se hace upsert al activar
+);
+
+ALTER TABLE push_subscriptions ENABLE ROW LEVEL SECURITY;
+
+-- Cada usuario solo ve y modifica su propia suscripción
+CREATE POLICY "push_sub_select" ON push_subscriptions
+  FOR SELECT USING (usuario_id = auth.uid());
+
+CREATE POLICY "push_sub_insert" ON push_subscriptions
+  FOR INSERT TO authenticated
+  WITH CHECK (usuario_id = auth.uid());
+
+CREATE POLICY "push_sub_update" ON push_subscriptions
+  FOR UPDATE USING (usuario_id = auth.uid());
+
+CREATE POLICY "push_sub_delete" ON push_subscriptions
+  FOR DELETE USING (usuario_id = auth.uid());
+
+CREATE INDEX idx_push_sub_tienda ON push_subscriptions (tienda_id, activo);
