@@ -10,7 +10,7 @@
 
 import { useRef, useState, useCallback } from 'react'
 import { X, Camera, ImagePlus, Loader2, AlertCircle, CheckCircle2, Trash2, Link2, Search, KeyRound } from 'lucide-react'
-import { analizarFactura, fileABase64, type ItemOCR } from '../../lib/ocr'
+import { analizarFoto, type ItemOCR } from '../../lib/ocr'
 
 // Verificar disponibilidad de la API key en build time
 const OCR_DISPONIBLE = !!(import.meta.env.VITE_ANTHROPIC_API_KEY)
@@ -170,8 +170,7 @@ export function FotoFacturaModal({ onAgregar, onClose }: FotoFacturaModalProps) 
     setErrorMsg(null)
 
     try {
-      const { base64, mimeType } = await fileABase64(archivo)
-      const productos = await analizarFactura(base64, mimeType)
+      const productos = await analizarFoto(archivo)
 
       if (productos.length === 0) {
         setErrorMsg('No se encontraron productos en la imagen. Intenta con una foto más clara.')
@@ -339,9 +338,9 @@ export function FotoFacturaModal({ onAgregar, onClose }: FotoFacturaModalProps) 
                 {estado === 'analizando' && (
                   <div className="absolute inset-0 bg-black/60 flex flex-col items-center justify-center gap-3">
                     <Loader2 size={40} className="text-white animate-spin" />
-                    <p className="text-white font-semibold text-sm">Analizando factura…</p>
+                    <p className="text-white font-semibold text-sm">Procesando factura…</p>
                     <p className="text-white/70 text-xs text-center px-6">
-                      Claude lee los productos y busca asociaciones en su historial
+                      Comprimiendo imagen y leyendo productos con Claude Vision
                     </p>
                   </div>
                 )}

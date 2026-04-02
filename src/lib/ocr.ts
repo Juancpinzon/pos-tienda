@@ -119,8 +119,37 @@ export async function analizarFactura(
     }))
 }
 
-// Convierte un File a base64
-export function fileABase64(file: File): Promise<{ base64: string; mimeType: 'image/jpeg' | 'image/png' | 'image/webp' | 'image/gif' }> {
+// Redimensiona y comprime una imagen antes de enviarla al API.
+// Anthropic Vision tiene un límite de 5 MB por imagen (decodificada).
+// Las fotos de celular pueden pesar 8–15 MB; el canvas las reduce a ~1 MB.
+async function reducirImagen(file: File, maxLado = 1_600, calidad = 0.82): Promise<Blob> {
+  return new Promise((resolve, reject) => {
+    const img = new Image()
+    const url = URL.createObjectURL(file)
+    img.onload = () => {
+      URL.revokeObjectURL(url)
+      const escala = Math.min(1, maxLado / Math.max(img.width, img.height))
+      const w = Math.round(img.width  * escala)
+      const h = Math.round(img.height * escala)
+      const canvas = document.createElement('canvas')
+      canvas.width  = w
+      canvas.height = h
+      const ctx = canvas.getContext('2d')
+      if (!ctx) { reject(new Error('Canvas no disponible')); return }
+      ctx.drawImage(img, 0, 0, w, h)
+      canvas.toBlob(
+        (blob) => blob ? resolve(blob) : reject(new Error('Error al comprimir la imagen')),
+        'image/jpeg',
+        calidad,
+      )
+    }
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('Error al cargar la imagen')) }
+    img.src = url
+  })
+}
+
+// Convierte un Blob/File a base64
+export function fileABase64(file: File | Blob): Promise<{ base64: string; mimeType: 'image/jpeg' | 'image/png' | 'image/webp' | 'image/gif' }> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader()
     reader.onload = () => {
@@ -134,4 +163,12 @@ export function fileABase64(file: File): Promise<{ base64: string; mimeType: 'im
     reader.onerror = () => reject(new Error('Error al leer la imagen'))
     reader.readAsDataURL(file)
   })
+}
+
+// Comprime, convierte a base64 y analiza la imagen con Claude Vision.
+// Punto de entrada principal para el modal de foto de factura.
+export async function analizarFoto(file: File): Promise<ItemOCR[]> {
+  const comprimida = await reducirImagen(file)
+  const { base64, mimeType } = await fileABase64(comprimida)
+  return analizarFactura(base64, mimeType)
 }
