@@ -8,9 +8,12 @@
 //     3. Checkbox "Recordar asociación" (default: true)
 //   Al confirmar: guardar todos los mapeos nuevos marcados
 
-import { useRef, useState, useEffect, useCallback } from 'react'
-import { X, Camera, ImagePlus, Loader2, AlertCircle, CheckCircle2, Trash2, Link2, Search } from 'lucide-react'
+import { useRef, useState, useCallback } from 'react'
+import { X, Camera, ImagePlus, Loader2, AlertCircle, CheckCircle2, Trash2, Link2, Search, KeyRound } from 'lucide-react'
 import { analizarFactura, fileABase64, type ItemOCR } from '../../lib/ocr'
+
+// Verificar disponibilidad de la API key en build time
+const OCR_DISPONIBLE = !!(import.meta.env.VITE_ANTHROPIC_API_KEY)
 import { buscarMapeo, guardarMapeo, sugerirProducto, type SugerenciaProducto } from '../../lib/mapeoSKU'
 import { formatCOP } from '../../utils/moneda'
 import type { ItemCompra } from '../../hooks/useProveedores'
@@ -313,6 +316,20 @@ export function FotoFacturaModal({ onAgregar, onClose }: FotoFacturaModalProps) 
 
       <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-4">
 
+        {/* Banner: API key no configurada */}
+        {!OCR_DISPONIBLE && (
+          <div className="flex items-start gap-3 bg-advertencia/10 border border-advertencia/40 rounded-xl p-3">
+            <KeyRound size={16} className="text-advertencia shrink-0 mt-0.5" />
+            <div className="flex flex-col gap-0.5">
+              <p className="text-sm font-semibold text-advertencia">OCR no disponible</p>
+              <p className="text-xs text-texto/80 leading-relaxed">
+                La variable <span className="font-mono bg-black/5 px-1 rounded">VITE_ANTHROPIC_API_KEY</span> no está
+                configurada en este entorno. Puede agregar los productos manualmente usando el formulario de abajo.
+              </p>
+            </div>
+          </div>
+        )}
+
         {/* ── Captura ──────────────────────────────────────────────────────── */}
         {(estado === 'captura' || estado === 'analizando') && (
           <>
@@ -347,9 +364,12 @@ export function FotoFacturaModal({ onAgregar, onClose }: FotoFacturaModalProps) 
             <div className="flex flex-col gap-2">
               {previewUrl && estado !== 'analizando' && (
                 <button type="button" onClick={handleAnalizar}
+                  disabled={!OCR_DISPONIBLE}
+                  title={!OCR_DISPONIBLE ? 'Configura VITE_ANTHROPIC_API_KEY para usar el OCR' : undefined}
                   className="h-12 bg-primario text-white rounded-xl font-display font-bold text-base
                              flex items-center justify-center gap-2
-                             hover:bg-primario-hover active:scale-[0.98] transition-all">
+                             hover:bg-primario-hover active:scale-[0.98] transition-all
+                             disabled:opacity-40 disabled:cursor-not-allowed">
                   <Camera size={18} />
                   Analizar factura
                 </button>

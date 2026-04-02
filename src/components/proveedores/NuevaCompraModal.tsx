@@ -516,7 +516,7 @@ export function NuevaCompraModal({ proveedorInicial, onClose }: NuevaCompraModal
                 onClick={() => setMostrarOCR(true)}
                 className="flex items-center gap-1.5 h-8 px-3 bg-primario/10 text-primario
                            border border-primario/30 rounded-lg text-xs font-semibold
-                           hover:bg-primario/20 transition-colors"
+                           hover:bg-primario/20 transition-colors shrink-0 whitespace-nowrap"
               >
                 <Camera size={13} />
                 Foto de factura
