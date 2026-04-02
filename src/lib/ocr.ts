@@ -45,11 +45,15 @@ export async function analizarFactura(
   mimeType: 'image/jpeg' | 'image/png' | 'image/webp' | 'image/gif' = 'image/jpeg',
 ): Promise<ItemOCR[]> {
   const apiKey = import.meta.env.VITE_ANTHROPIC_API_KEY
+  // Log de diagnóstico — confirma si la key fue embebida en el bundle de producción
+  console.log('[OCR] API key presente:', !!apiKey, '| Tamaño imagen (base64 chars):', imagenBase64.length)
   if (!apiKey) {
-    throw new Error('No hay API key de Anthropic configurada (VITE_ANTHROPIC_API_KEY)')
+    throw new Error('API_KEY_MISSING')
   }
 
-  const respuesta = await fetch('https://api.anthropic.com/v1/messages', {
+  let respuesta: Response
+  try {
+    respuesta = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -80,13 +84,23 @@ export async function analizarFactura(
           ],
         },
       ],
-    }),
-  })
+      }),
+    })
+  } catch (fetchErr) {
+    // Error de red (sin internet, CORS, DNS, etc.)
+    throw new Error('NETWORK_ERROR')
+  }
 
   if (!respuesta.ok) {
     const errorData = await respuesta.json().catch(() => ({}))
-    const msg = (errorData as { error?: { message?: string } }).error?.message ?? `Error ${respuesta.status}`
-    throw new Error(`Error de API: ${msg}`)
+    const msg = (errorData as { error?: { message?: string } }).error?.message ?? ''
+    const status = respuesta.status
+    console.error('[OCR] Error de API:', status, msg)
+
+    if (status === 401) throw new Error('API_KEY_INVALID')
+    if (status === 429) throw new Error('RATE_LIMIT')
+    if (status === 400 && msg.toLowerCase().includes('image')) throw new Error('IMAGE_TOO_LARGE')
+    throw new Error(`API_ERROR:${status}:${msg}`)
   }
 
   const data = await respuesta.json() as {

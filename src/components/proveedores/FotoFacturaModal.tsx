@@ -14,6 +14,25 @@ import { analizarFoto, type ItemOCR } from '../../lib/ocr'
 
 // Verificar disponibilidad de la API key en build time
 const OCR_DISPONIBLE = !!(import.meta.env.VITE_ANTHROPIC_API_KEY)
+
+// Traduce los códigos de error internos de ocr.ts a mensajes amigables para el tendero
+function traducirError(raw: string): string {
+  if (raw === 'API_KEY_MISSING')
+    return 'API key no configurada. Agrega VITE_ANTHROPIC_API_KEY en las variables de entorno de Vercel y vuelve a desplegar.'
+  if (raw === 'API_KEY_INVALID')
+    return 'API key inválida o expirada. Verifica que la key sea correcta en Vercel → Settings → Environment Variables.'
+  if (raw === 'NETWORK_ERROR')
+    return 'Sin conexión. Verifica tu internet e intenta de nuevo.'
+  if (raw === 'RATE_LIMIT')
+    return 'Límite de uso de la API alcanzado. Espera unos minutos e intenta de nuevo.'
+  if (raw === 'IMAGE_TOO_LARGE')
+    return 'La imagen es demasiado grande para la API. Intenta con una foto de menor resolución.'
+  if (raw.startsWith('API_ERROR:')) {
+    const [, status, msg] = raw.split(':')
+    return `Error de API (${status})${msg ? ': ' + msg : ''}. Intenta de nuevo o revisa los logs.`
+  }
+  return raw
+}
 import { buscarMapeo, guardarMapeo, sugerirProducto, type SugerenciaProducto } from '../../lib/mapeoSKU'
 import { formatCOP } from '../../utils/moneda'
 import type { ItemCompra } from '../../hooks/useProveedores'
@@ -182,7 +201,8 @@ export function FotoFacturaModal({ onAgregar, onClose }: FotoFacturaModalProps) 
       setItems(enriquecidos)
       setEstado('resultados')
     } catch (err) {
-      setErrorMsg(err instanceof Error ? err.message : 'Error desconocido')
+      const raw = err instanceof Error ? err.message : String(err)
+      setErrorMsg(traducirError(raw))
       setEstado('error')
     }
   }
@@ -387,13 +407,17 @@ export function FotoFacturaModal({ onAgregar, onClose }: FotoFacturaModalProps) 
 
         {/* ── Error ────────────────────────────────────────────────────────── */}
         {estado === 'error' && (
-          <div className="flex flex-col items-center gap-4 py-8 text-center">
+          <div className="flex flex-col items-center gap-4 py-6 text-center">
             <div className="w-16 h-16 bg-peligro/10 rounded-2xl flex items-center justify-center">
               <AlertCircle size={32} className="text-peligro" />
             </div>
-            <div>
-              <p className="font-semibold text-texto">No se pudo analizar</p>
-              <p className="text-sm text-suave mt-1 max-w-xs mx-auto">{errorMsg}</p>
+            <div className="w-full">
+              <p className="font-semibold text-texto mb-2">No se pudo analizar</p>
+              {errorMsg && (
+                <div className="bg-peligro/5 border border-peligro/20 rounded-xl px-4 py-3 text-left mx-2">
+                  <p className="text-sm text-texto leading-relaxed">{errorMsg}</p>
+                </div>
+              )}
             </div>
             <button type="button" onClick={() => setEstado('captura')}
               className="h-11 px-6 border border-borde text-texto rounded-xl text-sm font-semibold
