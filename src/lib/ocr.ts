@@ -1,5 +1,14 @@
-// Módulo OCR: analiza fotos de facturas de proveedores con Claude Vision
-// Llama directamente a la API de Anthropic desde el navegador
+// Módulo OCR: analiza fotos de facturas con Claude Vision.
+//
+// Arquitectura:
+//   Cuando Supabase está configurado (producción) → llama a la Edge Function
+//   'analizar-factura' como proxy. Esto resuelve el bloqueo CORS del navegador
+//   y mantiene la API key de Anthropic en el servidor, nunca expuesta al cliente.
+//
+//   Cuando Supabase NO está configurado (dev local sin .env) → intento directo
+//   con VITE_ANTHROPIC_API_KEY + cabecera 'anthropic-dangerous-direct-browser-calls'.
+
+import { supabase, supabaseConfigurado } from './supabase'
 
 export interface ItemOCR {
   nombreProducto: string
@@ -11,6 +20,65 @@ export interface ItemOCR {
 interface RespuestaOCR {
   productos: ItemOCR[]
 }
+
+// ─── Parseo de respuesta ──────────────────────────────────────────────────────
+
+function parsearRespuestaAnthropic(data: { content?: Array<{ type: string; text?: string }> }): ItemOCR[] {
+  const textoRespuesta = (data.content ?? [])
+    .filter((b) => b.type === 'text')
+    .map((b) => b.text ?? '')
+    .join('')
+
+  // Extraer JSON de la respuesta (puede venir envuelto en markdown)
+  const jsonMatch = textoRespuesta.match(/\{[\s\S]*\}/)
+  if (!jsonMatch) {
+    throw new Error('La respuesta del modelo no contiene JSON válido')
+  }
+
+  const parsed = JSON.parse(jsonMatch[0]) as RespuestaOCR
+  if (!Array.isArray(parsed.productos)) {
+    throw new Error('Formato de respuesta inesperado')
+  }
+
+  return parsed.productos
+    .filter((p) => p.nombreProducto && p.precioUnitario > 0)
+    .map((p) => ({
+      nombreProducto: String(p.nombreProducto).trim(),
+      cantidad: Math.max(0.01, Number(p.cantidad) || 1),
+      precioUnitario: Math.round(Math.max(0, Number(p.precioUnitario) || 0)),
+      subtotal: Math.round(Math.max(0, Number(p.subtotal) || 0)),
+    }))
+}
+
+// ─── Llamada a través de Supabase Edge Function (producción) ─────────────────
+
+async function analizarViaEdgeFunction(
+  imagenBase64: string,
+  mimeType: string,
+): Promise<ItemOCR[]> {
+  const { data, error } = await supabase.functions.invoke('analizar-factura', {
+    body: { imagenBase64, mimeType },
+  })
+
+  if (error) {
+    const msg = error.message ?? ''
+    console.error('[OCR] Edge Function error:', msg)
+    if (msg.includes('401') || msg.includes('nvalid') || msg.includes('Unauthorized')) throw new Error('API_KEY_INVALID')
+    if (msg.includes('429') || msg.includes('rate')) throw new Error('RATE_LIMIT')
+    throw new Error(`API_ERROR:${msg}`)
+  }
+
+  // La Edge Function puede devolver { error: '...' } con status 200 en algunos casos
+  const payload = data as { error?: string; status?: number; content?: Array<{ type: string; text?: string }> }
+  if (payload?.error) {
+    if (String(payload.error).includes('ANTHROPIC_API_KEY')) throw new Error('API_KEY_MISSING')
+    throw new Error(`API_ERROR:${payload.error}`)
+  }
+
+  return parsearRespuestaAnthropic(payload)
+}
+
+// ─── Llamada directa (fallback desarrollo local) ──────────────────────────────
 
 const PROMPT_SISTEMA = `Eres un asistente especializado en leer facturas y remisiones de proveedores de tiendas de barrio colombianas.
 
@@ -40,20 +108,14 @@ Si la imagen no es una factura o no puedes extraer productos, devuelve:
   "productos": []
 }`
 
-export async function analizarFactura(
+async function analizarDirecto(
   imagenBase64: string,
-  mimeType: 'image/jpeg' | 'image/png' | 'image/webp' | 'image/gif' = 'image/jpeg',
+  mimeType: string,
 ): Promise<ItemOCR[]> {
   const apiKey = import.meta.env.VITE_ANTHROPIC_API_KEY
-  // Log de diagnóstico — confirma si la key fue embebida en el bundle de producción
-  console.log('[OCR] API key presente:', !!apiKey, '| Tamaño imagen (base64 chars):', imagenBase64.length)
-  if (!apiKey) {
-    throw new Error('API_KEY_MISSING')
-  }
+  if (!apiKey) throw new Error('API_KEY_MISSING')
 
-  let respuesta: Response
-  try {
-    respuesta = await fetch('https://api.anthropic.com/v1/messages', {
+  const respuesta = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -62,80 +124,58 @@ export async function analizarFactura(
       'anthropic-dangerous-direct-browser-calls': 'true',
     },
     body: JSON.stringify({
-      model: 'claude-sonnet-4-6',
+      model: 'claude-sonnet-4-5-20251001',
       max_tokens: 1024,
       system: PROMPT_SISTEMA,
-      messages: [
-        {
-          role: 'user',
-          content: [
-            {
-              type: 'image',
-              source: {
-                type: 'base64',
-                media_type: mimeType,
-                data: imagenBase64,
-              },
-            },
-            {
-              type: 'text',
-              text: 'Extrae todos los productos de esta factura.',
-            },
-          ],
-        },
-      ],
-      }),
-    })
-  } catch (fetchErr) {
-    // Error de red (sin internet, CORS, DNS, etc.)
-    throw new Error('NETWORK_ERROR')
-  }
+      messages: [{
+        role: 'user',
+        content: [
+          { type: 'image', source: { type: 'base64', media_type: mimeType, data: imagenBase64 } },
+          { type: 'text', text: 'Extrae todos los productos de esta factura.' },
+        ],
+      }],
+    }),
+  })
 
   if (!respuesta.ok) {
-    const errorData = await respuesta.json().catch(() => ({}))
-    const msg = (errorData as { error?: { message?: string } }).error?.message ?? ''
-    const status = respuesta.status
-    console.error('[OCR] Error de API:', status, msg)
-
-    if (status === 401) throw new Error('API_KEY_INVALID')
-    if (status === 429) throw new Error('RATE_LIMIT')
-    if (status === 400 && msg.toLowerCase().includes('image')) throw new Error('IMAGE_TOO_LARGE')
-    throw new Error(`API_ERROR:${status}:${msg}`)
+    const err = await respuesta.json().catch(() => ({})) as { error?: { message?: string } }
+    const msg = err.error?.message ?? ''
+    if (respuesta.status === 401) throw new Error('API_KEY_INVALID')
+    if (respuesta.status === 429) throw new Error('RATE_LIMIT')
+    throw new Error(`API_ERROR:${respuesta.status}:${msg}`)
   }
 
-  const data = await respuesta.json() as {
-    content: Array<{ type: string; text?: string }>
-  }
-  const textoRespuesta = data.content
-    .filter((b) => b.type === 'text')
-    .map((b) => b.text ?? '')
-    .join('')
-
-  // Extraer JSON de la respuesta (puede venir envuelto en markdown)
-  const jsonMatch = textoRespuesta.match(/\{[\s\S]*\}/)
-  if (!jsonMatch) {
-    throw new Error('La respuesta del modelo no contiene JSON válido')
-  }
-
-  const parsed = JSON.parse(jsonMatch[0]) as RespuestaOCR
-  if (!Array.isArray(parsed.productos)) {
-    throw new Error('Formato de respuesta inesperado')
-  }
-
-  // Normalizar y limpiar los datos
-  return parsed.productos
-    .filter((p) => p.nombreProducto && p.precioUnitario > 0)
-    .map((p) => ({
-      nombreProducto: String(p.nombreProducto).trim(),
-      cantidad: Math.max(0.01, Number(p.cantidad) || 1),
-      precioUnitario: Math.round(Math.max(0, Number(p.precioUnitario) || 0)),
-      subtotal: Math.round(Math.max(0, Number(p.subtotal) || 0)),
-    }))
+  const data = await respuesta.json() as { content: Array<{ type: string; text?: string }> }
+  return parsearRespuestaAnthropic(data)
 }
 
-// Redimensiona y comprime una imagen antes de enviarla al API.
+// ─── Punto de entrada principal ───────────────────────────────────────────────
+
+export async function analizarFactura(
+  imagenBase64: string,
+  mimeType: 'image/jpeg' | 'image/png' | 'image/webp' | 'image/gif' = 'image/jpeg',
+): Promise<ItemOCR[]> {
+  console.log(
+    '[OCR] vía:', supabaseConfigurado ? 'Edge Function' : 'directo',
+    '| chars imagen:', imagenBase64.length,
+  )
+
+  try {
+    if (supabaseConfigurado) {
+      return await analizarViaEdgeFunction(imagenBase64, mimeType)
+    } else {
+      return await analizarDirecto(imagenBase64, mimeType)
+    }
+  } catch (err) {
+    if (err instanceof Error) throw err
+    throw new Error('NETWORK_ERROR')
+  }
+}
+
+// ─── Compresión de imagen ─────────────────────────────────────────────────────
 // Anthropic Vision tiene un límite de 5 MB por imagen (decodificada).
 // Las fotos de celular pueden pesar 8–15 MB; el canvas las reduce a ~1 MB.
+
 async function reducirImagen(file: File, maxLado = 1_600, calidad = 0.82): Promise<Blob> {
   return new Promise((resolve, reject) => {
     const img = new Image()
@@ -168,7 +208,6 @@ export function fileABase64(file: File | Blob): Promise<{ base64: string; mimeTy
     const reader = new FileReader()
     reader.onload = () => {
       const result = reader.result as string
-      // result es "data:image/jpeg;base64,XXXX..."
       const [header, base64] = result.split(',')
       const mimeMatch = header.match(/data:([^;]+)/)
       const mime = (mimeMatch?.[1] ?? 'image/jpeg') as 'image/jpeg' | 'image/png' | 'image/webp' | 'image/gif'
@@ -180,7 +219,6 @@ export function fileABase64(file: File | Blob): Promise<{ base64: string; mimeTy
 }
 
 // Comprime, convierte a base64 y analiza la imagen con Claude Vision.
-// Punto de entrada principal para el modal de foto de factura.
 export async function analizarFoto(file: File): Promise<ItemOCR[]> {
   const comprimida = await reducirImagen(file)
   const { base64, mimeType } = await fileABase64(comprimida)

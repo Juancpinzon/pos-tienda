@@ -11,9 +11,10 @@
 import { useRef, useState, useCallback } from 'react'
 import { X, Camera, ImagePlus, Loader2, AlertCircle, CheckCircle2, Trash2, Link2, Search, KeyRound } from 'lucide-react'
 import { analizarFoto, type ItemOCR } from '../../lib/ocr'
+import { supabaseConfigurado } from '../../lib/supabase'
 
-// Verificar disponibilidad de la API key en build time
-const OCR_DISPONIBLE = !!(import.meta.env.VITE_ANTHROPIC_API_KEY)
+// OCR disponible si hay Edge Function (Supabase) o API key directa (dev local)
+const OCR_DISPONIBLE = supabaseConfigurado || !!(import.meta.env.VITE_ANTHROPIC_API_KEY)
 
 // Traduce los códigos de error internos de ocr.ts a mensajes amigables para el tendero
 function traducirError(raw: string): string {
@@ -21,6 +22,8 @@ function traducirError(raw: string): string {
     return 'API key no configurada. Agrega VITE_ANTHROPIC_API_KEY en las variables de entorno de Vercel y vuelve a desplegar.'
   if (raw === 'API_KEY_INVALID')
     return 'API key inválida o expirada. Verifica que la key sea correcta en Vercel → Settings → Environment Variables.'
+  if (raw === 'SUPABASE_NOT_CONFIGURED')
+    return 'Supabase no está configurado. Agrega las variables VITE_SUPABASE_URL y VITE_SUPABASE_ANON_KEY en Vercel y vuelve a desplegar.'
   if (raw === 'NETWORK_ERROR')
     return 'Sin conexión. Verifica tu internet e intenta de nuevo.'
   if (raw === 'RATE_LIMIT')
@@ -342,8 +345,9 @@ export function FotoFacturaModal({ onAgregar, onClose }: FotoFacturaModalProps) 
             <div className="flex flex-col gap-0.5">
               <p className="text-sm font-semibold text-advertencia">OCR no disponible</p>
               <p className="text-xs text-texto/80 leading-relaxed">
-                La variable <span className="font-mono bg-black/5 px-1 rounded">VITE_ANTHROPIC_API_KEY</span> no está
-                configurada en este entorno. Puede agregar los productos manualmente usando el formulario de abajo.
+                El OCR requiere Supabase configurado (producción) o{' '}
+                <span className="font-mono bg-black/5 px-1 rounded">VITE_ANTHROPIC_API_KEY</span>{' '}
+                (desarrollo local). Puede agregar los productos manualmente usando el formulario de abajo.
               </p>
             </div>
           </div>
@@ -384,7 +388,7 @@ export function FotoFacturaModal({ onAgregar, onClose }: FotoFacturaModalProps) 
               {previewUrl && estado !== 'analizando' && (
                 <button type="button" onClick={handleAnalizar}
                   disabled={!OCR_DISPONIBLE}
-                  title={!OCR_DISPONIBLE ? 'Configura VITE_ANTHROPIC_API_KEY para usar el OCR' : undefined}
+                  title={!OCR_DISPONIBLE ? 'Configura Supabase o VITE_ANTHROPIC_API_KEY para usar el OCR' : undefined}
                   className="h-12 bg-primario text-white rounded-xl font-display font-bold text-base
                              flex items-center justify-center gap-2
                              hover:bg-primario-hover active:scale-[0.98] transition-all
