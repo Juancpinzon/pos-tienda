@@ -16,6 +16,7 @@ import type {
   MovimientoStock,
   MapeoSKU,
   ConfigFiscal,
+  CuentaAbierta,
 } from './schema'
 
 // Singleton de Dexie — única instancia para toda la aplicación
@@ -40,6 +41,8 @@ class POSDatabase extends Dexie {
   mapeosSKU!: EntityTable<MapeoSKU, 'id'>
   // v5 — facturación régimen simple
   configFiscal!: EntityTable<ConfigFiscal, 'id'>
+  // v6 — cuentas abiertas / comandas
+  cuentasAbiertas!: EntityTable<CuentaAbierta, 'id'>
 
   constructor() {
     super('POSTienda')
@@ -81,6 +84,11 @@ class POSDatabase extends Dexie {
     this.version(5).stores({
       configFiscal: '++id',
     })
+
+    // Versión 6: cuentas abiertas / comandas para ventas por rondas
+    this.version(6).stores({
+      cuentasAbiertas: '++id, estado, sesionCajaId, creadaEn',
+    })
   }
 }
 
@@ -105,4 +113,5 @@ export type {
   MovimientoStock,
   MapeoSKU,
   ConfigFiscal,
+  CuentaAbierta,
 }

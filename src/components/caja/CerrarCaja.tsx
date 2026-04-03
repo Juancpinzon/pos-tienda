@@ -1,7 +1,8 @@
 import { useState } from 'react'
-import { X, Lock, AlertTriangle, CheckCircle, Banknote, Smartphone, BookOpen, TrendingDown } from 'lucide-react'
+import { X, Lock, AlertTriangle, CheckCircle, Banknote, Smartphone, BookOpen, TrendingDown, ClipboardList } from 'lucide-react'
 import { TecladoNumerico } from '../shared/TecladoNumerico'
 import { cerrarCaja, useResumenCaja } from '../../hooks/useCaja'
+import { useCantidadCuentasAbiertas } from '../../hooks/useCuentasAbiertas'
 import { formatCOP } from '../../utils/moneda'
 
 interface CerrarCajaProps {
@@ -19,6 +20,7 @@ export function CerrarCaja({ sesionId, onClose }: CerrarCajaProps) {
   const diferencia = resumen ? montoCierre - resumen.efectivoEsperado : 0
   const diferenciaGrande = Math.abs(diferencia) > 5000
   const puedeConfirmar = efectivoContado.length > 0
+  const cuentasAbiertas = useCantidadCuentasAbiertas()
 
   const confirmar = async () => {
     if (!puedeConfirmar || cerrando) return
@@ -52,6 +54,21 @@ export function CerrarCaja({ sesionId, onClose }: CerrarCajaProps) {
         </div>
 
         <div className="flex-1 overflow-y-auto px-5 py-4 flex flex-col gap-4">
+
+          {/* Advertencia: cuentas abiertas sin cobrar */}
+          {cuentasAbiertas > 0 && (
+            <div className="bg-advertencia/10 border border-advertencia/30 rounded-xl px-4 py-3 flex items-start gap-3">
+              <ClipboardList size={18} className="text-advertencia shrink-0 mt-0.5" />
+              <div>
+                <p className="text-sm font-semibold text-advertencia leading-snug">
+                  {cuentasAbiertas} cuenta{cuentasAbiertas !== 1 ? 's' : ''} abierta{cuentasAbiertas !== 1 ? 's' : ''} sin cobrar
+                </p>
+                <p className="text-xs text-suave mt-0.5 leading-snug">
+                  Cobra las cuentas pendientes antes de cerrar la caja para que queden registradas en el cierre de hoy.
+                </p>
+              </div>
+            </div>
+          )}
 
           {/* Resumen del día — desglose completo antes de pedir el conteo */}
           {resumen && (

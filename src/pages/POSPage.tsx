@@ -1,19 +1,80 @@
-import { useState } from 'react'
-import { ShoppingCart, X } from 'lucide-react'
+import { useState, useEffect, useCallback } from 'react'
+import { ShoppingCart, X, ClipboardList } from 'lucide-react'
 import { BuscadorProducto } from '../components/pos/BuscadorProducto'
 import { GridProductosRapidos } from '../components/pos/GridProductosRapidos'
 import { LineaVenta } from '../components/pos/LineaVenta'
 import { ResumenVenta } from '../components/pos/ResumenVenta'
 import { ModalCobro } from '../components/pos/ModalCobro'
+import { CuentasPanel } from '../components/pos/CuentasPanel'
 import { useVentaStore, selectTotal, selectConteo } from '../stores/ventaStore'
+import { useCantidadCuentasAbiertas, sincronizarItemsCuenta, marcarCuentaCobrada } from '../hooks/useCuentasAbiertas'
+import { useSesionActual } from '../hooks/useCaja'
+import { useAuthStore } from '../stores/authStore'
 import { formatCOP } from '../utils/moneda'
+import type { CuentaAbierta, ItemCuenta } from '../db/schema'
 
 export default function POSPage() {
-  const [mostrarModal, setMostrarModal] = useState(false)
-  const [drawerAbierto, setDrawerAbierto] = useState(false)
-  const items = useVentaStore((s) => s.items)
-  const total = useVentaStore(selectTotal)
-  const conteo = useVentaStore(selectConteo)
+  const [mostrarModal,   setMostrarModal]   = useState(false)
+  const [drawerAbierto,  setDrawerAbierto]  = useState(false)
+  const [mostrarCuentas, setMostrarCuentas] = useState(false)
+
+  // Cuenta activa — persiste en memoria durante la sesión
+  const [cuentaActiva, setCuentaActiva] = useState<CuentaAbierta | null>(null)
+
+  const items         = useVentaStore((s) => s.items)
+  const limpiarCarrito = useVentaStore((s) => s.limpiarCarrito)
+  const total         = useVentaStore(selectTotal)
+  const conteo        = useVentaStore(selectConteo)
+
+  const cantidadCuentas = useCantidadCuentasAbiertas()
+  const sesion          = useSesionActual()
+  const usuario         = useAuthStore((s) => s.usuario)
+
+  // Solo dueño y encargado pueden usar cuentas abiertas
+  const puedeCuentas = !usuario || usuario.rol === 'dueno' || usuario.rol === 'encargado'
+
+  // Sincronizar ventaStore → cuenta activa en Dexie cada vez que cambien los ítems
+  useEffect(() => {
+    if (!cuentaActiva?.id) return
+    void sincronizarItemsCuenta(cuentaActiva.id, items as ItemCuenta[])
+  }, [items, cuentaActiva?.id])
+
+  // Seleccionar una cuenta: cargar sus ítems en ventaStore
+  const handleSeleccionarCuenta = useCallback((cuenta: CuentaAbierta) => {
+    limpiarCarrito()
+    setCuentaActiva(cuenta)
+    // Cargar los ítems de la cuenta en el carrito
+    const { agregarItem } = useVentaStore.getState()
+    cuenta.items.forEach((item) => {
+      agregarItem({
+        productoId:         item.productoId,
+        nombreProducto:     item.nombreProducto,
+        cantidad:           item.cantidad,
+        precioUnitario:     item.precioUnitario,
+        precioCompraSnapshot: item.precioCompraSnapshot,
+        descuento:          item.descuento,
+        esProductoFantasma: item.esProductoFantasma,
+      })
+    })
+  }, [limpiarCarrito])
+
+  // Salir del modo cuenta — volver a venta rápida
+  const handleSalirCuenta = useCallback(() => {
+    limpiarCarrito()
+    setCuentaActiva(null)
+  }, [limpiarCarrito])
+
+  // Cuando el cobro es exitoso: marcar cuenta como cobrada y salir del modo cuenta
+  const handleVentaExitosa = useCallback(() => {
+    if (cuentaActiva?.id) {
+      void marcarCuentaCobrada(cuentaActiva.id)
+      setCuentaActiva(null)
+    }
+  }, [cuentaActiva])
+
+  // Etiqueta del carrito según modo
+  const labelCarrito = cuentaActiva ? cuentaActiva.nombre : 'Venta actual'
+  const emojiCarrito = cuentaActiva ? '📋' : null
 
   // JSX compartido entre columna desktop y drawer móvil
   const listaItems = (
@@ -22,7 +83,9 @@ export default function POSPage() {
         <div className="h-full flex flex-col items-center justify-center gap-2 text-suave/50">
           <ShoppingCart size={36} strokeWidth={1} />
           <p className="text-sm text-center">
-            Agrega productos <br /> desde el buscador o el grid
+            {cuentaActiva
+              ? `Agrega productos a ${cuentaActiva.nombre}`
+              : 'Agrega productos \n desde el buscador o el grid'}
           </p>
         </div>
       ) : (
@@ -38,10 +101,60 @@ export default function POSPage() {
   return (
     <div className="h-full flex flex-col bg-fondo overflow-hidden">
 
-      {/* ── Header: buscador ──────────────────────────────────────────── */}
-      <div data-tour="buscador" className="bg-white border-b border-borde px-3 py-2 shrink-0">
-        <BuscadorProducto />
+      {/* ── Header: buscador + botón cuentas ─────────────────────────── */}
+      <div data-tour="buscador" className="bg-white border-b border-borde px-3 py-2 shrink-0 flex items-center gap-2">
+        <div className="flex-1 min-w-0">
+          <BuscadorProducto />
+        </div>
+
+        {/* Botón cuentas abiertas — solo dueño/encargado */}
+        {puedeCuentas && (
+          <button
+            type="button"
+            onClick={() => setMostrarCuentas(true)}
+            className={[
+              'relative h-11 px-3 rounded-xl border text-sm font-semibold shrink-0',
+              'flex items-center gap-1.5 transition-all active:scale-95',
+              cuentaActiva
+                ? 'bg-primario text-white border-primario'
+                : 'bg-white text-texto border-borde hover:border-primario/40',
+            ].join(' ')}
+            title="Cuentas abiertas"
+          >
+            <ClipboardList size={17} />
+            <span className="hidden sm:inline">
+              {cuentaActiva ? cuentaActiva.nombre : 'Cuentas'}
+            </span>
+            {/* Badge con cantidad de cuentas abiertas */}
+            {!cuentaActiva && cantidadCuentas > 0 && (
+              <span className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-acento text-white text-[10px] font-bold rounded-full flex items-center justify-center">
+                {cantidadCuentas}
+              </span>
+            )}
+          </button>
+        )}
       </div>
+
+      {/* Banner de cuenta activa */}
+      {cuentaActiva && (
+        <div className="bg-primario/8 border-b border-primario/20 px-3 py-1.5 flex items-center gap-2 shrink-0">
+          <span className="text-xs font-semibold text-primario flex-1">
+            📋 Cuenta activa: <span className="font-bold">{cuentaActiva.nombre}</span>
+            {items.length > 0 && (
+              <span className="ml-2 text-primario/70">
+                · {formatCOP(total)}
+              </span>
+            )}
+          </span>
+          <button
+            type="button"
+            onClick={handleSalirCuenta}
+            className="text-xs text-suave hover:text-peligro font-medium transition-colors"
+          >
+            Salir
+          </button>
+        </div>
+      )}
 
       {/* ── Cuerpo principal ──────────────────────────────────────────── */}
       <div className="flex-1 flex overflow-hidden">
@@ -59,10 +172,21 @@ export default function POSPage() {
 
           {/* Encabezado */}
           <div className="flex items-center gap-2 px-3 py-2 border-b border-borde shrink-0">
-            <ShoppingCart size={16} className="text-primario" />
-            <span className="text-xs font-semibold text-suave uppercase tracking-wide">
-              Venta actual
+            {emojiCarrito
+              ? <span className="text-base leading-none">{emojiCarrito}</span>
+              : <ShoppingCart size={16} className="text-primario" />}
+            <span className="text-xs font-semibold text-suave uppercase tracking-wide flex-1 truncate">
+              {labelCarrito}
             </span>
+            {cuentaActiva && (
+              <button
+                type="button"
+                onClick={handleSalirCuenta}
+                className="text-[10px] text-suave hover:text-peligro font-semibold transition-colors"
+              >
+                ✕ Salir
+              </button>
+            )}
           </div>
 
           {/* Lista de ítems */}
@@ -81,54 +205,66 @@ export default function POSPage() {
       <button
         type="button"
         onClick={() => setDrawerAbierto(true)}
-        className="md:hidden fixed bottom-5 left-1/2 -translate-x-1/2 z-30
-                   flex items-center gap-2 px-5 h-14
-                   bg-primario text-white rounded-full
-                   shadow-lg shadow-primario/40
-                   font-display font-bold text-base
-                   active:scale-95 transition-all"
+        className={[
+          'md:hidden fixed bottom-5 left-1/2 -translate-x-1/2 z-30',
+          'flex items-center gap-2 px-5 h-14 rounded-full',
+          'shadow-lg font-display font-bold text-base active:scale-95 transition-all',
+          cuentaActiva
+            ? 'bg-primario text-white shadow-primario/40'
+            : 'bg-primario text-white shadow-primario/40',
+        ].join(' ')}
       >
-        <ShoppingCart size={20} />
+        {cuentaActiva ? <ClipboardList size={20} /> : <ShoppingCart size={20} />}
         {conteo > 0
           ? `${Math.round(conteo)} item${Math.round(conteo) !== 1 ? 's' : ''} · ${formatCOP(total)}`
-          : 'Ver carrito'}
+          : cuentaActiva ? cuentaActiva.nombre : 'Ver carrito'}
       </button>
 
       {/* ── Drawer de carrito — solo móvil ───────────────────────────── */}
       {drawerAbierto && (
         <>
-          {/* Backdrop: cierra al tocar fuera */}
           <div
             className="md:hidden fixed inset-0 bg-black/50 z-40"
             onClick={() => setDrawerAbierto(false)}
           />
 
-          {/* Panel deslizante desde abajo */}
           <div className="md:hidden fixed inset-x-0 bottom-0 z-50
                           flex flex-col bg-white rounded-t-2xl
                           max-h-[82vh] shadow-2xl">
 
-            {/* Handle visual + header */}
             <div className="flex items-center justify-between px-4 py-3 border-b border-borde shrink-0">
               <div className="flex items-center gap-2">
-                <ShoppingCart size={18} className="text-primario" />
-                <span className="font-semibold text-texto">Venta actual</span>
+                {emojiCarrito
+                  ? <span className="text-lg leading-none">{emojiCarrito}</span>
+                  : <ShoppingCart size={18} className="text-primario" />}
+                <span className="font-semibold text-texto truncate max-w-[180px]">
+                  {labelCarrito}
+                </span>
               </div>
-              <button
-                type="button"
-                onClick={() => setDrawerAbierto(false)}
-                className="p-2 rounded-full hover:bg-fondo text-suave active:scale-95 transition-all"
-              >
-                <X size={20} />
-              </button>
+              <div className="flex items-center gap-2">
+                {cuentaActiva && (
+                  <button
+                    type="button"
+                    onClick={() => { setDrawerAbierto(false); handleSalirCuenta() }}
+                    className="text-xs text-suave hover:text-peligro font-semibold"
+                  >
+                    Salir de cuenta
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => setDrawerAbierto(false)}
+                  className="p-2 rounded-full hover:bg-fondo text-suave active:scale-95 transition-all"
+                >
+                  <X size={20} />
+                </button>
+              </div>
             </div>
 
-            {/* Lista de ítems */}
             <div className="flex-1 overflow-y-auto px-2 py-1 min-h-0">
               {listaItems}
             </div>
 
-            {/* Resumen + COBRAR */}
             <ResumenVenta
               onCobrar={() => {
                 setDrawerAbierto(false)
@@ -141,7 +277,20 @@ export default function POSPage() {
 
       {/* ── Modal de cobro ────────────────────────────────────────────── */}
       {mostrarModal && (
-        <ModalCobro onClose={() => setMostrarModal(false)} />
+        <ModalCobro
+          onClose={() => setMostrarModal(false)}
+          onVentaExitosa={handleVentaExitosa}
+        />
+      )}
+
+      {/* ── Panel de cuentas abiertas ─────────────────────────────────── */}
+      {mostrarCuentas && (
+        <CuentasPanel
+          cuentaActivaId={cuentaActiva?.id ?? null}
+          sesionCajaId={sesion?.id}
+          onSeleccionarCuenta={handleSeleccionarCuenta}
+          onClose={() => setMostrarCuentas(false)}
+        />
       )}
     </div>
   )

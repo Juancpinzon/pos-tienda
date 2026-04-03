@@ -194,6 +194,31 @@ export interface ConfigFiscal {
   vigenciaHasta?: Date
 }
 
+// ─── Módulo de Cuentas Abiertas / Comandas (v6) ──────────────────────────────
+
+/** Ítem dentro de una cuenta abierta — misma estructura que ItemCarrito */
+export interface ItemCuenta {
+  productoId?: number
+  nombreProducto: string
+  cantidad: number
+  precioUnitario: number
+  precioCompraSnapshot?: number
+  descuento: number
+  subtotal: number
+  esProductoFantasma: boolean
+}
+
+export interface CuentaAbierta {
+  id?: number
+  nombre: string                // "Mesa 1", "Don Carlos", "La barra"
+  items: ItemCuenta[]           // Productos acumulados — JSON array en Dexie
+  total: number                 // Calculado: suma de subtotales
+  estado: 'abierta' | 'cobrada'
+  sesionCajaId?: number
+  creadaEn: Date
+  actualizadoEn: Date
+}
+
 // ─── Módulo de Control de Stock (v3) ─────────────────────────────────────────
 
 export interface MovimientoStock {

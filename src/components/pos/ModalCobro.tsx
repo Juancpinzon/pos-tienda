@@ -33,6 +33,8 @@ const PLATAFORMAS: { id: PlataformaTransferencia; emoji: string }[] = [
 
 interface ModalCobroProps {
   onClose: () => void
+  /** Callback opcional — se llama justo después de registrar la venta con éxito */
+  onVentaExitosa?: () => void
 }
 
 // Obtiene o crea una sesión de caja activa (NUNCA bloquea una venta)
@@ -450,7 +452,7 @@ function PantallaExito({
 
 // ─── Modal principal ──────────────────────────────────────────────────────────
 
-export function ModalCobro({ onClose }: ModalCobroProps) {
+export function ModalCobro({ onClose, onVentaExitosa }: ModalCobroProps) {
   const items = useVentaStore((s) => s.items)
   const total = useVentaStore(selectTotal)
   const limpiarCarrito = useVentaStore((s) => s.limpiarCarrito)
@@ -638,6 +640,7 @@ export function ModalCobro({ onClose }: ModalCobroProps) {
       setDetallesGuardados(detallesSnapshot.map((d, i) => ({ ...d, id: i, ventaId })))
 
       limpiarCarrito()
+      onVentaExitosa?.()
       setEstado('exito')
     } catch (err) {
       setMensajeError(err instanceof Error ? err.message : 'Error desconocido')
