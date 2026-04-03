@@ -109,7 +109,7 @@ export default function ReportesPage() {
       next: setDatos,
       error: (err) => {
         console.error('[ReportesPage:datos]', err)
-        setDatos({ ventas: [], totalVendido: 0, cantidadVentas: 0, ticketPromedio: 0, totalEfectivo: 0, totalTransferencia: 0, totalNequi: 0, totalDaviplata: 0, totalDale: 0, totalFiado: 0, totalAnulado: 0, cantidadAnuladas: 0 })
+        setDatos({ ventas: [], totalVendido: 0, cantidadVentas: 0, ticketPromedio: 0, totalEfectivo: 0, totalTransferencia: 0, totalNequi: 0, totalDaviplata: 0, totalDale: 0, totalFiado: 0, totalAnulado: 0, cantidadAnuladas: 0, cobrosfiado: 0, cobrosFiadoEfectivo: 0, cobrosFiadoTransferencia: 0 })
       },
     })
     return () => sub.unsubscribe()

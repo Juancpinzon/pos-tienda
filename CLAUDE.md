@@ -122,6 +122,7 @@ pos-tienda/
 │   │   └── notificaciones.ts      # Lógica de notificaciones
 │   ├── components/
 │   │   ├── pos/                   # Pantalla principal de venta
+  │   │   └── ModalNotaVenta.tsx # Preview nota de venta (Fase 24)
 │   │   ├── fiado/                 # Módulo de cartera
 │   │   ├── productos/             # Gestión de inventario
 │   │   ├── proveedores/           # Módulo de proveedores
@@ -599,6 +600,15 @@ Ver guía completa de publicación en `docs/fase-23-play-store.md`.
 - useBluetooth.ts: dual @capacitor-community/bluetooth-le + Web Bluetooth API
 - docs/fase-23-play-store.md: guía de publicación en Play Store
 
+### Fase 24: Nota de Venta — Régimen Simple ✅
+- src/lib/notaVenta.ts: generarNotaVenta (HTML), generarPDF (html2canvas+jsPDF), generarTextoNotaVenta, compartirNotaPorWhatsApp, descargarPDF
+- src/db/schema.ts: nueva interfaz ConfigFiscal (ultimoConsecutivo, prefijo, campos DIAN futuros)
+- src/db/database.ts: tabla configFiscal (versión 5), consecutivo persistido
+- src/components/pos/ModalNotaVenta.tsx: preview HTML en iframe, botones Descargar PDF y WhatsApp
+- src/components/pos/ModalCobro.tsx: PantallaExito con botón "📄 Ver nota de venta" + consecutivo auto-generado
+- src/pages/HistorialVentasPage.tsx: botón "📄 Nota de venta" en cada venta del historial
+- src/components/config/ConfigModal.tsx: sección Facturación con prefijo, consecutivo actual y aviso Régimen Simple
+
 ---
 
 ## 🚨 Reglas de Código
@@ -649,7 +659,7 @@ git add . && git commit -m "mensaje" && git push origin main
 - Integración con impresoras térmicas Bluetooth (usar `useBluetooth.ts` ya creado)
 - Publicar en Google Play Store (ver `docs/fase-23-play-store.md`)
 - IA conversacional para análisis de ventas (usar VITE_ANTHROPIC_API_KEY)
-- Facturación electrónica DIAN
+- Facturación electrónica DIAN (cuando sea obligatorio — preparado en ConfigFiscal)
 
 ---
 

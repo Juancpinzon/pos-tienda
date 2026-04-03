@@ -18,7 +18,11 @@
       "Skill(claude-api:*)",
       "Bash(python -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\(d[''''dependencies''''].get\\(''''@zxing/library'''',''''not found''''\\)\\)\")",
       "Bash(node -e \"const p = require\\(''./node_modules/jspdf/package.json''\\); console.log\\(''jspdf:'', p.version\\)\")",
-      "Bash(node -e \"const p = require\\(''./node_modules/html2canvas/package.json''\\); console.log\\(''html2canvas:'', p.version\\)\")"
+      "Bash(node -e \"const p = require\\(''./node_modules/html2canvas/package.json''\\); console.log\\(''html2canvas:'', p.version\\)\")",
+      "Bash(node -e \"const p = require\\(''./node_modules/@zxing/library/package.json''\\); console.log\\(''zxing version:'', p.version\\)\")",
+      "Bash(node -e \"const lib = require\\(''./node_modules/@zxing/library''\\); console.log\\(''exports:'', Object.keys\\(lib\\).filter\\(k => k.includes\\(''Reader''\\) || k.includes\\(''Format''\\) || k.includes\\(''Exception''\\) || k.includes\\(''Not''\\)\\).slice\\(0,20\\)\\)\")",
+      "Bash(node -e \"const p = require\\(''./node_modules/vite/package.json''\\); console.log\\(''vite:'', p.version\\)\")",
+      "Bash(npx supabase:*)"
     ]
   }
 }

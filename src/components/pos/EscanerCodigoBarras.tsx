@@ -11,10 +11,16 @@
 //   - Si el dispositivo no tiene cámara → estado 'sin_camara'
 //   - HTTPS requerido en producción (Vercel lo provee automáticamente)
 //
-// BUG FIX (2026-04): La versión anterior usaba `decodeOnceFromVideoElement()` que
+// BUG FIX (2026-04-a): La versión anterior usaba `decodeOnceFromVideoElement()` que
 // NO existe en @zxing/library v0.21.x — lanzaba TypeError en cada frame, era capturado
 // silenciosamente y el escáner nunca disparaba. Fix: usar `decodeFromVideoDevice()`
 // que es el método oficial para escaneo continuo desde cámara.
+//
+// BUG FIX (2026-04-b): El callback de `decodeFromVideoDevice` capturaba el valor inicial
+// del estado `codigoDetectado` (siempre false) por el cierre estático (stale closure)
+// de React — el guard de "ya detecté" nunca funcionaba. Fix: usar un `useRef` como
+// guardia en lugar del estado. Los refs son mutables y el closure siempre lee el
+// valor actual, no el capturado al momento de registrar el callback.
 
 import { useEffect, useRef, useState } from 'react'
 import { X, Camera, CameraOff, Loader2 } from 'lucide-react'
@@ -30,7 +36,14 @@ export function EscanerCodigoBarras({ onCodigoDetectado, onClose }: EscanerCodig
   const videoRef  = useRef<HTMLVideoElement>(null)
   const readerRef = useRef<import('@zxing/library').BrowserMultiFormatReader | null>(null)
   const [estado, setEstado]           = useState<EstadoEscaner>('iniciando')
+  // Estado visual para el UI (flash verde + texto de confirmación)
   const [codigoDetectado, setCodigoDetectado] = useState(false)
+
+  // Guardia anti-disparo-múltiple con useRef (no useState).
+  // Un callback síncrono como el de ZXing captura el valor del estado al momento de
+  // registrar el closure (stale closure), por lo que siempre vería codigoDetectado=false.
+  // Un ref es un objeto mutable compartido — el closure SIEMPRE lee .current actualizado.
+  const yaDetectadoRef = useRef(false)
 
   useEffect(() => {
     let activo = true
@@ -87,9 +100,12 @@ export function EscanerCodigoBarras({ onCodigoDetectado, onClose }: EscanerCodig
               const codigo = result.getText()
               if (!codigo) return
 
-              // Prevenir disparos múltiples en el mismo frame
-              if (codigoDetectado) return
-              setCodigoDetectado(true)
+              // Prevenir disparos múltiples en el mismo frame.
+              // IMPORTANTE: usar el ref, no el estado — el closure de ZXing captura
+              // el valor inicial del estado (siempre false) y nunca lo ve actualizado.
+              if (yaDetectadoRef.current) return
+              yaDetectadoRef.current = true
+              setCodigoDetectado(true)  // solo para la UI (flash verde + texto)
 
               // Vibración háptica (si el dispositivo lo soporta)
               if (navigator.vibrate) navigator.vibrate(200)
