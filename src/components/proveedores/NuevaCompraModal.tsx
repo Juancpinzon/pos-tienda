@@ -774,7 +774,17 @@ export function NuevaCompraModal({ proveedorInicial, onClose }: NuevaCompraModal
       {/* Modal OCR */}
       {mostrarOCR && (
         <FotoFacturaModal
-          onAgregar={(nuevosItems) => setItems((prev) => [...prev, ...nuevosItems])}
+          onAgregar={(nuevosItems, extras) => {
+            setItems((prev) => [...prev, ...nuevosItems])
+            // Pre-seleccionar el proveedor detectado si no hay uno seleccionado
+            if (extras?.proveedor && !provSeleccionado) {
+              setProvSeleccionado(extras.proveedor)
+            }
+            // Auto-rellenar notas con número de factura si no hay notas aún
+            if (extras?.notasFactura && !notas) {
+              setNotas(extras.notasFactura)
+            }
+          }}
           onClose={() => setMostrarOCR(false)}
         />
       )}

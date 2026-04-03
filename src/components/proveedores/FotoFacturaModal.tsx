@@ -2,16 +2,24 @@
 // Modal OCR + mapeo inteligente de SKUs.
 //
 // Flujo post-OCR:
-//   Para cada producto detectado:
-//     1. Buscar en mapeosSKU → si hay mapeo exacto: pre-asociar automáticamente
-//     2. Si no hay: mostrar buscador con sugerencias del catálogo
-//     3. Checkbox "Recordar asociación" (default: true)
-//   Al confirmar: guardar todos los mapeos nuevos marcados
+//   1. Detecta proveedor, número de factura y productos automáticamente
+//   2. Busca el proveedor en Dexie por nombre o NIT
+//   3. Para cada producto: buscar en mapeosSKU → si hay mapeo: pre-asociar
+//   4. Al confirmar: crear proveedor si es nuevo y el checkbox está activo
 
 import { useRef, useState, useCallback } from 'react'
-import { X, Camera, ImagePlus, Loader2, AlertCircle, CheckCircle2, Trash2, Link2, Search, KeyRound } from 'lucide-react'
-import { analizarFoto, type ItemOCR } from '../../lib/ocr'
+import {
+  X, Camera, ImagePlus, Loader2, AlertCircle, CheckCircle2,
+  Trash2, Link2, Search, KeyRound, Truck, Plus,
+} from 'lucide-react'
+import { analizarFoto, type ItemOCR, type ProveedorOCR, type FacturaOCR } from '../../lib/ocr'
 import { supabaseConfigurado } from '../../lib/supabase'
+import { buscarMapeo, guardarMapeo, sugerirProducto, type SugerenciaProducto } from '../../lib/mapeoSKU'
+import { crearProveedor } from '../../hooks/useProveedores'
+import { formatCOP } from '../../utils/moneda'
+import { db } from '../../db/database'
+import type { ItemCompra } from '../../hooks/useProveedores'
+import type { Producto, Proveedor } from '../../db/schema'
 
 // OCR disponible si hay Edge Function (Supabase) o API key directa (dev local)
 const OCR_DISPONIBLE = supabaseConfigurado || !!(import.meta.env.VITE_ANTHROPIC_API_KEY)
@@ -36,13 +44,13 @@ function traducirError(raw: string): string {
   }
   return raw
 }
-import { buscarMapeo, guardarMapeo, sugerirProducto, type SugerenciaProducto } from '../../lib/mapeoSKU'
-import { formatCOP } from '../../utils/moneda'
-import type { ItemCompra } from '../../hooks/useProveedores'
-import type { Producto } from '../../db/schema'
 
 interface FotoFacturaModalProps {
-  onAgregar: (items: ItemCompra[]) => void
+  /** Callback al confirmar: entrega los ítems y, opcionalmente, proveedor detectado y notas de factura */
+  onAgregar: (
+    items: ItemCompra[],
+    extras?: { proveedor?: { id: number; nombre: string }; notasFactura?: string }
+  ) => void
   onClose: () => void
 }
 
@@ -51,15 +59,10 @@ type Estado = 'captura' | 'analizando' | 'resultados' | 'error'
 // Un ítem enriquecido con datos de mapeo
 interface ItemEnriquecido extends ItemOCR {
   seleccionado: boolean
-  // Producto del catálogo asociado (si se encontró o eligió)
   productoAsociado: Producto | null
-  // Nombre que vino del mapeo guardado (para badge)
   vinoDeMapa: boolean
-  // Si el usuario quiere guardar la asociación
   recordar: boolean
-  // Sugerencias del catálogo para este ítem
   sugerencias: SugerenciaProducto[]
-  // Controlando el buscador de sugerencias
   busquedaAbierta: boolean
   queryBusqueda: string
 }
@@ -91,7 +94,6 @@ function BuscadorAsociacion({
         />
       </div>
 
-      {/* Sugerencias */}
       {item.sugerencias.length > 0 && (
         <div className="bg-white border border-borde rounded-lg overflow-hidden shadow-sm">
           {item.sugerencias.map((s) => (
@@ -138,6 +140,14 @@ export function FotoFacturaModal({ onAgregar, onClose }: FotoFacturaModalProps) 
   const [errorMsg,    setErrorMsg]    = useState<string | null>(null)
   const [items,       setItems]       = useState<ItemEnriquecido[]>([])
 
+  // Datos de proveedor y factura detectados por OCR
+  const [proveedorOCR,   setProveedorOCR]   = useState<ProveedorOCR | null>(null)
+  const [facturaOCR,     setFacturaOCR]     = useState<FacturaOCR | null>(null)
+  // Proveedor encontrado en Dexie (null = no encontrado aún / no buscado)
+  const [provExistente,  setProvExistente]  = useState<Proveedor | null | undefined>(undefined)
+  // Si el tendero quiere crear/actualizar el proveedor al confirmar
+  const [crearProv,      setCrearProv]      = useState(true)
+
   // ── Seleccionar imagen ──────────────────────────────────────────────────────
   const handleArchivoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -147,20 +157,35 @@ export function FotoFacturaModal({ onAgregar, onClose }: FotoFacturaModalProps) 
     setEstado('captura')
     setErrorMsg(null)
     setItems([])
+    setProveedorOCR(null)
+    setFacturaOCR(null)
+    setProvExistente(undefined)
+    setCrearProv(true)
   }
+
+  // ── Buscar proveedor en Dexie por nombre o NIT ──────────────────────────────
+  const buscarProveedorLocal = useCallback(async (prov: ProveedorOCR) => {
+    const lower = prov.nombre.toLowerCase().trim()
+    const todos = await db.proveedores.filter((p) => p.activo).toArray()
+    // Intentar match exacto o muy parecido (contiene el nombre del OCR)
+    const encontrado = todos.find(
+      (p) =>
+        p.nombre.toLowerCase() === lower ||
+        p.nombre.toLowerCase().includes(lower) ||
+        lower.includes(p.nombre.toLowerCase())
+    )
+    setProvExistente(encontrado ?? null)
+  }, [])
 
   // ── Enriquecer resultados OCR con mapeos ────────────────────────────────────
   const enriquecerConMapeos = useCallback(async (crudos: ItemOCR[]): Promise<ItemEnriquecido[]> => {
     return Promise.all(
       crudos.map(async (p) => {
-        // Buscar mapeo guardado
         const mapeo = await buscarMapeo(p.nombreProducto)
         let productoAsociado: Producto | null = null
         let vinoDeMapa = false
 
         if (mapeo) {
-          // Verificar que el producto sigue existiendo
-          const { db } = await import('../../db/database')
           const prod = await db.productos.get(mapeo.productoId)
           if (prod?.activo) {
             productoAsociado = prod
@@ -168,7 +193,6 @@ export function FotoFacturaModal({ onAgregar, onClose }: FotoFacturaModalProps) 
           }
         }
 
-        // Sugerencias del catálogo (para cuando no hay mapeo o el usuario quiere cambiar)
         const sugerencias = await sugerirProducto(p.nombreProducto, 4)
 
         return {
@@ -176,9 +200,9 @@ export function FotoFacturaModal({ onAgregar, onClose }: FotoFacturaModalProps) 
           seleccionado: true,
           productoAsociado,
           vinoDeMapa,
-          recordar: true,          // Por defecto: guardar la asociación
+          recordar: true,
           sugerencias,
-          busquedaAbierta: !productoAsociado,  // Abrir buscador si no hay mapeo
+          busquedaAbierta: !productoAsociado,
           queryBusqueda: '',
         }
       })
@@ -192,12 +216,24 @@ export function FotoFacturaModal({ onAgregar, onClose }: FotoFacturaModalProps) 
     setErrorMsg(null)
 
     try {
-      const productos = await analizarFoto(archivo)
+      const resultado = await analizarFoto(archivo)
+      const { proveedor, factura, productos } = resultado
 
       if (productos.length === 0) {
         setErrorMsg('No se encontraron productos en la imagen. Intenta con una foto más clara.')
         setEstado('error')
         return
+      }
+
+      // Guardar datos de proveedor y factura
+      setProveedorOCR(proveedor)
+      setFacturaOCR(factura)
+
+      // Buscar si el proveedor ya existe en local
+      if (proveedor) {
+        await buscarProveedorLocal(proveedor)
+      } else {
+        setProvExistente(undefined)
       }
 
       const enriquecidos = await enriquecerConMapeos(productos)
@@ -210,7 +246,7 @@ export function FotoFacturaModal({ onAgregar, onClose }: FotoFacturaModalProps) 
     }
   }
 
-  // ── Actualizar campo de texto (nombre, cantidad, precio) ────────────────────
+  // ── Actualizar campo de texto ───────────────────────────────────────────────
   const actualizarCampo = (idx: number, campo: keyof ItemOCR, valor: string) => {
     setItems((prev) =>
       prev.map((item, i) => {
@@ -223,11 +259,9 @@ export function FotoFacturaModal({ onAgregar, onClose }: FotoFacturaModalProps) 
             (campo === 'precioUnitario' ? Number(valor) : item.precioUnitario)
           )
         }
-        // Si cambia el nombre, limpiar la asociación y recalcular sugerencias
         if (campo === 'nombreProducto') {
           actualizado.productoAsociado = null
           actualizado.vinoDeMapa = false
-          // Actualizar sugerencias async
           sugerirProducto(valor, 4).then((sugs) => {
             setItems((prev2) =>
               prev2.map((it, j) => j === i ? { ...it, sugerencias: sugs } : it)
@@ -250,12 +284,11 @@ export function FotoFacturaModal({ onAgregar, onClose }: FotoFacturaModalProps) 
     )
   }
 
-  // ── Actualizar query de búsqueda y recalcular sugerencias ───────────────────
+  // ── Actualizar query de búsqueda ────────────────────────────────────────────
   const handleQueryChange = (idx: number, q: string) => {
     setItems((prev) =>
       prev.map((item, i) => i === idx ? { ...item, queryBusqueda: q } : item)
     )
-    // Buscar sugerencias con el texto que está escribiendo
     const texto = q.trim() || items[idx]?.nombreProducto
     sugerirProducto(texto, 4).then((sugs) => {
       setItems((prev) =>
@@ -280,21 +313,21 @@ export function FotoFacturaModal({ onAgregar, onClose }: FotoFacturaModalProps) 
       (i) => i.seleccionado && i.nombreProducto && i.precioUnitario > 0
     )
 
-    // Guardar mapeos nuevos que el tendero quiso recordar
+    // Guardar mapeos nuevos
     await Promise.all(
       seleccionados
         .filter((i) => i.recordar && i.productoAsociado?.id !== undefined && !i.vinoDeMapa)
         .map((i) => guardarMapeo(i.nombreProducto, i.productoAsociado!.id!))
     )
 
-    // Incrementar vecesUsado para mapeos existentes que se volvieron a usar
+    // Incrementar vecesUsado para mapeos existentes
     await Promise.all(
       seleccionados
         .filter((i) => i.vinoDeMapa && i.productoAsociado?.id !== undefined)
         .map((i) => guardarMapeo(i.nombreProducto, i.productoAsociado!.id!))
     )
 
-    // Construir los ItemCompra para el modal padre
+    // Construir ItemCompra[]
     const itemsCompra: ItemCompra[] = seleccionados.map((i) => ({
       nombreProducto: i.productoAsociado?.nombre ?? i.nombreProducto,
       productoId:     i.productoAsociado?.id,
@@ -303,14 +336,31 @@ export function FotoFacturaModal({ onAgregar, onClose }: FotoFacturaModalProps) 
       subtotal:       i.subtotal,
     }))
 
-    onAgregar(itemsCompra)
+    // Resolver proveedor
+    let proveedorExtra: { id: number; nombre: string } | undefined
+
+    if (provExistente) {
+      // Ya existe en Dexie → pre-seleccionarlo
+      proveedorExtra = { id: provExistente.id!, nombre: provExistente.nombre }
+    } else if (crearProv && proveedorOCR) {
+      // Proveedor nuevo → crearlo en Dexie
+      const id = await crearProveedor(proveedorOCR.nombre, {
+        telefono: proveedorOCR.telefono ?? undefined,
+      })
+      proveedorExtra = { id, nombre: proveedorOCR.nombre }
+    }
+
+    // Notas con número de factura si se detectó
+    const notasFactura = facturaOCR?.numero ? `Factura #${facturaOCR.numero}` : undefined
+
+    onAgregar(itemsCompra, { proveedor: proveedorExtra, notasFactura })
     onClose()
   }
 
-  const seleccionados    = items.filter((i) => i.seleccionado)
+  const seleccionados      = items.filter((i) => i.seleccionado)
   const totalSeleccionados = seleccionados.reduce((s, i) => s + i.subtotal, 0)
-  const autoAsociados    = items.filter((i) => i.vinoDeMapa).length
-  const sinAsociar       = seleccionados.filter((i) => !i.productoAsociado).length
+  const autoAsociados      = items.filter((i) => i.vinoDeMapa).length
+  const sinAsociar         = seleccionados.filter((i) => !i.productoAsociado).length
 
   return (
     <div className="fixed inset-0 z-[60] flex flex-col bg-fondo">
@@ -326,19 +376,19 @@ export function FotoFacturaModal({ onAgregar, onClose }: FotoFacturaModalProps) 
           <h2 className="font-display font-bold text-texto text-base leading-tight">
             Foto de factura
           </h2>
-          <p className="text-xs text-suave">El sistema extrae y asocia los productos automáticamente</p>
+          <p className="text-xs text-suave">El sistema extrae proveedor y productos automáticamente</p>
         </div>
         {estado === 'resultados' && autoAsociados > 0 && (
           <span className="text-xs font-semibold text-exito bg-exito/10 px-2 py-1 rounded-lg flex items-center gap-1">
             <Link2 size={11} />
-            {autoAsociados} auto-asignado{autoAsociados > 1 ? 's' : ''}
+            {autoAsociados} auto
           </span>
         )}
       </div>
 
       <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-4">
 
-        {/* Banner: API key no configurada */}
+        {/* Banner: OCR no disponible */}
         {!OCR_DISPONIBLE && (
           <div className="flex items-start gap-3 bg-advertencia/10 border border-advertencia/40 rounded-xl p-3">
             <KeyRound size={16} className="text-advertencia shrink-0 mt-0.5" />
@@ -364,7 +414,7 @@ export function FotoFacturaModal({ onAgregar, onClose }: FotoFacturaModalProps) 
                     <Loader2 size={40} className="text-white animate-spin" />
                     <p className="text-white font-semibold text-sm">Procesando factura…</p>
                     <p className="text-white/70 text-xs text-center px-6">
-                      Comprimiendo imagen y leyendo productos con Claude Vision
+                      Extrayendo proveedor, número y productos con Claude Vision
                     </p>
                   </div>
                 )}
@@ -431,7 +481,7 @@ export function FotoFacturaModal({ onAgregar, onClose }: FotoFacturaModalProps) 
           </div>
         )}
 
-        {/* ── Resultados con mapeos ─────────────────────────────────────────── */}
+        {/* ── Resultados ───────────────────────────────────────────────────── */}
         {estado === 'resultados' && (
           <>
             {/* Mini preview */}
@@ -440,16 +490,11 @@ export function FotoFacturaModal({ onAgregar, onClose }: FotoFacturaModalProps) 
                 <img src={previewUrl} alt="Factura" className="w-14 h-14 object-cover rounded-lg shrink-0" />
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-semibold text-texto">{items.length} productos detectados</p>
-                  {autoAsociados > 0 && (
-                    <p className="text-xs text-exito font-medium flex items-center gap-1 mt-0.5">
-                      <Link2 size={11} />
-                      {autoAsociados} reconocido{autoAsociados > 1 ? 's' : ''} del historial
-                    </p>
+                  {facturaOCR?.numero && (
+                    <p className="text-xs text-suave mt-0.5">Factura #{facturaOCR.numero}</p>
                   )}
-                  {sinAsociar > 0 && (
-                    <p className="text-xs text-advertencia mt-0.5">
-                      {sinAsociar} sin asociar al catálogo
-                    </p>
+                  {facturaOCR?.fecha && (
+                    <p className="text-xs text-suave">{facturaOCR.fecha}</p>
                   )}
                 </div>
                 <button type="button" onClick={() => { setEstado('captura'); setItems([]) }}
@@ -459,14 +504,75 @@ export function FotoFacturaModal({ onAgregar, onClose }: FotoFacturaModalProps) 
               </div>
             )}
 
+            {/* Proveedor detectado */}
+            {proveedorOCR && (
+              <div className={[
+                'rounded-xl border p-3 flex flex-col gap-2',
+                provExistente
+                  ? 'bg-exito/5 border-exito/30'
+                  : 'bg-primario/5 border-primario/20',
+              ].join(' ')}>
+                {/* Cabecera */}
+                <div className="flex items-start gap-2">
+                  <Truck size={15} className={provExistente ? 'text-exito shrink-0 mt-0.5' : 'text-primario shrink-0 mt-0.5'} />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-semibold text-suave uppercase tracking-wide mb-0.5">
+                      {provExistente ? '✅ Proveedor ya registrado' : '📦 Proveedor detectado'}
+                    </p>
+                    <p className="text-sm font-bold text-texto truncate">{proveedorOCR.nombre}</p>
+                    {(proveedorOCR.nit || proveedorOCR.telefono) && (
+                      <p className="text-xs text-suave mt-0.5 flex flex-wrap gap-x-3">
+                        {proveedorOCR.nit && <span>NIT: {proveedorOCR.nit}</span>}
+                        {proveedorOCR.telefono && <span>Tel: {proveedorOCR.telefono}</span>}
+                      </p>
+                    )}
+                    {provExistente && (
+                      <p className="text-xs text-exito font-medium mt-0.5">{provExistente.nombre}</p>
+                    )}
+                  </div>
+                </div>
+
+                {/* Checkbox crear/actualizar */}
+                {!provExistente && (
+                  <label className="flex items-center gap-2 cursor-pointer pt-1 border-t border-primario/10">
+                    <div
+                      onClick={() => setCrearProv((v) => !v)}
+                      className={[
+                        'w-5 h-5 rounded border-2 shrink-0 flex items-center justify-center transition-colors cursor-pointer',
+                        crearProv ? 'bg-primario border-primario' : 'border-borde',
+                      ].join(' ')}
+                    >
+                      {crearProv && <CheckCircle2 size={12} className="text-white" />}
+                    </div>
+                    <span className="text-xs text-texto flex items-center gap-1">
+                      <Plus size={11} className="text-primario" />
+                      Crear este proveedor automáticamente
+                    </span>
+                  </label>
+                )}
+              </div>
+            )}
+
             {/* Lista de ítems */}
             <div className="bg-white rounded-xl border border-borde overflow-hidden">
               <div className="px-4 py-2.5 border-b border-borde/50 flex items-center">
-                <span className="text-sm font-semibold text-texto flex-1">Productos extraídos</span>
+                <span className="text-sm font-semibold text-texto flex-1">
+                  Productos extraídos
+                  {autoAsociados > 0 && (
+                    <span className="ml-2 text-xs font-normal text-exito">
+                      · {autoAsociados} reconocido{autoAsociados > 1 ? 's' : ''}
+                    </span>
+                  )}
+                  {sinAsociar > 0 && (
+                    <span className="ml-2 text-xs font-normal text-advertencia">
+                      · {sinAsociar} sin asociar
+                    </span>
+                  )}
+                </span>
                 <button type="button"
                   onClick={() => setItems((prev) => prev.map((i) => ({ ...i, seleccionado: true })))}
                   className="text-xs text-primario hover:underline">
-                  Seleccionar todos
+                  Todos
                 </button>
               </div>
 
@@ -474,7 +580,7 @@ export function FotoFacturaModal({ onAgregar, onClose }: FotoFacturaModalProps) 
                 {items.map((item, idx) => (
                   <div key={idx} className={['p-3 flex gap-3 transition-colors', item.seleccionado ? '' : 'opacity-50'].join(' ')}>
 
-                    {/* Checkbox selección */}
+                    {/* Checkbox */}
                     <button type="button" onClick={() => toggleSeleccion(idx)}
                       className={[
                         'w-5 h-5 rounded border-2 shrink-0 mt-1 flex items-center justify-center transition-colors',
@@ -483,9 +589,8 @@ export function FotoFacturaModal({ onAgregar, onClose }: FotoFacturaModalProps) 
                       {item.seleccionado && <CheckCircle2 size={12} className="text-white" />}
                     </button>
 
-                    {/* Contenido */}
                     <div className="flex-1 flex flex-col gap-1.5 min-w-0">
-                      {/* Nombre OCR (editable) */}
+                      {/* Nombre editable */}
                       <input type="text" value={item.nombreProducto}
                         onChange={(e) => actualizarCampo(idx, 'nombreProducto', e.target.value)}
                         className="w-full h-9 px-2.5 border border-borde rounded-lg text-sm text-texto
@@ -540,7 +645,6 @@ export function FotoFacturaModal({ onAgregar, onClose }: FotoFacturaModalProps) 
                         </button>
                       )}
 
-                      {/* Buscador de catálogo */}
                       {item.busquedaAbierta && !item.productoAsociado && (
                         <BuscadorAsociacion
                           item={item}
@@ -550,7 +654,6 @@ export function FotoFacturaModal({ onAgregar, onClose }: FotoFacturaModalProps) 
                         />
                       )}
 
-                      {/* Checkbox "Recordar asociación" */}
                       {item.productoAsociado && !item.vinoDeMapa && (
                         <label className="flex items-center gap-2 cursor-pointer mt-0.5">
                           <input type="checkbox" checked={item.recordar}

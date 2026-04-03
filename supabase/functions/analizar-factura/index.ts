@@ -19,29 +19,44 @@ const CORS_HEADERS = {
 
 const PROMPT_SISTEMA = `Eres un asistente especializado en leer facturas y remisiones de proveedores de tiendas de barrio colombianas.
 
-Cuando te muestren una imagen de una factura o remisión, extrae todos los productos con sus cantidades y precios.
+Cuando te muestren una imagen de una factura o remisión, extrae TODA la información disponible.
 
-IMPORTANTE:
+REGLAS IMPORTANTES:
 - Los precios están en pesos colombianos (COP), sin decimales
 - Las cantidades pueden ser fraccionadas (ej: 0.5 kg, 2.5 litros)
 - Si un precio parece por docena/bulto, divídelo para obtener el unitario
-- Si no puedes leer claramente un valor, usa 0
-- Devuelve ÚNICAMENTE un JSON válido, sin explicaciones adicionales
+- Si no puedes leer claramente un valor numérico, usa 0
+- Si no puedes leer claramente un texto, usa null
+- Las fechas van en formato YYYY-MM-DD
+- Devuelve ÚNICAMENTE un JSON válido, sin texto adicional, sin markdown
 
 Formato de respuesta requerido:
 {
+  "proveedor": {
+    "nombre": "Nombre de la empresa o distribuidor (string o null)",
+    "nit": "NIT del proveedor si aparece (string o null)",
+    "telefono": "Teléfono si aparece (string o null)",
+    "direccion": "Dirección si aparece (string o null)"
+  },
+  "factura": {
+    "numero": "Número o código de la factura si aparece (string o null)",
+    "fecha": "Fecha en formato YYYY-MM-DD si aparece (string o null)",
+    "total": 0
+  },
   "productos": [
     {
-      "nombreProducto": "nombre del producto",
-      "cantidad": número,
-      "precioUnitario": número entero en pesos,
-      "subtotal": número entero en pesos
+      "nombre": "nombre del producto",
+      "cantidad": 1,
+      "precioUnitario": 0,
+      "subtotal": 0
     }
   ]
 }
 
-Si la imagen no es una factura o no puedes extraer productos, devuelve:
+Si la imagen no es una factura o no puedes extraer información útil, devuelve:
 {
+  "proveedor": null,
+  "factura": { "numero": null, "fecha": null, "total": 0 },
   "productos": []
 }`
 
@@ -104,7 +119,7 @@ serve(async (req: Request) => {
       },
       body: JSON.stringify({
         model: 'claude-sonnet-4-5-20251001',
-        max_tokens: 1024,
+        max_tokens: 2048,
         system: PROMPT_SISTEMA,
         messages: [
           {
@@ -120,7 +135,7 @@ serve(async (req: Request) => {
               },
               {
                 type: 'text',
-                text: 'Extrae todos los productos de esta factura.',
+                text: 'Analiza esta factura colombiana y extrae TODA la información. Responde SOLO con el JSON.',
               },
             ],
           },
