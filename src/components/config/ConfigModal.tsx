@@ -2,20 +2,13 @@ import { useEffect, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
-import { X, Store, Phone, MapPin, FileText, Receipt, BookOpen, Users, Send, CheckCircle, UserX, Loader2, Sun, Moon, Monitor, Printer, Bluetooth, BluetoothOff, CheckCircle2, Plus, Pencil, Bell, BellOff, ShieldCheck } from 'lucide-react'
+import { X, Store, Phone, MapPin, FileText, Receipt, BookOpen, Users, Send, CheckCircle, UserX, Loader2, Sun, Moon, Monitor, Plus, Pencil, Bell, BellOff, ShieldCheck } from 'lucide-react'
 import { useConfig, guardarConfig } from '../../hooks/useConfig'
 import { supabase, supabaseConfigurado } from '../../lib/supabase'
 import { useAuthStore } from '../../stores/authStore'
 import { ConfirmDialog } from '../shared/ConfirmDialog'
 import { useThemeStore, type Tema } from '../../stores/themeStore'
-import {
-  bluetoothDisponible,
-  obtenerNombreImpresora,
-  impresoraConectada,
-  conectarImpresora,
-  desconectarImpresora,
-  imprimirPrueba,
-} from '../../lib/impresora'
+import { ConfigImpresora } from './ConfigImpresora'
 import {
   crearTiendaNueva,
   renombrarTienda,
@@ -493,188 +486,7 @@ function SeccionMisTiendas({ onClose }: { onClose: () => void }) {
   )
 }
 
-// ─── Sección impresora Bluetooth (solo dueño) ─────────────────────────────────
-
-function SeccionImpresora() {
-  const usuario = useAuthStore((s) => s.usuario)
-
-  const [nombreGuardado,  setNombreGuardado]  = useState<string | null>(() => obtenerNombreImpresora())
-  const [conectado,       setConectado]       = useState<boolean>(() => impresoraConectada())
-  const [accion,          setAccion]          = useState<'idle' | 'conectando' | 'probando' | 'ok' | 'error'>('idle')
-  const [mensajeAccion,   setMensajeAccion]   = useState<string | null>(null)
-
-  // Solo visible para dueño
-  if (usuario?.rol !== 'dueno') return null
-
-  const btDisponible = bluetoothDisponible()
-
-  const handleConectar = async () => {
-    setAccion('conectando')
-    setMensajeAccion(null)
-    try {
-      const { nombre } = await conectarImpresora()
-      setNombreGuardado(nombre)
-      setConectado(true)
-      setAccion('ok')
-      setMensajeAccion(`Conectado a: ${nombre}`)
-    } catch (err) {
-      setAccion('error')
-      setMensajeAccion(err instanceof Error ? err.message : 'Error al conectar')
-    }
-  }
-
-  const handlePrueba = async () => {
-    setAccion('probando')
-    setMensajeAccion(null)
-    try {
-      await imprimirPrueba()
-      setAccion('ok')
-      setMensajeAccion('Recibo de prueba enviado.')
-    } catch (err) {
-      setAccion('error')
-      setMensajeAccion(err instanceof Error ? err.message : 'Error al imprimir')
-    }
-  }
-
-  const handleDesconectar = () => {
-    desconectarImpresora()
-    setNombreGuardado(null)
-    setConectado(false)
-    setAccion('idle')
-    setMensajeAccion(null)
-  }
-
-  const ocupado = accion === 'conectando' || accion === 'probando'
-
-  return (
-    <section>
-      <p className="text-xs font-semibold text-suave uppercase tracking-wider mb-3 flex items-center gap-1.5">
-        <Printer size={13} />
-        Impresora Bluetooth
-      </p>
-
-      {!btDisponible ? (
-        /* Navegador incompatible */
-        <div className="bg-fondo rounded-xl border border-borde p-4 flex items-start gap-3">
-          <BluetoothOff size={18} className="text-suave shrink-0 mt-0.5" />
-          <p className="text-sm text-suave leading-relaxed">
-            La impresión Bluetooth funciona en{' '}
-            <span className="font-semibold text-texto">Chrome para Android</span>.
-            En iPhone use el botón de WhatsApp para compartir el recibo.
-          </p>
-        </div>
-      ) : (
-        <div className="bg-fondo rounded-xl border border-borde overflow-hidden">
-
-          {/* Estado actual */}
-          <div className="flex items-center gap-3 px-4 py-3 border-b border-borde/50">
-            <div className={[
-              'w-8 h-8 rounded-full flex items-center justify-center shrink-0',
-              conectado ? 'bg-exito/15 text-exito' : 'bg-gray-100 text-suave',
-            ].join(' ')}>
-              <Bluetooth size={15} />
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium text-texto">
-                {conectado && nombreGuardado ? nombreGuardado : 'Sin impresora'}
-              </p>
-              <p className="text-xs text-suave">
-                {conectado ? 'Conectada en esta sesión' : nombreGuardado ? `Última: ${nombreGuardado}` : 'No configurada'}
-              </p>
-            </div>
-            {conectado && (
-              <span className="text-[10px] font-bold text-exito bg-exito/10 px-2 py-0.5 rounded-full shrink-0">
-                ONLINE
-              </span>
-            )}
-          </div>
-
-          {/* Botones de acción */}
-          <div className="p-3 flex flex-col gap-2">
-            {/* Buscar / Reconectar */}
-            <button
-              type="button"
-              onClick={handleConectar}
-              disabled={ocupado}
-              className="w-full h-10 bg-gray-900 text-white rounded-xl text-sm font-semibold
-                         flex items-center justify-center gap-2
-                         hover:bg-gray-800 active:scale-95 transition-all
-                         disabled:opacity-40 disabled:cursor-not-allowed"
-            >
-              {accion === 'conectando' ? (
-                <Loader2 size={15} className="animate-spin" />
-              ) : (
-                <Bluetooth size={15} />
-              )}
-              {accion === 'conectando'
-                ? 'Buscando…'
-                : conectado
-                  ? 'Cambiar impresora'
-                  : 'Buscar impresora Bluetooth'}
-            </button>
-
-            {/* Recibo de prueba — solo si está conectada */}
-            {conectado && (
-              <button
-                type="button"
-                onClick={handlePrueba}
-                disabled={ocupado}
-                className="w-full h-10 bg-primario/10 text-primario border border-primario/25
-                           rounded-xl text-sm font-semibold flex items-center justify-center gap-2
-                           hover:bg-primario/15 active:scale-95 transition-all
-                           disabled:opacity-40 disabled:cursor-not-allowed"
-              >
-                {accion === 'probando' ? (
-                  <Loader2 size={15} className="animate-spin" />
-                ) : (
-                  <Printer size={15} />
-                )}
-                {accion === 'probando' ? 'Imprimiendo…' : 'Imprimir recibo de prueba'}
-              </button>
-            )}
-
-            {/* Desconectar — solo si hay algo guardado */}
-            {(nombreGuardado || conectado) && (
-              <button
-                type="button"
-                onClick={handleDesconectar}
-                disabled={ocupado}
-                className="w-full h-10 text-peligro border border-peligro/25 rounded-xl text-sm
-                           font-semibold flex items-center justify-center gap-2
-                           hover:bg-peligro/5 active:scale-95 transition-all
-                           disabled:opacity-40 disabled:cursor-not-allowed"
-              >
-                <BluetoothOff size={15} />
-                Desconectar
-              </button>
-            )}
-          </div>
-
-          {/* Resultado de la última acción */}
-          {mensajeAccion && (
-            <div className={[
-              'mx-3 mb-3 px-3 py-2 rounded-lg text-xs flex items-start gap-2',
-              accion === 'error'
-                ? 'bg-peligro/8 text-peligro border border-peligro/20'
-                : 'bg-exito/8 text-exito border border-exito/20',
-            ].join(' ')}>
-              {accion === 'error'
-                ? <BluetoothOff size={13} className="shrink-0 mt-0.5" />
-                : <CheckCircle2 size={13} className="shrink-0 mt-0.5" />}
-              <span className="leading-snug">{mensajeAccion}</span>
-            </div>
-          )}
-
-          {/* Nota de compatibilidad */}
-          <p className="px-4 pb-3 text-[11px] text-suave/70 leading-snug">
-            Compatible con impresoras termicas de 58mm (Xprinter, POS-5805DD, Rongta y similares).
-            Requiere Chrome para Android.
-          </p>
-        </div>
-      )}
-    </section>
-  )
-}
+// SeccionImpresora: ahora vive en ./ConfigImpresora.tsx
 
 // ─── Sección de notificaciones (solo dueño) ───────────────────────────────────
 
@@ -1224,7 +1036,7 @@ export function ConfigModal({ onClose, onReiniciarTour }: ConfigModalProps) {
             <SeccionMisTiendas onClose={onClose} />
 
             {/* Impresora Bluetooth (solo dueño) */}
-            <SeccionImpresora />
+            <ConfigImpresora />
 
             {/* Notificaciones push (solo dueño) */}
             <SeccionNotificaciones

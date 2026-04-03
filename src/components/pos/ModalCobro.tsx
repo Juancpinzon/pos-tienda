@@ -341,43 +341,60 @@ function PantallaExito({
             📄 Ver nota de venta ({consecutivoNota})
           </button>
 
-          {/* Botón de impresión — solo si Web Bluetooth disponible */}
+          {/* Impresión Bluetooth */}
           {bluetoothDisponible() ? (
-            <div className="flex flex-col gap-1.5">
+            nombreImpresora ? (
+              /* ── Impresora configurada → botón PRIMARIO ── */
+              <div className="flex flex-col gap-1.5">
+                <button
+                  type="button"
+                  onClick={handleImprimir}
+                  disabled={ocupado || estadoImpresion === 'ok'}
+                  className={[
+                    'w-full h-12 rounded-xl font-display font-bold text-base flex items-center justify-center gap-2',
+                    'active:scale-95 transition-all disabled:cursor-not-allowed',
+                    estadoImpresion === 'ok'
+                      ? 'bg-exito/10 text-exito border border-exito/30'
+                      : 'bg-gray-900 text-white hover:bg-gray-800 disabled:opacity-50',
+                  ].join(' ')}
+                >
+                  {ocupado ? (
+                    <div className="w-5 h-5 border-2 border-white/40 border-t-white rounded-full animate-spin" />
+                  ) : estadoImpresion === 'ok' ? (
+                    <CheckCircle2 size={20} />
+                  ) : (
+                    <Printer size={20} />
+                  )}
+                  {estadoImpresion === 'conectando'  ? 'Conectando…'
+                    : estadoImpresion === 'imprimiendo' ? 'Imprimiendo…'
+                    : estadoImpresion === 'ok'          ? '¡Recibo impreso!'
+                    : '🖨️ Imprimir recibo'}
+                </button>
+                {estadoImpresion !== 'ok' && (
+                  <p className="text-center text-xs text-suave">🖨️ {nombreImpresora}</p>
+                )}
+                {estadoImpresion === 'error' && errorImpresion && (
+                  <p className="text-center text-xs text-peligro leading-snug px-1">{errorImpresion}</p>
+                )}
+              </div>
+            ) : (
+              /* ── Sin impresora configurada → botón SECUNDARIO ── */
               <button
                 type="button"
                 onClick={handleImprimir}
-                disabled={ocupado || estadoImpresion === 'ok'}
-                className={[
-                  'w-full h-11 rounded-xl font-semibold flex items-center justify-center gap-2',
-                  'active:scale-95 transition-all disabled:cursor-not-allowed',
-                  estadoImpresion === 'ok'
-                    ? 'bg-exito/10 text-exito border border-exito/30'
-                    : 'bg-gray-900 text-white hover:bg-gray-800 disabled:opacity-50',
-                ].join(' ')}
+                disabled={ocupado}
+                className="w-full h-10 border border-borde text-texto rounded-xl text-sm font-semibold
+                           flex items-center justify-center gap-2
+                           hover:bg-fondo active:scale-95 transition-all disabled:opacity-40"
               >
                 {ocupado ? (
-                  <div className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />
-                ) : estadoImpresion === 'ok' ? (
-                  <CheckCircle2 size={16} />
-                ) : nombreImpresora ? (
-                  <Printer size={18} />
+                  <div className="w-4 h-4 border-2 border-texto/20 border-t-texto/60 rounded-full animate-spin" />
                 ) : (
-                  <Settings size={18} />
+                  <Settings size={15} />
                 )}
-                {labelImprimir()}
+                {ocupado ? 'Buscando impresora…' : '⚙️ Configurar impresora'}
               </button>
-              {/* Nombre de impresora conectada */}
-              {nombreImpresora && estadoImpresion !== 'ok' && (
-                <p className="text-center text-xs text-suave">🖨️ {nombreImpresora}</p>
-              )}
-              {/* Error de impresión */}
-              {estadoImpresion === 'error' && errorImpresion && (
-                <p className="text-center text-xs text-peligro leading-snug px-1">
-                  {errorImpresion}
-                </p>
-              )}
-            </div>
+            )
           ) : (
             /* Mensaje iOS / navegador incompatible */
             <div className="flex items-start gap-2 bg-gray-50 border border-borde rounded-xl px-3 py-2.5">
