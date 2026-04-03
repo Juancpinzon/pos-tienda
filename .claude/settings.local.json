@@ -22,7 +22,9 @@
       "Bash(node -e \"const p = require\\(''./node_modules/@zxing/library/package.json''\\); console.log\\(''zxing version:'', p.version\\)\")",
       "Bash(node -e \"const lib = require\\(''./node_modules/@zxing/library''\\); console.log\\(''exports:'', Object.keys\\(lib\\).filter\\(k => k.includes\\(''Reader''\\) || k.includes\\(''Format''\\) || k.includes\\(''Exception''\\) || k.includes\\(''Not''\\)\\).slice\\(0,20\\)\\)\")",
       "Bash(node -e \"const p = require\\(''./node_modules/vite/package.json''\\); console.log\\(''vite:'', p.version\\)\")",
-      "Bash(npx supabase:*)"
+      "Bash(npx supabase:*)",
+      "mcp__03e5ad9d-1d09-477d-9143-5b04085e2400__execute_sql",
+      "mcp__03e5ad9d-1d09-477d-9143-5b04085e2400__apply_migration"
     ]
   }
 }
