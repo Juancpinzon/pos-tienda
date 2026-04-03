@@ -75,7 +75,7 @@ function Campo({
 
 // ─── Tipos internos ───────────────────────────────────────────────────────────
 
-interface EmpleadoRow { id: string; nombre: string; email: string }
+interface EmpleadoRow { id: string; nombre: string; email: string; rol?: string }
 
 // ─── Sección de equipo (solo dueño + Supabase) ────────────────────────────────
 
@@ -85,6 +85,7 @@ function SeccionEquipo() {
   // Formulario de nuevo empleado
   const [emailEmpleado,  setEmailEmpleado]  = useState('')
   const [nombreEmpleado, setNombreEmpleado] = useState('')
+  const [rolNuevo,       setRolNuevo]       = useState<'encargado' | 'empleado'>('empleado')
   const [cargando,       setCargando]       = useState(false)
   const [resultado,      setResultado]      = useState<{ ok: boolean; msg: string } | null>(null)
 
@@ -96,15 +97,15 @@ function SeccionEquipo() {
 
   if (!supabaseConfigurado || usuario?.rol !== 'dueno') return null
 
-  // Cargar lista de empleados
+  // Cargar lista de empleados (encargados + cajeros)
   const cargarEmpleados = async () => {
     if (!usuario?.tiendaId) return
     setCargandoLista(true)
     const { data } = await supabase
       .from('usuarios')
-      .select('id, nombre, email')
+      .select('id, nombre, email, rol')
       .eq('tienda_id', usuario.tiendaId)
-      .eq('rol', 'empleado')
+      .in('rol', ['encargado', 'empleado'])
       .order('nombre')
     setEmpleados((data as EmpleadoRow[]) ?? [])
     setCargandoLista(false)
@@ -156,7 +157,7 @@ function SeccionEquipo() {
         tienda_id: usuario.tiendaId,
         email:     emailEmpleado.trim().toLowerCase(),
         nombre:    nombreEmpleado.trim(),
-        rol:       'empleado',
+        rol:       rolNuevo,
       })
 
       if (usuarioError) {
@@ -201,7 +202,17 @@ function SeccionEquipo() {
                 <span className="text-sm font-bold text-sky-600">{emp.nombre.charAt(0).toUpperCase()}</span>
               </div>
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-semibold text-texto truncate">{emp.nombre}</p>
+                <div className="flex items-center gap-1.5">
+                  <p className="text-sm font-semibold text-texto truncate">{emp.nombre}</p>
+                  <span className={[
+                    'text-[10px] font-bold px-1.5 py-0.5 rounded shrink-0',
+                    emp.rol === 'encargado'
+                      ? 'bg-cyan-100 text-cyan-700'
+                      : 'bg-sky-100 text-sky-600',
+                  ].join(' ')}>
+                    {emp.rol === 'encargado' ? 'Encargado' : 'Cajero'}
+                  </span>
+                </div>
                 <p className="text-xs text-suave truncate">{emp.email}</p>
               </div>
               <button
@@ -226,9 +237,9 @@ function SeccionEquipo() {
       {/* Formulario agregar empleado */}
       <div className="bg-fondo rounded-xl border border-borde p-4 flex flex-col gap-3">
         <div>
-          <p className="text-sm text-texto font-medium">Agregar empleado</p>
+          <p className="text-sm text-texto font-medium">Agregar miembro del equipo</p>
           <p className="text-xs text-suave mt-0.5">
-            Solo puede usar POS y Fiados. Sin acceso a Caja, Reportes ni Configuración.
+            Encargado: caja, compras, productos, reportes básicos. Cajero: solo POS y fiados.
           </p>
         </div>
         <form onSubmit={handleInvitar} className="flex flex-col gap-2.5">
@@ -236,7 +247,7 @@ function SeccionEquipo() {
             type="text"
             value={nombreEmpleado}
             onChange={(e) => setNombreEmpleado(e.target.value)}
-            placeholder="Nombre del empleado"
+            placeholder="Nombre"
             required
             maxLength={60}
             className={INPUT_CLS}
@@ -245,10 +256,30 @@ function SeccionEquipo() {
             type="email"
             value={emailEmpleado}
             onChange={(e) => setEmailEmpleado(e.target.value)}
-            placeholder="Correo del empleado"
+            placeholder="Correo"
             required
             className={INPUT_CLS}
           />
+          {/* Selector de rol */}
+          <div className="grid grid-cols-2 gap-2">
+            {(['encargado', 'empleado'] as const).map((r) => (
+              <button
+                key={r}
+                type="button"
+                onClick={() => setRolNuevo(r)}
+                className={[
+                  'h-10 rounded-xl border text-sm font-semibold transition-all',
+                  rolNuevo === r
+                    ? r === 'encargado'
+                      ? 'bg-cyan-500/15 text-cyan-700 border-cyan-400/40'
+                      : 'bg-sky-500/15 text-sky-700 border-sky-400/40'
+                    : 'text-suave border-borde hover:border-primario/40',
+                ].join(' ')}
+              >
+                {r === 'encargado' ? '🔑 Encargado' : '👤 Cajero'}
+              </button>
+            ))}
+          </div>
           <button
             type="submit"
             disabled={cargando || !emailEmpleado || !nombreEmpleado}

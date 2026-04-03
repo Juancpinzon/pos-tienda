@@ -2,7 +2,7 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 
-export type RolUsuario = 'dueno' | 'empleado'
+export type RolUsuario = 'dueno' | 'encargado' | 'empleado'
 
 export interface TiendaResumen {
   id:     string
@@ -54,8 +54,9 @@ export const useAuthStore = create<AuthState>()(
 
 /** Rutas permitidas para cada rol */
 export const RUTAS_POR_ROL: Record<RolUsuario, string[]> = {
-  dueno:    ['/', '/fiados', '/productos', '/inventario', '/proveedores', '/caja', '/reportes', '/multi-tienda'],
-  empleado: ['/', '/fiados'],
+  dueno:     ['/', '/fiados', '/productos', '/inventario', '/proveedores', '/caja', '/reportes', '/historial', '/pedido', '/multi-tienda'],
+  encargado: ['/', '/fiados', '/productos', '/proveedores', '/caja', '/reportes', '/historial', '/pedido'],
+  empleado:  ['/', '/fiados', '/historial'],
 }
 
 export function puedeAcceder(rol: RolUsuario, ruta: string): boolean {

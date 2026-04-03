@@ -24,7 +24,7 @@ import ListaPedidoPage from './pages/ListaPedidoPage'
 import LoginPage from './pages/LoginPage'
 import RegisterPage from './pages/RegisterPage'
 import { formatCOP } from './utils/moneda'
-import { useAuthStore, puedeAcceder, type TiendaResumen } from './stores/authStore'
+import { useAuthStore, puedeAcceder, type TiendaResumen, type RolUsuario } from './stores/authStore'
 import { supabase, supabaseConfigurado } from './lib/supabase'
 import { startAutoSync, stopAutoSync, pullFromSupabase } from './lib/sync'
 import { cargarTiendasDueno, registrarPropietarioTienda, cambiarTiendaActiva } from './hooks/useTiendasDueno'
@@ -213,9 +213,11 @@ function HeaderDia({ onAbrirConfig }: { onAbrirConfig: () => void }) {
             'text-xs font-bold px-2 py-0.5 rounded-md',
             usuario.rol === 'dueno'
               ? 'bg-acento/25 text-acento'
-              : 'bg-sky-400/20 text-sky-300',
+              : usuario.rol === 'encargado'
+                ? 'bg-cyan-400/20 text-cyan-300'
+                : 'bg-sky-400/20 text-sky-300',
           ].join(' ')}>
-            {usuario.rol === 'dueno' ? '👑 Dueño' : '👤 Empleado'}
+            {usuario.rol === 'dueno' ? '👑 Dueño' : usuario.rol === 'encargado' ? '🔑 Encargado' : '👤 Empleado'}
           </span>
         )}
 
@@ -332,7 +334,7 @@ export default function App() {
           id:           perfil.id as string,
           email:        perfil.email as string,
           nombre:       perfil.nombre as string,
-          rol:          perfil.rol as 'dueno' | 'empleado',
+          rol:          perfil.rol as RolUsuario,
           tiendaId:     perfil.tienda_id as string,
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           nombreTienda: (perfil.tiendas as any)?.nombre ?? 'Mi Tienda',
@@ -440,15 +442,15 @@ function AppLayout({ primerUso }: { primerUso: boolean }) {
 
   // Items de navegación filtrados según el rol
   const navItemsTodos = [
-    { to: '/',              icon: ShoppingCart, label: 'POS',       badge: false,           tourId: undefined,    roles: ['dueno', 'empleado'] },
-    { to: '/fiados',        icon: BookOpen,     label: 'Fiados',    badge: false,           tourId: 'nav-fiados', roles: ['dueno', 'empleado'] },
-    { to: '/productos',     icon: Package,      label: 'Productos', badge: hayBajoStock,    tourId: undefined,    roles: ['dueno']             },
-    { to: '/inventario',    icon: Archive,      label: 'Stock',     badge: hayBajoStock,    tourId: undefined,    roles: ['dueno']             },
-    { to: '/proveedores',   icon: Truck,        label: 'Proveed.',  badge: false,           tourId: undefined,    roles: ['dueno']             },
-    { to: '/caja',          icon: DollarSign,   label: 'Caja',      badge: sinCaja,         tourId: 'nav-caja',   roles: ['dueno']             },
-    { to: '/reportes',      icon: BarChart2,    label: 'Reportes',  badge: false,           tourId: undefined,    roles: ['dueno']             },
-    { to: '/historial',     icon: Receipt,      label: 'Historial', badge: false,           tourId: undefined,    roles: ['dueno', 'empleado'] },
-    { to: '/pedido',        icon: ClipboardList, label: 'Pedido',   badge: false,           tourId: undefined,    roles: ['dueno']             },
+    { to: '/',              icon: ShoppingCart,  label: 'POS',       badge: false,        tourId: undefined,    roles: ['dueno', 'encargado', 'empleado'] },
+    { to: '/fiados',        icon: BookOpen,      label: 'Fiados',    badge: false,        tourId: 'nav-fiados', roles: ['dueno', 'encargado', 'empleado'] },
+    { to: '/productos',     icon: Package,       label: 'Productos', badge: hayBajoStock, tourId: undefined,    roles: ['dueno', 'encargado']             },
+    { to: '/inventario',    icon: Archive,       label: 'Stock',     badge: hayBajoStock, tourId: undefined,    roles: ['dueno']                          },
+    { to: '/proveedores',   icon: Truck,         label: 'Proveed.',  badge: false,        tourId: undefined,    roles: ['dueno', 'encargado']             },
+    { to: '/caja',          icon: DollarSign,    label: 'Caja',      badge: sinCaja,      tourId: 'nav-caja',   roles: ['dueno', 'encargado']             },
+    { to: '/reportes',      icon: BarChart2,     label: 'Reportes',  badge: false,        tourId: undefined,    roles: ['dueno', 'encargado']             },
+    { to: '/historial',     icon: Receipt,       label: 'Historial', badge: false,        tourId: undefined,    roles: ['dueno', 'encargado', 'empleado'] },
+    { to: '/pedido',        icon: ClipboardList, label: 'Pedido',    badge: false,        tourId: undefined,    roles: ['dueno', 'encargado']             },
     // Multi-tienda: solo si el dueño tiene 2+ tiendas en Supabase
     ...(tieneMultitienda
       ? [{ to: '/multi-tienda', icon: Store, label: 'Tiendas', badge: false, tourId: undefined, roles: ['dueno'] }]

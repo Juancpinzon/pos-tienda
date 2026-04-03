@@ -6,6 +6,7 @@ import { X, Package, ChevronDown, ScanBarcode } from 'lucide-react'
 import { useCategorias, crearProducto, editarProducto } from '../../hooks/useProductos'
 import type { Producto } from '../../db/schema'
 import { EscanerCodigoBarras } from '../pos/EscanerCodigoBarras'
+import { useAuthStore } from '../../stores/authStore'
 
 // ─── Schema de validación ─────────────────────────────────────────────────────
 
@@ -84,6 +85,8 @@ const SELECT_CLS =
 export function FormProducto({ producto, nombrePreset, codigoBarrasPreset, onClose, onGuardado }: FormProductoProps) {
   const categorias = useCategorias()
   const esEdicion = producto !== null && producto !== undefined
+  const usuario = useAuthStore((s) => s.usuario)
+  const verCostos = !usuario || usuario.rol === 'dueno'
 
   const {
     register,
@@ -232,19 +235,21 @@ export function FormProducto({ producto, nombrePreset, codigoBarrasPreset, onClo
             </div>
 
             {/* Precio compra + Código de barras (row) */}
-            <div className="grid grid-cols-2 gap-3">
-              <Campo label="Precio de compra" error={errors.precioCompra?.message}>
-                <div className="relative">
-                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-suave text-sm font-medium">$</span>
-                  <input
-                    {...register('precioCompra')}
-                    type="number"
-                    min={0}
-                    placeholder="Opcional"
-                    className={`${INPUT_CLS} pl-7 moneda`}
-                  />
-                </div>
-              </Campo>
+            <div className={verCostos ? 'grid grid-cols-2 gap-3' : ''}>
+              {verCostos && (
+                <Campo label="Precio de compra" error={errors.precioCompra?.message}>
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-suave text-sm font-medium">$</span>
+                    <input
+                      {...register('precioCompra')}
+                      type="number"
+                      min={0}
+                      placeholder="Opcional"
+                      className={`${INPUT_CLS} pl-7 moneda`}
+                    />
+                  </div>
+                </Campo>
+              )}
 
               <Campo label="Código de barras" error={errors.codigoBarras?.message}>
                 <div className="relative flex gap-1.5">
@@ -267,8 +272,8 @@ export function FormProducto({ producto, nombrePreset, codigoBarrasPreset, onClo
               </Campo>
             </div>
 
-            {/* ── Calculadora de precio sugerido ─────────────────────────── */}
-            {pvSugerido > 0 && (
+            {/* ── Calculadora de precio sugerido — solo para dueño ────────── */}
+            {verCostos && pvSugerido > 0 && (
               <div data-tour="calculadora-precio" className="bg-primario/5 border border-primario/20 rounded-xl p-3 flex flex-col gap-3">
 
                 {/* Fila 1: label + input utilidad */}

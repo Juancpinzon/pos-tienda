@@ -5,6 +5,8 @@ import { db } from '../db/database'
 import { formatCOP } from '../utils/moneda'
 import { getBucketMora } from '../hooks/useFiados'
 import { DashboardUtilidadNeta } from '../components/reportes/DashboardUtilidadNeta'
+import { AsistenteIA } from '../components/reportes/AsistenteIA'
+import { useAuthStore } from '../stores/authStore'
 import type { Cliente } from '../db/schema'
 
 // ─── Tipos de período ─────────────────────────────────────────────────────────
@@ -29,6 +31,8 @@ function inicioDePerido(periodo: Periodo): Date {
 // ─── Componente principal ─────────────────────────────────────────────────────
 
 export default function ReportesPage() {
+  const usuario = useAuthStore((s) => s.usuario)
+  const esDueno = !usuario || usuario.rol === 'dueno'
   const [periodo, setPeriodo] = useState<Periodo>('hoy')
 
   const inicio = useMemo(() => inicioDePerido(periodo), [periodo])
@@ -267,7 +271,7 @@ export default function ReportesPage() {
           </div>
 
           {/* Dashboard de Utilidad Neta — solo para dueño */}
-          <DashboardUtilidadNeta inicio={inicio} />
+          {esDueno && <DashboardUtilidadNeta inicio={inicio} />}
 
           {/* Métricas principales */}
           {datos ? (
@@ -361,8 +365,8 @@ export default function ReportesPage() {
             </div>
           )}
 
-          {/* Margen promedio del período */}
-          {margenPeriodo !== undefined && margenPeriodo !== null && (
+          {/* Margen promedio del período — solo para dueño */}
+          {esDueno && margenPeriodo !== undefined && margenPeriodo !== null && (
             <div className={[
               'rounded-xl border p-4 flex items-center gap-4',
               margenPeriodo.margen >= 25
@@ -398,7 +402,7 @@ export default function ReportesPage() {
               </div>
             </div>
           )}
-          {margenPeriodo !== undefined && margenPeriodo === null && topProductos && topProductos.length > 0 && (
+          {esDueno && margenPeriodo !== undefined && margenPeriodo === null && topProductos && topProductos.length > 0 && (
             <div className="bg-fondo rounded-xl border border-borde p-3 flex items-center gap-3">
               <span className="text-xl">📊</span>
               <p className="text-xs text-suave">
@@ -454,8 +458,8 @@ export default function ReportesPage() {
             )}
           </div>
 
-          {/* Compras del período y margen bruto */}
-          {(totalCompras !== undefined || datos) && (
+          {/* Compras del período y margen bruto — solo para dueño */}
+          {esDueno && (totalCompras !== undefined || datos) && (
             <div className="bg-white rounded-xl border border-borde overflow-hidden">
               <div className="px-4 py-3 border-b border-borde/50 flex items-center gap-2">
                 <Truck size={16} className="text-acento" />
@@ -589,6 +593,7 @@ export default function ReportesPage() {
           <div className="h-8" />
         </div>
       </div>
+      {esDueno && <AsistenteIA />}
     </div>
   )
 }
