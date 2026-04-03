@@ -46,32 +46,55 @@ Si la imagen no es una factura o no puedes extraer productos, devuelve:
 }`
 
 serve(async (req: Request) => {
+  console.log('[analizar-factura] Función iniciada, método:', req.method)
+
   // Preflight CORS
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: CORS_HEADERS })
   }
 
   try {
+    // 1. Verificar API key
     const apiKey = Deno.env.get('ANTHROPIC_API_KEY')
+    console.log('[analizar-factura] API Key presente:', !!apiKey)
+    if (apiKey) {
+      console.log('[analizar-factura] API Key prefijo:', apiKey.substring(0, 10) + '...')
+    }
+
     if (!apiKey) {
+      console.error('[analizar-factura] ERROR: ANTHROPIC_API_KEY no configurada')
       return new Response(
         JSON.stringify({ error: 'ANTHROPIC_API_KEY no configurada en los secrets de Supabase' }),
         { status: 500, headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' } },
       )
     }
 
-    const { imagenBase64, mimeType } = await req.json() as {
-      imagenBase64: string
-      mimeType: string
+    // 2. Parsear body
+    let imagenBase64: string
+    let mimeType: string
+    try {
+      const body = await req.json() as { imagenBase64: string; mimeType: string }
+      imagenBase64 = body.imagenBase64
+      mimeType = body.mimeType
+      console.log('[analizar-factura] Body recibido — mimeType:', mimeType, '| base64 chars:', imagenBase64?.length ?? 0)
+    } catch (parseErr) {
+      console.error('[analizar-factura] ERROR parseando body:', parseErr)
+      return new Response(
+        JSON.stringify({ error: 'Body inválido o no es JSON' }),
+        { status: 400, headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' } },
+      )
     }
 
     if (!imagenBase64) {
+      console.error('[analizar-factura] ERROR: imagenBase64 vacío')
       return new Response(
         JSON.stringify({ error: 'imagenBase64 es requerido' }),
         { status: 400, headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' } },
       )
     }
 
+    // 3. Llamar a Anthropic
+    console.log('[analizar-factura] Llamando a Anthropic API...')
     const anthropicRes = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
@@ -105,22 +128,28 @@ serve(async (req: Request) => {
       }),
     })
 
+    console.log('[analizar-factura] Respuesta Anthropic status:', anthropicRes.status)
+
     const data = await anthropicRes.json()
 
     if (!anthropicRes.ok) {
-      const msg = (data as { error?: { message?: string } }).error?.message ?? `Error ${anthropicRes.status}`
+      const errData = data as { error?: { message?: string; type?: string } }
+      const msg = errData.error?.message ?? `Error ${anthropicRes.status}`
+      console.error('[analizar-factura] ERROR Anthropic:', JSON.stringify(errData))
       return new Response(
-        JSON.stringify({ error: msg, status: anthropicRes.status }),
+        JSON.stringify({ error: msg, status: anthropicRes.status, tipo: errData.error?.type }),
         { status: anthropicRes.status, headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' } },
       )
     }
 
+    console.log('[analizar-factura] Éxito — stop_reason:', (data as { stop_reason?: string }).stop_reason)
     return new Response(JSON.stringify(data), {
       headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
     })
 
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'Error interno'
+    console.error('[analizar-factura] EXCEPCIÓN no controlada:', msg)
     return new Response(
       JSON.stringify({ error: msg }),
       { status: 500, headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' } },
