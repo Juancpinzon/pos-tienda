@@ -620,10 +620,10 @@ Ver guía completa de publicación en `docs/fase-23-play-store.md`.
 
 - Generación automática de pedido por proveedor, compartir por WhatsApp
 
-### Fase 22: Notificaciones Push 🔄 (En progreso)
+### Fase 22: Notificaciones Push ✅
 
-- usePushNotifications.ts creado con soporte dual nativo/web
-- Pendiente: integración completa con alertas de stock y recordatorios de fiado
+- lib/notificaciones.ts unificado para web (PWA) y Android (Capacitor).
+- Scheduler local implementado exitosamente: checkMoraFiado y checkProductosAgotados corriendo en background web/nativo.
 
 ### Fase 23: Capacitor Android ✅
 

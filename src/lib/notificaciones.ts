@@ -12,6 +12,7 @@ import { db } from '../db/database'
 import { obtenerConfig } from '../hooks/useConfig'
 import { supabase, supabaseConfigurado } from './supabase'
 import { useAuthStore } from '../stores/authStore'
+import { Capacitor } from '@capacitor/core'
 
 // ─── Rate limiting ────────────────────────────────────────────────────────────
 
@@ -241,13 +242,32 @@ export function iniciarScheduler(): () => void {
 // ─── API pública ──────────────────────────────────────────────────────────────
 
 /**
- * Solicita permiso de notificaciones al navegador.
+ * Solicita permiso de notificaciones al entorno (Nativo o Web).
  * Si se concede y Supabase está configurado, guarda la suscripción
  * en push_subscriptions para uso futuro con push desde servidor.
  */
 export async function solicitarPermiso(): Promise<NotificationPermission> {
-  if (!('Notification' in window)) return 'denied'
-  const permiso = await Notification.requestPermission()
+  let permiso: NotificationPermission = 'denied'
+
+  // Si estamos en entorno Nativo (Android/iOS) con Capacitor
+  if (Capacitor.isNativePlatform()) {
+    try {
+      const { PushNotifications } = await import('@capacitor/push-notifications')
+      const result = await PushNotifications.requestPermissions()
+      permiso = result.receive as NotificationPermission
+
+      if (permiso === 'granted') {
+        // Registrar en FCM/APNs para obtener Token
+        await PushNotifications.register()
+      }
+    } catch {
+      permiso = 'denied'
+    }
+  } else {
+    // Entorno Web (pwa o tab)
+    if (!('Notification' in window)) return 'denied'
+    permiso = await Notification.requestPermission()
+  }
 
   if (permiso === 'granted' && supabaseConfigurado) {
     const usuario = useAuthStore.getState().usuario
