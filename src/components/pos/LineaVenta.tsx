@@ -46,13 +46,13 @@ export function LineaVenta({ item, index }: LineaVentaProps) {
 
   return (
     <div className={[
-      'flex items-center gap-2 py-2 px-2 rounded-xl',
+      'flex flex-col sm:flex-row sm:items-center gap-2 py-2 px-2 rounded-xl',
       item.esProductoFantasma ? 'bg-orange-50 border border-orange-200' : 'bg-white',
     ].join(' ')}>
 
       {/* Nombre */}
-      <div className="flex-1 min-w-0">
-        <p className="text-sm font-medium text-texto truncate leading-tight">
+      <div className="flex-1 w-full sm:w-auto min-w-0">
+        <p className="text-sm font-medium text-texto line-clamp-2 md:truncate leading-tight text-balance" title={item.nombreProducto}>
           {item.esProductoFantasma && (
             <span className="text-acento text-xs mr-1">👻</span>
           )}
@@ -97,6 +97,8 @@ export function LineaVenta({ item, index }: LineaVentaProps) {
         )}
       </div>
 
+      {/* Fila de controles en móvil */}
+      <div className="flex items-center justify-between w-full sm:w-auto sm:justify-end gap-2">
       {/* Controles cantidad */}
       <div className="flex items-center gap-1 shrink-0">
         <button
@@ -125,15 +127,15 @@ export function LineaVenta({ item, index }: LineaVentaProps) {
         <span className="moneda text-sm font-bold text-texto">{formatCOP(item.subtotal)}</span>
       </div>
 
-      {/* Eliminar */}
       <button
         type="button"
         onClick={() => quitarItem(index)}
         className="w-8 h-8 flex items-center justify-center rounded-lg
-                   text-suave hover:text-peligro hover:bg-red-50 active:scale-90 transition-all"
+                   text-suave hover:text-peligro hover:bg-red-50 active:scale-90 transition-all shrink-0"
       >
         <Trash2 size={15} />
       </button>
+      </div>
     </div>
   )
 }
