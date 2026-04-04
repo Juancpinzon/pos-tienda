@@ -20,6 +20,12 @@ import { formatCOP } from '../../utils/moneda'
 import { db } from '../../db/database'
 import type { ItemCompra } from '../../hooks/useProveedores'
 import type { Producto, Proveedor } from '../../db/schema'
+import * as pdfjsLib from 'pdfjs-dist'
+
+pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
+  'pdfjs-dist/build/pdf.worker.mjs',
+  import.meta.url,
+).toString()
 
 // OCR disponible si hay Edge Function (Supabase) o API key directa (dev local)
 const OCR_DISPONIBLE = supabaseConfigurado || !!(import.meta.env.VITE_ANTHROPIC_API_KEY)
@@ -133,7 +139,8 @@ function BuscadorAsociacion({
 // ─── Modal principal ──────────────────────────────────────────────────────────
 
 export function FotoFacturaModal({ onAgregar, onClose }: FotoFacturaModalProps) {
-  const inputFileRef = useRef<HTMLInputElement>(null)
+  const inputCameraRef = useRef<HTMLInputElement>(null)
+  const inputGalleryRef = useRef<HTMLInputElement>(null)
   const [previewUrl,  setPreviewUrl]  = useState<string | null>(null)
   const [archivo,     setArchivo]     = useState<File | null>(null)
   const [estado,      setEstado]      = useState<Estado>('captura')
@@ -148,19 +155,58 @@ export function FotoFacturaModal({ onAgregar, onClose }: FotoFacturaModalProps) 
   // Si el tendero quiere crear/actualizar el proveedor al confirmar
   const [crearProv,      setCrearProv]      = useState(true)
 
+  // ── Convertir PDF a Imagen ──────────────────────────────────────────────────
+  const convertirPdfAImagen = async (file: File): Promise<File> => {
+    const arrayBuffer = await file.arrayBuffer()
+    const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise
+    const page = await pdf.getPage(1)
+    const viewport = page.getViewport({ scale: 2.0 })
+
+    const canvas = document.createElement('canvas')
+    const ctx = canvas.getContext('2d')
+    if (!ctx) throw new Error('Canvas no soportado')
+
+    canvas.width = viewport.width
+    canvas.height = viewport.height
+
+    await page.render({ canvasContext: ctx, viewport }).promise
+
+    return new Promise((resolve, reject) => {
+      canvas.toBlob((blob) => {
+        if (blob) {
+          resolve(new File([blob], file.name.replace(/\.pdf$/i, '.jpg'), { type: 'image/jpeg' }))
+        } else {
+          reject(new Error('Error al generar imagen del PDF'))
+        }
+      }, 'image/jpeg', 0.9)
+    })
+  }
+
   // ── Seleccionar imagen ──────────────────────────────────────────────────────
-  const handleArchivoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
+  const handleArchivoChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    let file = e.target.files?.[0]
     if (!file) return
-    setArchivo(file)
-    setPreviewUrl(URL.createObjectURL(file))
-    setEstado('captura')
+
+    setEstado('analizando')
     setErrorMsg(null)
-    setItems([])
-    setProveedorOCR(null)
-    setFacturaOCR(null)
-    setProvExistente(undefined)
-    setCrearProv(true)
+
+    try {
+      if (file.type === 'application/pdf') {
+        file = await convertirPdfAImagen(file)
+      }
+
+      setArchivo(file)
+      setPreviewUrl(URL.createObjectURL(file))
+      setEstado('captura')
+      setItems([])
+      setProveedorOCR(null)
+      setFacturaOCR(null)
+      setProvExistente(undefined)
+      setCrearProv(true)
+    } catch (err) {
+      setErrorMsg(err instanceof Error ? err.message : 'Error al procesar el archivo')
+      setEstado('error')
+    }
   }
 
   // ── Buscar proveedor en Dexie por nombre o NIT ──────────────────────────────
@@ -420,18 +466,32 @@ export function FotoFacturaModal({ onAgregar, onClose }: FotoFacturaModalProps) 
                 )}
               </div>
             ) : (
-              <button type="button" onClick={() => inputFileRef.current?.click()}
-                className="aspect-[4/3] rounded-xl border-2 border-dashed border-borde
-                           flex flex-col items-center justify-center gap-3
-                           bg-white hover:bg-fondo hover:border-primario/40 transition-colors">
-                <div className="w-16 h-16 bg-primario/10 rounded-2xl flex items-center justify-center">
-                  <Camera size={32} className="text-primario" />
-                </div>
-                <div className="text-center">
-                  <p className="font-semibold text-texto text-sm">Tomar foto de la factura</p>
-                  <p className="text-xs text-suave mt-1">o seleccionar desde la galería</p>
-                </div>
-              </button>
+              <div className="flex gap-3">
+                <button type="button" onClick={() => inputCameraRef.current?.click()}
+                  className="flex-1 aspect-[4/5] sm:aspect-square rounded-xl border-2 border-dashed border-borde
+                             flex flex-col items-center justify-center gap-3
+                             bg-white hover:bg-fondo hover:border-primario/40 transition-colors p-2">
+                  <div className="w-14 h-14 bg-primario/10 rounded-2xl flex items-center justify-center shrink-0">
+                    <Camera size={28} className="text-primario" />
+                  </div>
+                  <div className="text-center px-1">
+                    <p className="font-semibold text-texto text-sm">Tomar foto</p>
+                  </div>
+                </button>
+
+                <button type="button" onClick={() => inputGalleryRef.current?.click()}
+                  className="flex-1 aspect-[4/5] sm:aspect-square rounded-xl border-2 border-dashed border-borde
+                             flex flex-col items-center justify-center gap-3
+                             bg-white hover:bg-fondo hover:border-primario/40 transition-colors p-2">
+                  <div className="w-14 h-14 bg-primario/10 rounded-2xl flex items-center justify-center shrink-0">
+                    <ImagePlus size={28} className="text-primario" />
+                  </div>
+                  <div className="text-center px-1">
+                    <p className="font-semibold text-texto text-sm">Elegir de galería</p>
+                    <p className="text-[10px] text-suave mt-1 leading-tight">También acepta PDFs</p>
+                  </div>
+                </button>
+              </div>
             )}
 
             <div className="flex flex-col gap-2">
@@ -447,14 +507,24 @@ export function FotoFacturaModal({ onAgregar, onClose }: FotoFacturaModalProps) 
                   Analizar factura
                 </button>
               )}
-              <button type="button" onClick={() => inputFileRef.current?.click()}
-                disabled={estado === 'analizando'}
-                className="h-11 border border-borde text-texto rounded-xl text-sm font-semibold
-                           flex items-center justify-center gap-2
-                           hover:bg-fondo transition-colors disabled:opacity-40">
-                <ImagePlus size={16} />
-                {previewUrl ? 'Cambiar imagen' : 'Seleccionar imagen'}
-              </button>
+              <div className="grid grid-cols-2 gap-2">
+                <button type="button" onClick={() => inputCameraRef.current?.click()}
+                  disabled={estado === 'analizando'}
+                  className="h-11 border border-borde text-texto rounded-xl text-sm font-semibold
+                             flex items-center justify-center gap-2
+                             hover:bg-fondo transition-colors disabled:opacity-40">
+                  <Camera size={16} />
+                  Tomar otra
+                </button>
+                <button type="button" onClick={() => inputGalleryRef.current?.click()}
+                  disabled={estado === 'analizando'}
+                  className="h-11 border border-borde text-texto rounded-xl text-sm font-semibold
+                             flex items-center justify-center gap-2
+                             hover:bg-fondo transition-colors disabled:opacity-40">
+                  <ImagePlus size={16} />
+                  De galería
+                </button>
+              </div>
             </div>
           </>
         )}
@@ -684,8 +754,10 @@ export function FotoFacturaModal({ onAgregar, onClose }: FotoFacturaModalProps) 
         )}
       </div>
 
-      {/* Input oculto */}
-      <input ref={inputFileRef} type="file" accept="image/*" capture="environment"
+      {/* Inputs ocultos */}
+      <input ref={inputCameraRef} type="file" accept="image/*" capture="environment"
+        className="hidden" onChange={handleArchivoChange} />
+      <input ref={inputGalleryRef} type="file" accept="image/*,application/pdf"
         className="hidden" onChange={handleArchivoChange} />
 
       {/* Footer */}
