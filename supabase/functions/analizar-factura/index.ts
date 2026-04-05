@@ -17,18 +17,38 @@ const CORS_HEADERS = {
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 }
 
-const PROMPT_SISTEMA = `Eres un asistente especializado en leer facturas y remisiones de proveedores de tiendas de barrio colombianas.
+const PROMPT_SISTEMA = `Eres un asistente especializado en leer facturas electrónicas y remisiones de proveedores de tiendas de barrio colombianas.
 
 Cuando te muestren una imagen de una factura o remisión, extrae TODA la información disponible.
 
-REGLAS IMPORTANTES:
-- Los precios están en pesos colombianos (COP), sin decimales
+═══════════════════════════════════════════════════════
+REGLA CRÍTICA SOBRE EL IVA (MUY IMPORTANTE):
+═══════════════════════════════════════════════════════
+Las facturas colombianas de distribuidores muestran precios CON y SIN IVA en columnas separadas.
+
+SIEMPRE debes usar el precio CON IVA incluido:
+- "precioUnitario" = columna "PRECIO UN IVA" / "P. + IVA" / "PRECIO CON IVA" / "VLR CON IVA"
+  (NO uses "PRECIO UN" ni "P. SIN IVA" ni el precio base sin impuesto)
+- "subtotal" = columna "VLR TOT IVA" / "TOTAL CON IVA" / "VLR FINAL"
+  (NO uses "VLR TOTAL" ni "SUBTOTAL" si hay otra columna con IVA incluido)
+- "factura.total" = el TOTAL FINAL que pagó el tendero, con todos los impuestos incluidos
+  (busca: "TOTAL A PAGAR", "VALOR A PAGAR", "TOTAL FACTURA", el monto escrito a mano al pie)
+
+Si la factura SOLO tiene un precio (sin columna de IVA separada), úsalo directamente.
+Si ves "B. IVA X%" e "IVA X%", el total real = subtotal + todos los IVAs sumados.
+
+Regla adicional: si el %IVA por producto aparece, inclúyelo en "ivaPercent".
+
+═══════════════════════════════════════════════════════
+OTRAS REGLAS:
+═══════════════════════════════════════════════════════
+- Los precios están en pesos colombianos (COP), sin decimales, sin puntos de miles en el JSON
 - Las cantidades pueden ser fraccionadas (ej: 0.5 kg, 2.5 litros)
 - Si un precio parece por docena/bulto, divídelo para obtener el unitario
 - Si no puedes leer claramente un valor numérico, usa 0
 - Si no puedes leer claramente un texto, usa null
 - Las fechas van en formato YYYY-MM-DD
-- Devuelve ÚNICAMENTE un JSON válido, sin texto adicional, sin markdown
+- Devuelve ÚNICAMENTE un JSON válido, sin texto adicional, sin markdown, sin bloques de código
 
 Formato de respuesta requerido:
 {
@@ -48,6 +68,7 @@ Formato de respuesta requerido:
       "nombre": "nombre del producto",
       "cantidad": 1,
       "precioUnitario": 0,
+      "ivaPercent": 19,
       "subtotal": 0
     }
   ]
@@ -135,7 +156,7 @@ serve(async (req: Request) => {
               },
               {
                 type: 'text',
-                text: 'Analiza esta factura colombiana y extrae TODA la información. Responde SOLO con el JSON.',
+                text: 'Analiza esta factura colombiana. IMPORTANTE: usa siempre el precio CON IVA incluido (columna "PRECIO UN IVA" o similar) y el total final con todos los impuestos. Responde SOLO con el JSON, sin texto adicional.',
               },
             ],
           },
