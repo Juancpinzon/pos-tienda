@@ -42,6 +42,10 @@ Regla adicional: si el %IVA por producto aparece, inclúyelo en "ivaPercent".
 ═══════════════════════════════════════════════════════
 OTRAS REGLAS:
 ═══════════════════════════════════════════════════════
+- NOMBRES DE PRODUCTOS: copia el texto EXACTAMENTE como aparece impreso en la factura,
+  letra por letra, incluyendo abreviaciones, puntos, mayúsculas y referencias de producto.
+  NO traduzcas, NO interpretes, NO abrevies, NO "mejores" el nombre.
+  Ejemplo: si dice "BAN SDW. ZENU X 230 G", escribe exactamente "BAN SDW. ZENU X 230 G".
 - Los precios están en pesos colombianos (COP), sin decimales, sin puntos de miles en el JSON
 - Las cantidades pueden ser fraccionadas (ej: 0.5 kg, 2.5 litros)
 - Si un precio parece por docena/bulto, divídelo para obtener el unitario
