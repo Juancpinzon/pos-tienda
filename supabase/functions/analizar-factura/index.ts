@@ -1,13 +1,6 @@
 // Edge Function: analizar-factura
 // Proxy entre la PWA y la API de Anthropic para evitar bloqueos CORS en el navegador.
 // La API key de Anthropic vive como secret en Supabase, nunca expuesta al cliente.
-//
-// Deploy:
-//   supabase functions deploy analizar-factura --no-verify-jwt
-//
-// Secret requerido (una sola vez):
-//   supabase secrets set ANTHROPIC_API_KEY=sk-ant-...
-//   O: Supabase Dashboard → Edge Functions → Manage secrets
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 
@@ -17,119 +10,84 @@ const CORS_HEADERS = {
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 }
 
-const PROMPT_SISTEMA = `Eres un asistente especializado en leer facturas electrónicas y remisiones de proveedores de tiendas de barrio colombianas.
+const PROMPT_SISTEMA = `Eres un experto en leer facturas de distribuidores de tiendas de barrio colombianas.
 
-Cuando te muestren una imagen de una factura o remisión, extrae TODA la información disponible.
+Extrae toda la informacion de la factura y devuelve UNICAMENTE un JSON valido, sin texto adicional.
 
---- REGLA CRITICA SOBRE EL IVA (MUY IMPORTANTE) ---
-Las facturas colombianas de distribuidores muestran precios CON y SIN IVA en columnas separadas.
+REGLA DEL IVA (muy importante):
+Las facturas colombianas tienen columnas separadas: precio sin IVA y precio con IVA.
+- Para precioUnitario: usa la columna "PRECIO UN IVA" o "P.+IVA" o "PRECIO CON IVA". NO uses "PRECIO UN" (sin IVA).
+- Para subtotal: usa la columna "VLR TOT IVA" o "TOTAL CON IVA". NO uses "VLR TOTAL" (sin IVA).
+- Para factura.total: usa el total final con todos los impuestos sumados (busca "TOTAL A PAGAR" o el monto escrito a mano).
+- Si solo hay un precio por producto (sin columna IVA separada), usalo directamente.
+- Si el porcentaje de IVA aparece por producto, ponlo en el campo ivaPercent.
 
-SIEMPRE debes usar el precio CON IVA incluido:
-- "precioUnitario" = columna "PRECIO UN IVA" / "P. + IVA" / "PRECIO CON IVA" / "VLR CON IVA"
-  (NO uses "PRECIO UN" ni "P. SIN IVA" ni el precio base sin impuesto)
-- "subtotal" = columna "VLR TOT IVA" / "TOTAL CON IVA" / "VLR FINAL"
-  (NO uses "VLR TOTAL" ni "SUBTOTAL" si hay otra columna con IVA incluido)
-- "factura.total" = el TOTAL FINAL que pago el tendero, con todos los impuestos incluidos
-  (busca: "TOTAL A PAGAR", "VALOR A PAGAR", "TOTAL FACTURA", el monto escrito a mano al pie)
+REGLA DE NOMBRES:
+Copia el nombre del producto EXACTAMENTE como aparece impreso, letra por letra. No interpretes ni cambies el nombre.
+Ejemplo: "BAN SDW. ZENU X 230 G" debe quedar exactamente "BAN SDW. ZENU X 230 G".
 
-Si la factura SOLO tiene un precio (sin columna de IVA separada), usalo directamente.
-Si ves "B. IVA X%" e "IVA X%", el total real = subtotal + todos los IVAs sumados.
-Si el porcentaje de IVA por producto aparece, incluyelo en "ivaPercent".
+OTRAS REGLAS:
+- Precios en pesos colombianos sin decimales ni puntos de miles en el JSON
+- Cantidades pueden ser fraccionadas (0.5, 2.5)
+- Si no lees un numero claramente, usa 0. Si no lees un texto, usa null.
+- Fechas en formato YYYY-MM-DD
 
---- OTRAS REGLAS ---
-- NOMBRES DE PRODUCTOS: copia el texto EXACTAMENTE como aparece impreso en la factura,
-  letra por letra, incluyendo abreviaciones, puntos, mayúsculas y referencias de producto.
-  NO traduzcas, NO interpretes, NO abrevies, NO "mejores" el nombre.
-  Ejemplo: si dice "BAN SDW. ZENU X 230 G", escribe exactamente "BAN SDW. ZENU X 230 G".
-- Los precios están en pesos colombianos (COP), sin decimales, sin puntos de miles en el JSON
-- Las cantidades pueden ser fraccionadas (ej: 0.5 kg, 2.5 litros)
-- Si un precio parece por docena/bulto, divídelo para obtener el unitario
-- Si no puedes leer claramente un valor numérico, usa 0
-- Si no puedes leer claramente un texto, usa null
-- Las fechas van en formato YYYY-MM-DD
-- Devuelve ÚNICAMENTE un JSON válido, sin texto adicional, sin markdown, sin bloques de código
-
-Formato de respuesta requerido:
+Formato JSON requerido:
 {
   "proveedor": {
-    "nombre": "Nombre de la empresa o distribuidor (string o null)",
-    "nit": "NIT del proveedor si aparece (string o null)",
-    "telefono": "Teléfono si aparece (string o null)",
-    "direccion": "Dirección si aparece (string o null)"
+    "nombre": "nombre de la empresa o null",
+    "nit": "NIT o null",
+    "telefono": "telefono o null",
+    "direccion": "direccion o null"
   },
   "factura": {
-    "numero": "Número o código de la factura si aparece (string o null)",
-    "fecha": "Fecha en formato YYYY-MM-DD si aparece (string o null)",
+    "numero": "numero de factura o null",
+    "fecha": "YYYY-MM-DD o null",
     "total": 0
   },
   "productos": [
     {
-      "nombre": "nombre del producto",
+      "nombre": "nombre exacto como aparece en la factura",
       "cantidad": 1,
       "precioUnitario": 0,
-      "ivaPercent": 19,
+      "ivaPercent": 0,
       "subtotal": 0
     }
   ]
 }
 
-Si la imagen no es una factura o no puedes extraer información útil, devuelve:
-{
-  "proveedor": null,
-  "factura": { "numero": null, "fecha": null, "total": 0 },
-  "productos": []
-}`
+Si la imagen no es una factura, devuelve: {"proveedor":null,"factura":{"numero":null,"fecha":null,"total":0},"productos":[]}`
 
 serve(async (req: Request) => {
-  console.log('[analizar-factura] Función iniciada, método:', req.method)
+  console.log('[analizar-factura] metodo:', req.method)
 
-  // Preflight CORS
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: CORS_HEADERS })
   }
 
   try {
-    // 1. Verificar API key
     const apiKey = Deno.env.get('ANTHROPIC_API_KEY')
     console.log('[analizar-factura] API Key presente:', !!apiKey)
-    if (apiKey) {
-      console.log('[analizar-factura] API Key prefijo:', apiKey.substring(0, 10) + '...')
-    }
 
     if (!apiKey) {
-      console.error('[analizar-factura] ERROR: ANTHROPIC_API_KEY no configurada')
       return new Response(
-        JSON.stringify({ error: 'ANTHROPIC_API_KEY no configurada en los secrets de Supabase' }),
+        JSON.stringify({ error: 'ANTHROPIC_API_KEY no configurada' }),
         { status: 500, headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' } },
       )
     }
 
-    // 2. Parsear body
-    let imagenBase64: string
-    let mimeType: string
-    try {
-      const body = await req.json() as { imagenBase64: string; mimeType: string }
-      imagenBase64 = body.imagenBase64
-      mimeType = body.mimeType
-      console.log('[analizar-factura] Body recibido — mimeType:', mimeType, '| base64 chars:', imagenBase64?.length ?? 0)
-    } catch (parseErr) {
-      console.error('[analizar-factura] ERROR parseando body:', parseErr)
-      return new Response(
-        JSON.stringify({ error: 'Body inválido o no es JSON' }),
-        { status: 400, headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' } },
-      )
-    }
+    const body = await req.json() as { imagenBase64: string; mimeType: string }
+    const { imagenBase64, mimeType } = body
+    console.log('[analizar-factura] mimeType:', mimeType, '| base64 chars:', imagenBase64?.length ?? 0)
 
     if (!imagenBase64) {
-      console.error('[analizar-factura] ERROR: imagenBase64 vacío')
       return new Response(
         JSON.stringify({ error: 'imagenBase64 es requerido' }),
         { status: 400, headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' } },
       )
     }
 
-    // 3. Llamar a Anthropic
-    console.log('[analizar-factura] Llamando a Anthropic API...')
+    console.log('[analizar-factura] Llamando a Anthropic...')
     const anthropicRes = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
@@ -138,7 +96,7 @@ serve(async (req: Request) => {
         'anthropic-version': '2023-06-01',
       },
       body: JSON.stringify({
-        model: 'claude-sonnet-4-5-20251001',
+        model: 'claude-sonnet-4-6',
         max_tokens: 2048,
         system: PROMPT_SISTEMA,
         messages: [
@@ -155,7 +113,7 @@ serve(async (req: Request) => {
               },
               {
                 type: 'text',
-                text: 'Analiza esta factura colombiana. IMPORTANTE: usa siempre el precio CON IVA incluido (columna "PRECIO UN IVA" o similar) y el total final con todos los impuestos. Responde SOLO con el JSON, sin texto adicional.',
+                text: 'Analiza esta factura. Usa precios CON IVA. Copia nombres exactos. Responde solo con el JSON.',
               },
             ],
           },
@@ -163,28 +121,27 @@ serve(async (req: Request) => {
       }),
     })
 
-    console.log('[analizar-factura] Respuesta Anthropic status:', anthropicRes.status)
-
+    console.log('[analizar-factura] Anthropic status:', anthropicRes.status)
     const data = await anthropicRes.json()
 
     if (!anthropicRes.ok) {
       const errData = data as { error?: { message?: string; type?: string } }
       const msg = errData.error?.message ?? `Error ${anthropicRes.status}`
-      console.error('[analizar-factura] ERROR Anthropic:', JSON.stringify(errData))
+      console.error('[analizar-factura] Error Anthropic:', JSON.stringify(errData))
       return new Response(
-        JSON.stringify({ error: msg, status: anthropicRes.status, tipo: errData.error?.type }),
+        JSON.stringify({ error: msg, status: anthropicRes.status }),
         { status: anthropicRes.status, headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' } },
       )
     }
 
-    console.log('[analizar-factura] Éxito — stop_reason:', (data as { stop_reason?: string }).stop_reason)
+    console.log('[analizar-factura] Exito')
     return new Response(JSON.stringify(data), {
       headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
     })
 
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'Error interno'
-    console.error('[analizar-factura] EXCEPCIÓN no controlada:', msg)
+    console.error('[analizar-factura] Excepcion:', msg)
     return new Response(
       JSON.stringify({ error: msg }),
       { status: 500, headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' } },
