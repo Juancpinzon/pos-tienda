@@ -13,7 +13,7 @@ export function ListaEmpleados() {
   const { empleados, archivarEmpleado } = useNomina()
   const [empleadoActivo, setEmpleadoActivo] = useState<Empleado | null>(null)
   const [empleadoPrestaciones, setEmpleadoPrestaciones] = useState<Empleado | null>(null)
-  const [empleadoEditando, setEmpleadoEditando] = useState<number | null>(null)
+  const [empleadoEditando, setEmpleadoEditando] = useState<Empleado | null>(null)
   const [empleadoBorrando, setEmpleadoBorrando] = useState<Empleado | null>(null)
 
   const handleBorrar = async () => {
@@ -98,7 +98,7 @@ export function ListaEmpleados() {
             </button>
             <div className="w-px h-6 bg-borde mx-1"></div>
             <button 
-              onClick={() => setEmpleadoEditando(emp.id!)}
+              onClick={() => setEmpleadoEditando(emp)}
               className="p-1.5 text-suave hover:bg-blue-50 hover:text-blue-600 rounded-lg transition-colors"
               title="Editar"
             >
@@ -131,18 +131,17 @@ export function ListaEmpleados() {
       )}
       {empleadoEditando && (
         <FormEmpleado 
-          empleadoId={empleadoEditando}
+          empleadoId={empleadoEditando.id}
           onClose={() => setEmpleadoEditando(null)}
         />
       )}
 
       {empleadoBorrando && (
         <ConfirmDialog
-          isOpen={true}
           titulo="Eliminar Empleado"
           mensaje={`¿Estás seguro de que quieres eliminar a ${empleadoBorrando.nombre}? El empleado no se borrará, solo se archivará para conservar su historial de nómina.`}
-          onConfirm={handleBorrar}
-          onCancel={() => setEmpleadoBorrando(null)}
+          onConfirmar={handleBorrar}
+          onCancelar={() => setEmpleadoBorrando(null)}
         />
       )}
     </>
