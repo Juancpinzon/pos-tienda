@@ -7,6 +7,10 @@ export function useNomina() {
     db.empleados.filter(e => e.activo).sortBy('nombre')
   )
 
+  const empleadosArchivados = useLiveQuery(() => 
+    db.empleados.filter(e => !e.activo).sortBy('nombre')
+  )
+
   const crearEmpleado = async (empleado: Omit<Empleado, 'id' | 'creadoEn'>) => {
     return await db.empleados.add({
       ...empleado,
@@ -20,6 +24,10 @@ export function useNomina() {
 
   const archivarEmpleado = async (id: number) => {
     return await db.empleados.update(id, { activo: false })
+  }
+
+  const restaurarEmpleado = async (id: number) => {
+    return await db.empleados.update(id, { activo: true })
   }
 
   const crearPeriodoNomina = async (periodo: Omit<PeriodoNomina, 'id' | 'creadoEn'>) => {
@@ -127,9 +135,11 @@ export function useNomina() {
 
   return {
     empleados,
+    empleadosArchivados,
     crearEmpleado,
     actualizarEmpleado,
     archivarEmpleado,
+    restaurarEmpleado,
     crearPeriodoNomina,
     listarPeriodosNomina,
     marcarPagado,

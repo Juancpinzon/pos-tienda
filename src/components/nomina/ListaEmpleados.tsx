@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useNomina } from '../../hooks/useNomina'
 import { formatCOP } from '../../utils/moneda'
-import { User, Briefcase, Calendar, Calculator, Wallet, Edit2, Trash2 } from 'lucide-react'
+import { User, Briefcase, Calendar, Calculator, Wallet, Edit2, Trash2, RotateCcw } from 'lucide-react'
 import { toast } from 'react-hot-toast'
 import { ConfirmDialog } from '../shared/ConfirmDialog'
 import { FormEmpleado } from './FormEmpleado'
@@ -10,17 +10,35 @@ import { PrestacionesEmpleado } from './PrestacionesEmpleado'
 import type { Empleado } from '../../db/schema'
 
 export function ListaEmpleados() {
-  const { empleados, archivarEmpleado } = useNomina()
+  const { empleados, empleadosArchivados, archivarEmpleado, restaurarEmpleado } = useNomina()
   const [empleadoActivo, setEmpleadoActivo] = useState<Empleado | null>(null)
   const [empleadoPrestaciones, setEmpleadoPrestaciones] = useState<Empleado | null>(null)
   const [empleadoEditando, setEmpleadoEditando] = useState<Empleado | null>(null)
   const [empleadoBorrando, setEmpleadoBorrando] = useState<Empleado | null>(null)
+  const [mostrarArchivados, setMostrarArchivados] = useState(false)
+  const [empleadoRestaurando, setEmpleadoRestaurando] = useState<Empleado | null>(null)
 
   const handleBorrar = async () => {
     if (empleadoBorrando?.id) {
-      await archivarEmpleado(empleadoBorrando.id)
-      toast.success('Empleado archivado correctamente')
+      const id = empleadoBorrando.id
       setEmpleadoBorrando(null)
+      toast.promise(archivarEmpleado(id), {
+        loading: 'Archivando...',
+        success: 'Empleado archivado',
+        error: 'Error al archivar'
+      })
+    }
+  }
+
+  const handleRestaurar = async () => {
+    if (empleadoRestaurando?.id) {
+      const id = empleadoRestaurando.id
+      setEmpleadoRestaurando(null)
+      toast.promise(restaurarEmpleado(id), {
+        loading: 'Restaurando...',
+        success: 'Empleado restaurado',
+        error: 'Error al restaurar'
+      })
     }
   }
 
@@ -52,11 +70,25 @@ export function ListaEmpleados() {
     return `${años} años`
   }
 
+  const rendersTotales = mostrarArchivados ? [...(empleados || []), ...(empleadosArchivados || [])] : (empleados || [])
+
   return (
     <>
+      {((empleadosArchivados?.length || 0) > 0) && (
+        <div className="flex justify-end mb-3">
+          <button 
+            type="button"
+            onClick={() => setMostrarArchivados(!mostrarArchivados)}
+            className="text-xs text-primario font-bold hover:underline"
+          >
+            {mostrarArchivados ? 'Ocultar archivados' : `Ver archivados (${empleadosArchivados?.length})`}
+          </button>
+        </div>
+      )}
+
       <div className="flex flex-col gap-3">
-        {empleados.map((emp) => (
-          <div key={emp.id} className="bg-white border border-borde rounded-xl p-3 flex items-center justify-between active:scale-[0.98] transition-transform">
+        {rendersTotales.map((emp) => (
+          <div key={emp.id} className={`bg-white border ${emp.activo ? 'border-borde' : 'border-borde/50 opacity-60'} rounded-xl p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3 active:scale-[0.98] transition-all`}>
             <div className="flex gap-3">
             <div className="w-10 h-10 rounded-full bg-primario/10 flex flex-col items-center justify-center text-primario shrink-0">
               <span className="text-sm font-bold uppercase">{emp.nombre.substring(0, 2)}</span>
@@ -82,35 +114,48 @@ export function ListaEmpleados() {
               <p className="moneda font-bold text-primario text-sm">{formatCOP(emp.salario)}</p>
               <p className="text-[10px] text-suave uppercase">/ mes</p>
             </div>
-            <button 
-              onClick={() => setEmpleadoPrestaciones(emp)}
-              className="p-2 bg-acento/10 text-acento hover:bg-acento hover:text-white rounded-lg transition-colors ml-2"
-              title="Ver Prestaciones"
-            >
-              <Wallet size={18} />
-            </button>
-            <button 
-              onClick={() => setEmpleadoActivo(emp)}
-              className="p-2 bg-primario/10 text-primario hover:bg-primario hover:text-white rounded-lg transition-colors ml-2 border border-transparent shadow-sm"
-              title="Liquidar Nómina"
-            >
-              <Calculator size={18} />
-            </button>
-            <div className="w-px h-6 bg-borde mx-1"></div>
-            <button 
-              onClick={() => setEmpleadoEditando(emp)}
-              className="p-1.5 text-suave hover:bg-blue-50 hover:text-blue-600 rounded-lg transition-colors"
-              title="Editar"
-            >
-              <Edit2 size={16} />
-            </button>
-            <button 
-              onClick={() => setEmpleadoBorrando(emp)}
-              className="p-1.5 text-suave hover:bg-red-50 hover:text-red-500 rounded-lg transition-colors"
-              title="Eliminar"
-            >
-              <Trash2 size={16} />
-            </button>
+            {emp.activo ? (
+              <>
+                <button 
+                  onClick={() => setEmpleadoPrestaciones(emp)}
+                  className="p-2 bg-acento/10 text-acento hover:bg-acento hover:text-white rounded-lg transition-colors ml-2"
+                  title="Ver Prestaciones"
+                >
+                  <Wallet size={18} />
+                </button>
+                <button 
+                  onClick={() => setEmpleadoActivo(emp)}
+                  className="p-2 bg-primario/10 text-primario hover:bg-primario hover:text-white rounded-lg transition-colors ml-2 border border-transparent shadow-sm"
+                  title="Liquidar Nómina"
+                >
+                  <Calculator size={18} />
+                </button>
+                <div className="w-px h-6 bg-borde mx-1"></div>
+                <button 
+                  onClick={() => setEmpleadoEditando(emp)}
+                  className="p-1.5 text-suave hover:bg-blue-50 hover:text-blue-600 rounded-lg transition-colors"
+                  title="Editar"
+                >
+                  <Edit2 size={16} />
+                </button>
+                <button 
+                  onClick={() => setEmpleadoBorrando(emp)}
+                  className="p-1.5 text-suave hover:bg-red-50 hover:text-red-500 rounded-lg transition-colors"
+                  title="Eliminar"
+                >
+                  <Trash2 size={16} />
+                </button>
+              </>
+            ) : (
+              <button 
+                onClick={() => setEmpleadoRestaurando(emp)}
+                className="p-1.5 text-suave hover:bg-emerald-50 hover:text-emerald-600 rounded-lg transition-colors flex items-center gap-1.5"
+                title="Restaurar"
+              >
+                <RotateCcw size={16} />
+                <span className="text-[10px] font-bold uppercase">Restaurar</span>
+              </button>
+            )}
           </div>
         </div>
       ))}
@@ -138,10 +183,21 @@ export function ListaEmpleados() {
 
       {empleadoBorrando && (
         <ConfirmDialog
-          titulo="Eliminar Empleado"
-          mensaje={`¿Estás seguro de que quieres eliminar a ${empleadoBorrando.nombre}? El empleado no se borrará, solo se archivará para conservar su historial de nómina.`}
+          titulo="Archivar Empleado"
+          mensaje={`¿Estás seguro de que quieres archivar a ${empleadoBorrando.nombre}? Conservará su historial de pagos, pero dejará de aparecer en la lista principal.`}
           onConfirmar={handleBorrar}
           onCancelar={() => setEmpleadoBorrando(null)}
+        />
+      )}
+
+      {empleadoRestaurando && (
+        <ConfirmDialog
+          titulo="Restaurar Empleado"
+          mensaje={`¿Estás seguro de que quieres restaurar a ${empleadoRestaurando.nombre}? Volverá a estar activo en la nómina.`}
+          onConfirmar={handleRestaurar}
+          onCancelar={() => setEmpleadoRestaurando(null)}
+          peligroso={false}
+          labelConfirmar="Restaurar"
         />
       )}
     </>
