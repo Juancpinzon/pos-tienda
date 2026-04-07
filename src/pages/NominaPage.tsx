@@ -1,12 +1,18 @@
-import { useState } from 'react'
-import { Users, Plus } from 'lucide-react'
+import { useState, useEffect } from 'react'
+import { Users, Plus, AlertCircle, Info } from 'lucide-react'
 import { useNomina } from '../hooks/useNomina'
 import { ListaEmpleados } from '../components/nomina/ListaEmpleados'
 import { FormEmpleado } from '../components/nomina/FormEmpleado'
+import { checkAlertasNomina } from '../lib/notificaciones'
 
 export default function NominaPage() {
   const [mostrarForm, setMostrarForm] = useState(false)
   const { empleados } = useNomina()
+  const [alertas, setAlertas] = useState<Awaited<ReturnType<typeof checkAlertasNomina>>>([])
+
+  useEffect(() => {
+    checkAlertasNomina().then(setAlertas)
+  }, [])
 
   return (
     <div className="flex flex-col h-full bg-fondo">
@@ -33,7 +39,30 @@ export default function NominaPage() {
         </button>
       </header>
 
-      <main className="flex-1 overflow-y-auto p-4 relative">
+      <main className="flex-1 overflow-y-auto p-4 relative flex flex-col gap-4">
+        {alertas.length > 0 && (
+          <div className="flex flex-col gap-2">
+            {alertas.map(a => (
+              <div 
+                key={a.id} 
+                className={`p-3 rounded-xl border flex items-start gap-3 ${
+                  a.tipo === 'warning' 
+                    ? 'bg-yellow-50 border-yellow-200 text-yellow-800' 
+                    : 'bg-blue-50 border-blue-200 text-blue-800'
+                }`}
+              >
+                <div className="mt-0.5 shrink-0">
+                  {a.tipo === 'warning' ? <AlertCircle size={18} /> : <Info size={18} />}
+                </div>
+                <div>
+                  <h4 className="font-bold text-sm tracking-tight">{a.titulo}</h4>
+                  <p className="text-xs mt-0.5 opacity-90 leading-snug">{a.mensaje}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
         <ListaEmpleados />
       </main>
 

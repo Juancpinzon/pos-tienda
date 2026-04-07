@@ -674,6 +674,14 @@ Ver guía completa de publicación en `docs/fase-23-play-store.md`.
 - supabase/functions/asistente-ventas/index.ts: Proxy a Anthropic con claude-3-5-haiku-20241022 y System Prompt local
 - Integrado directamente en ReportesPage.tsx exclusivo para el dueño
 
+### Fase 27: Módulo de Empleados y Nómina Básica (Sub-sprints 27.1 - 27.4) ✅
+
+- **Schema & DB**: Tablas `empleados`, `periodosNomina`, `liquidacionesPrestaciones`, `adelantosEmpleado` en Dexie.
+- **Hook de Nómina (`useNomina.ts`)**: Funciones base y helper unificadas para el manejo de CRUD empleados y creación de nominas periódicas integrando adelantos.
+- **Formulario y Gestión**: Validaciones correctas en `FormEmpleado`, `ListaEmpleados` con calculos de antiguedad.
+- **Panel de Liquidación**: `NuevaNomina` maneja quincenal/mensual, deducciones de Seguridad Social automáticas (8%), bonificaciones, e importación iterativa de adelantos pendientes.
+- **Colillas PDF & WhatsApp**: `ColillaEmpleado.tsx` creado para autogenerar desprendibles usando `html2canvas` y `jspdf` (estilo comprobante de banco ligero), mostrando NIT, cargo del empleado e integrando WhatsApp local en un IFrame adaptado.
+
 # Fase 27: Módulo de Empleados y Nómina Básica
 
 > Agrega esta sección al CLAUDE.md existente del proyecto pos-tienda.

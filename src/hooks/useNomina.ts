@@ -1,6 +1,6 @@
 import { useLiveQuery } from 'dexie-react-hooks'
 import { db } from '../db/database'
-import type { Empleado, PeriodoNomina } from '../db/schema'
+import type { Empleado, PeriodoNomina, LiquidacionPrestaciones } from '../db/schema'
 
 export function useNomina() {
   const empleados = useLiveQuery(() => 
@@ -56,6 +56,75 @@ export function useNomina() {
     return adelantos.filter(a => !a.descontadoEn)
   }
 
+  const calcularPrestacionesEmpleado = async (empleadoId: number, año: number) => {
+    const empleado = await db.empleados.get(empleadoId)
+    if (!empleado) return []
+
+    const fechaIngreso = new Date(empleado.fechaIngreso)
+    const inicioAno = new Date(año, 0, 1)
+    const fechaEfectiva = fechaIngreso > inicioAno ? fechaIngreso : inicioAno
+
+    const finS1 = new Date(año, 5, 30) // 30 jun
+    const finS2 = new Date(año, 11, 31) // 31 dic
+    const inicioS2 = new Date(año, 6, 1) // 1 jul
+
+    const diffDays = (d1: Date, d2: Date) => Math.max(0, Math.floor((d2.getTime() - d1.getTime()) / 86400000) + 1)
+
+    const diasS1 = fechaEfectiva <= finS1 ? diffDays(fechaEfectiva, finS1) : 0
+    
+    const fechaEfectivaS2 = fechaEfectiva > inicioS2 ? fechaEfectiva : inicioS2
+    const diasS2 = fechaEfectivaS2 <= finS2 ? diffDays(fechaEfectivaS2, finS2) : 0
+
+    const diasAnio = diasS1 + diasS2
+
+    const liquidacionesDB = await db.liquidacionesPrestaciones
+      .where('empleadoId').equals(empleadoId)
+      .toArray()
+
+    const primaS1 = Math.round((empleado.salario * Math.min(diasS1, 180)) / 360)
+    const primaS2 = Math.round((empleado.salario * Math.min(diasS2, 180)) / 360)
+    const cesantias = Math.round((empleado.salario * Math.min(diasAnio, 360)) / 360)
+    const intereses = Math.round((cesantias * Math.min(diasAnio, 360) * 0.12) / 360)
+
+    const crearRegistroVirtual = (tipo: LiquidacionPrestaciones['tipo'], periodo: string, base: number, dias: number, monto: number): LiquidacionPrestaciones => {
+      const dbReg = liquidacionesDB.find(l => l.tipo === tipo && l.periodo === periodo)
+      if (dbReg) return dbReg
+      return {
+        empleadoId,
+        tipo,
+        periodo,
+        baseCalculo: base,
+        diasCalculo: dias,
+        monto,
+        estado: 'pendiente',
+        creadoEn: new Date()
+      }
+    }
+
+    return [
+      crearRegistroVirtual('prima', `${año}-S1`, empleado.salario, diasS1, primaS1),
+      crearRegistroVirtual('prima', `${año}-S2`, empleado.salario, diasS2, primaS2),
+      crearRegistroVirtual('cesantias', `${año}`, empleado.salario, diasAnio, cesantias),
+      crearRegistroVirtual('intereses_cesantias', `${año}`, cesantias, diasAnio, intereses),
+    ].filter(p => p.monto > 0)
+  }
+
+  const registrarPagoPrestacion = async (prestacion: LiquidacionPrestaciones) => {
+    // Si ya tiene ID, es que ya estaba registrada, solo actualizamos? Normalmente no debería pasar si es una nueva
+    if (prestacion.id) {
+      return await db.liquidacionesPrestaciones.update(prestacion.id, {
+        estado: 'pagado',
+        fechaPago: prestacion.fechaPago || new Date(),
+      })
+    } else {
+      return await db.liquidacionesPrestaciones.add({
+        ...prestacion,
+        estado: 'pagado',
+        fechaPago: prestacion.fechaPago || new Date(),
+      })
+    }
+  }
+
   return {
     empleados,
     crearEmpleado,
@@ -64,6 +133,8 @@ export function useNomina() {
     crearPeriodoNomina,
     listarPeriodosNomina,
     marcarPagado,
-    getAdelantosPendientes
+    getAdelantosPendientes,
+    calcularPrestacionesEmpleado,
+    registrarPagoPrestacion
   }
 }

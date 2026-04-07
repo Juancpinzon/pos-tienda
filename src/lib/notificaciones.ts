@@ -22,6 +22,7 @@ const INTERVALO: Record<string, number> = {
   fiado: 4  * 60 * 60 * 1000,   // máximo una vez cada 4h
   stock: 24 * 60 * 60 * 1000,   // máximo una vez al día
   caja:  24 * 60 * 60 * 1000,   // máximo una vez al día
+  nomina: 24 * 60 * 60 * 1000,  // máximo una vez al día
 }
 
 function puedeEnviar(tipo: string): boolean {
@@ -174,6 +175,62 @@ async function checkAperturaCaja(): Promise<void> {
   marcarEnviado('caja')
 }
 
+export async function checkAlertasNomina(): Promise<{ id: string, titulo: string, mensaje: string, tipo: 'warning' | 'info' }[]> {
+  const numEmpleados = await db.empleados.filter((e) => e.activo).count()
+  if (numEmpleados === 0) return []
+
+  const alertas: { id: string, titulo: string, mensaje: string, tipo: 'warning' | 'info' }[] = []
+  
+  const hoy = new Date()
+  const mes = hoy.getMonth() // 0 = Ene, 5 = Jun, 11 = Dic
+  const dia = hoy.getDate()
+
+  // Prima S1: 30 Junio. Alerta 15 días antes (15 de Junio)
+  if (mes === 5 && dia >= 15 && dia <= 30) {
+    alertas.push({
+      id: 'prima-s1',
+      titulo: 'Prima Primer Semestre',
+      mensaje: 'Recuerda liquidar la prima de servicios antes del 30 de Junio.',
+      tipo: 'warning'
+    })
+  }
+
+  // Prima S2: 20 Diciembre. Alerta 15 días antes (5 de Diciembre)
+  if (mes === 11 && dia >= 5 && dia <= 20) {
+    alertas.push({
+      id: 'prima-s2',
+      titulo: 'Prima Segundo Semestre',
+      mensaje: 'Recuerda liquidar la prima de servicios antes del 20 de Diciembre.',
+      tipo: 'warning'
+    })
+  }
+
+  // Intereses de Cesantías: Enero
+  if (mes === 0) {
+    alertas.push({
+      id: 'int-cesantias',
+      titulo: 'Intereses sobre Cesantías',
+      mensaje: 'Recuerda pagar los intereses sobre las cesantías antes del 31 de Enero.',
+      tipo: 'info'
+    })
+  }
+
+  return alertas
+}
+
+async function notificarMenuNomina(): Promise<void> {
+  if (!puedeEnviar('nomina')) return
+  const config = await obtenerConfig()
+  if (!config.notificacionesActivas) return
+
+  const alertas = await checkAlertasNomina()
+  if (alertas.length === 0) return
+
+  const alerta = alertas[0]
+  await mostrarNotificacion(`🔔 ${alerta.titulo}`, alerta.mensaje, '/nomina')
+  marcarEnviado('nomina')
+}
+
 // ─── Scheduler principal ──────────────────────────────────────────────────────
 
 let cajaTimerId: ReturnType<typeof setTimeout> | null = null
@@ -215,6 +272,7 @@ export function iniciarScheduler(): () => void {
     if (!config.notificacionesActivas || Notification.permission !== 'granted') return
     await checkMoraFiado()
     await checkProductosAgotados()
+    await notificarMenuNomina()
   }, 30_000)
 
   // Chequeo periódico cada 4 horas mientras la app está abierta
@@ -223,6 +281,7 @@ export function iniciarScheduler(): () => void {
     if (!config.notificacionesActivas || Notification.permission !== 'granted') return
     await checkMoraFiado()
     await checkProductosAgotados()
+    await notificarMenuNomina()
   }, 4 * 60 * 60 * 1000)
 
   // Recordatorio de apertura de caja a la hora configurada

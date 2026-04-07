@@ -1,13 +1,15 @@
 import { useState } from 'react'
 import { useNomina } from '../../hooks/useNomina'
 import { formatCOP } from '../../utils/moneda'
-import { User, Briefcase, Calendar, ChevronRight, Calculator } from 'lucide-react'
+import { User, Briefcase, Calendar, Calculator, Wallet } from 'lucide-react'
 import { NuevaNomina } from './NuevaNomina'
+import { PrestacionesEmpleado } from './PrestacionesEmpleado'
 import type { Empleado } from '../../db/schema'
 
 export function ListaEmpleados() {
   const { empleados } = useNomina()
   const [empleadoActivo, setEmpleadoActivo] = useState<Empleado | null>(null)
+  const [empleadoPrestaciones, setEmpleadoPrestaciones] = useState<Empleado | null>(null)
 
   if (!empleados) {
     return <div className="text-center p-8 text-suave text-sm">Cargando empleados...</div>
@@ -68,6 +70,13 @@ export function ListaEmpleados() {
               <p className="text-[10px] text-suave uppercase">/ mes</p>
             </div>
             <button 
+              onClick={() => setEmpleadoPrestaciones(emp)}
+              className="p-2 bg-acento/10 text-acento hover:bg-acento hover:text-white rounded-lg transition-colors ml-2"
+              title="Ver Prestaciones"
+            >
+              <Wallet size={18} />
+            </button>
+            <button 
               onClick={() => setEmpleadoActivo(emp)}
               className="p-2 bg-primario/10 text-primario hover:bg-primario hover:text-white rounded-lg transition-colors ml-2"
               title="Liquidar Nómina"
@@ -83,6 +92,13 @@ export function ListaEmpleados() {
         <NuevaNomina 
           empleado={empleadoActivo} 
           onClose={() => setEmpleadoActivo(null)} 
+        />
+      )}
+
+      {empleadoPrestaciones && (
+        <PrestacionesEmpleado 
+          empleado={empleadoPrestaciones} 
+          onClose={() => setEmpleadoPrestaciones(null)} 
         />
       )}
     </>
