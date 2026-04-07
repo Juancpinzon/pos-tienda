@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { BrowserRouter, Routes, Route, NavLink, Navigate, useLocation, useNavigate } from 'react-router-dom'
-import { ShoppingCart, BookOpen, Package, DollarSign, BarChart2, AlertCircle, Settings, Truck, Archive, LogOut, RefreshCw, Moon, Sun, Store, ChevronDown, Receipt, ClipboardList } from 'lucide-react'
+import { ShoppingCart, BookOpen, Package, DollarSign, BarChart2, AlertCircle, Settings, Truck, Archive, LogOut, RefreshCw, Moon, Sun, Store, ChevronDown, Receipt, ClipboardList, Users } from 'lucide-react'
 import { useThemeStore, esModoOscuroActivo } from './stores/themeStore'
 import { useSeed } from './hooks/useSeed'
 import { useSesionActual, useResumenCaja } from './hooks/useCaja'
@@ -21,6 +21,7 @@ import InventarioPage from './pages/InventarioPage'
 import DashboardMultitienda from './pages/DashboardMultitienda'
 import HistorialVentasPage from './pages/HistorialVentasPage'
 import ListaPedidoPage from './pages/ListaPedidoPage'
+import NominaPage from './pages/NominaPage'
 import LoginPage from './pages/LoginPage'
 import RegisterPage from './pages/RegisterPage'
 import { formatCOP } from './utils/moneda'
@@ -451,6 +452,7 @@ function AppLayout({ primerUso }: { primerUso: boolean }) {
     { to: '/reportes',      icon: BarChart2,     label: 'Reportes',  badge: false,        tourId: undefined,    roles: ['dueno', 'encargado']             },
     { to: '/historial',     icon: Receipt,       label: 'Historial', badge: false,        tourId: undefined,    roles: ['dueno', 'encargado', 'empleado'] },
     { to: '/pedido',        icon: ClipboardList, label: 'Pedido',    badge: false,        tourId: undefined,    roles: ['dueno', 'encargado']             },
+    { to: '/nomina',        icon: Users,         label: 'Empleados', badge: false,        tourId: undefined,    roles: ['dueno', 'encargado']             },
     // Multi-tienda: solo si el dueño tiene 2+ tiendas en Supabase
     ...(tieneMultitienda
       ? [{ to: '/multi-tienda', icon: Store, label: 'Tiendas', badge: false, tourId: undefined, roles: ['dueno'] }]
@@ -518,6 +520,7 @@ function AppLayout({ primerUso }: { primerUso: boolean }) {
             <Route path="/reportes"      element={<RutaProtegida><ReportesPage /></RutaProtegida>}                  />
             <Route path="/historial"     element={<HistorialVentasPage />}                                             />
             <Route path="/pedido"        element={<RutaProtegida><ListaPedidoPage /></RutaProtegida>}                  />
+            <Route path="/nomina"        element={<RutaProtegida><NominaPage /></RutaProtegida>}                       />
             <Route path="/multi-tienda" element={<RutaProtegida><DashboardMultitienda /></RutaProtegida>}             />
           </Routes>
         </main>

@@ -17,6 +17,10 @@ import type {
   MapeoSKU,
   ConfigFiscal,
   CuentaAbierta,
+  Empleado,
+  PeriodoNomina,
+  LiquidacionPrestaciones,
+  AdelantoEmpleado,
 } from './schema'
 
 // Singleton de Dexie — única instancia para toda la aplicación
@@ -43,6 +47,11 @@ class POSDatabase extends Dexie {
   configFiscal!: EntityTable<ConfigFiscal, 'id'>
   // v6 — cuentas abiertas / comandas
   cuentasAbiertas!: EntityTable<CuentaAbierta, 'id'>
+  // v7 — módulo de nómina
+  empleados!: EntityTable<Empleado, 'id'>
+  periodosNomina!: EntityTable<PeriodoNomina, 'id'>
+  liquidacionesPrestaciones!: EntityTable<LiquidacionPrestaciones, 'id'>
+  adelantosEmpleado!: EntityTable<AdelantoEmpleado, 'id'>
 
   constructor() {
     super('POSTienda')
@@ -89,6 +98,14 @@ class POSDatabase extends Dexie {
     this.version(6).stores({
       cuentasAbiertas: '++id, estado, sesionCajaId, creadaEn',
     })
+
+    // Versión 7: módulo de nómina para empleados
+    this.version(7).stores({
+      empleados: "++id, activo, nombre",
+      periodosNomina: "++id, empleadoId, estado, fechaInicio",
+      liquidacionesPrestaciones: "++id, empleadoId, tipo, periodo, estado",
+      adelantosEmpleado: "++id, empleadoId, descontadoEn",
+    })
   }
 }
 
@@ -114,4 +131,8 @@ export type {
   MapeoSKU,
   ConfigFiscal,
   CuentaAbierta,
+  Empleado,
+  PeriodoNomina,
+  LiquidacionPrestaciones,
+  AdelantoEmpleado,
 }

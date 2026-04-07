@@ -54,8 +54,8 @@ export const useAuthStore = create<AuthState>()(
 
 /** Rutas permitidas para cada rol */
 export const RUTAS_POR_ROL: Record<RolUsuario, string[]> = {
-  dueno:     ['/', '/fiados', '/productos', '/inventario', '/proveedores', '/caja', '/reportes', '/historial', '/pedido', '/multi-tienda'],
-  encargado: ['/', '/fiados', '/productos', '/proveedores', '/caja', '/reportes', '/historial', '/pedido'],
+  dueno:     ['/', '/fiados', '/productos', '/inventario', '/proveedores', '/caja', '/reportes', '/historial', '/pedido', '/multi-tienda', '/nomina'],
+  encargado: ['/', '/fiados', '/productos', '/proveedores', '/caja', '/reportes', '/historial', '/pedido', '/nomina'],
   empleado:  ['/', '/fiados', '/historial'],
 }
 

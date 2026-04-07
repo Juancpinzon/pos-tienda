@@ -234,3 +234,64 @@ export interface MovimientoStock {
   compraId?: number      // link a compra si tipo='entrada'
   creadoEn: Date
 }
+
+// ─── Módulo de Nómina y Empleados (v7) ───────────────────────────────────────
+
+export interface Empleado {
+  id?: number;
+  nombre: string;
+  cedula?: string;
+  cargo?: string;
+  salario: number;
+  tipoContrato: "indefinido" | "fijo" | "obra_labor";
+  fechaIngreso: Date;
+  telefono?: string;
+  activo: boolean;
+  creadoEn: Date;
+}
+
+export interface PeriodoNomina {
+  id?: number;
+  empleadoId: number;
+  tipo: "quincenal" | "mensual";
+  fechaInicio: Date;
+  fechaFin: Date;
+  salarioBase: number;
+  diasTrabajados: number;
+  horasExtra?: number;
+  bonificaciones: number;
+  deduccionSalud: number;
+  deduccionPension: number;
+  otrasDeduciones: number;
+  totalDevengado: number;
+  totalDeducciones: number;
+  netoAPagar: number;
+  estado: "borrador" | "pagado";
+  fechaPago?: Date;
+  notas?: string;
+  creadoEn: Date;
+}
+
+export interface LiquidacionPrestaciones {
+  id?: number;
+  empleadoId: number;
+  tipo: "prima" | "cesantias" | "intereses_cesantias" | "vacaciones";
+  periodo: string; // "2025-S1", "2025", "2025-S2"
+  baseCalculo: number; // Salario promedio del período
+  diasCalculo: number; // Días trabajados en el período
+  monto: number;
+  estado: "pendiente" | "pagado";
+  fechaPago?: Date;
+  creadoEn: Date;
+}
+
+export interface AdelantoEmpleado {
+  id?: number;
+  empleadoId: number;
+  monto: number;
+  descripcion?: string;
+  sesionCajaId?: number;
+  descontadoEn?: number; // ID del PeriodoNomina donde se descontó
+  creadoEn: Date;
+}
+

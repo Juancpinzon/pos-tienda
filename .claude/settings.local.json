@@ -24,7 +24,11 @@
       "Bash(node -e \"const p = require\\(''./node_modules/vite/package.json''\\); console.log\\(''vite:'', p.version\\)\")",
       "Bash(npx supabase:*)",
       "mcp__03e5ad9d-1d09-477d-9143-5b04085e2400__execute_sql",
-      "mcp__03e5ad9d-1d09-477d-9143-5b04085e2400__apply_migration"
+      "mcp__03e5ad9d-1d09-477d-9143-5b04085e2400__apply_migration",
+      "mcp__03e5ad9d-1d09-477d-9143-5b04085e2400__get_logs",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" -X OPTIONS \"https://kzyebyztrlupzoyvqyhq.supabase.co/functions/v1/analizar-factura\" -H \"Origin: https://pos-tienda-ten.vercel.app\")",
+      "Bash(curl -s -w \"\\\\nHTTP_STATUS:%{http_code}\" -X POST \"https://kzyebyztrlupzoyvqyhq.supabase.co/functions/v1/analizar-factura\" -H \"Content-Type: application/json\" -d '{\"\"imagenBase64\"\":\"\"dGVzdA==\"\",\"\"mimeType\"\":\"\"image/jpeg\"\"}')",
+      "Bash(curl -s -w \"\\\\nHTTP:%{http_code}\" -X POST \"https://kzyebyztrlupzoyvqyhq.supabase.co/functions/v1/analizar-factura\" -H \"Content-Type: application/json\" -d '{\"\"imagenBase64\"\":\"\"dGVzdA==\"\",\"\"mimeType\"\":\"\"image/jpeg\"\"}')"
     ]
   }
 }
