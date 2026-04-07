@@ -622,8 +622,11 @@ Ver guía completa de publicación en `docs/fase-23-play-store.md`.
 
 ### Fase 22: Notificaciones Push ✅
 
-- lib/notificaciones.ts unificado para web (PWA) y Android (Capacitor).
-- Scheduler local implementado exitosamente: checkMoraFiado y checkProductosAgotados corriendo en background web/nativo.
+- Motor completo en src/lib/notificaciones.ts
+- Recordatorios mora fiado (7, 15, 30 días)
+- Alertas stock agotado
+- Recordatorio apertura de caja
+- Sección Notificaciones en ConfigModal
 
 ### Fase 23: Capacitor Android ✅
 
@@ -633,17 +636,39 @@ Ver guía completa de publicación en `docs/fase-23-play-store.md`.
 - useBluetooth.ts: dual @capacitor-community/bluetooth-le + Web Bluetooth API
 - docs/fase-23-play-store.md: guía de publicación en Play Store
 
-### Fase 24: Nota de Venta — Régimen Simple ✅
+### Fase 24: Nota de Venta (Régimen Simple) ✅
 
-- src/lib/notaVenta.ts: generarNotaVenta (HTML), generarPDF (html2canvas+jsPDF), generarTextoNotaVenta, compartirNotaPorWhatsApp, descargarPDF
-- src/db/schema.ts: nueva interfaz ConfigFiscal (ultimoConsecutivo, prefijo, campos DIAN futuros)
-- src/db/database.ts: tabla configFiscal (versión 5), consecutivo persistido
-- src/components/pos/ModalNotaVenta.tsx: preview HTML en iframe, botones Descargar PDF y WhatsApp
-- src/components/pos/ModalCobro.tsx: PantallaExito con botón "📄 Ver nota de venta" + consecutivo auto-generado
-- src/pages/HistorialVentasPage.tsx: botón "📄 Nota de venta" en cada venta del historial
-- src/components/config/ConfigModal.tsx: sección Facturación con prefijo, consecutivo actual y aviso Régimen Simple
+- Consecutivo NV-0001, NV-0002...
+- PDF descargable con jspdf + html2canvas
+- Compartir por WhatsApp
+- Sección Facturación en ConfigModal
+
+### Fase: Roles Ampliados ✅
+
+- Tres niveles: dueño / encargado / cajero
+- Encargado: puede abrir caja, registrar compras, usar OCR, ver reportes básicos
+- Cajero: solo ventas y fiados
+- Selector de rol al invitar empleado
+
+### Fase: Cuentas Abiertas (Comandas) ✅
+
+- Tabla cuentas_abiertas en Dexie y Supabase
+- Panel lateral en POSPage con cuentas activas
+- Agregar productos a cuenta por rondas
+- Cobrar cuenta completa al final
+- Advertencia al cerrar caja con cuentas abiertas
+
+### Fase: OCR Mejorado ✅
+
+- Extrae proveedor completo (nombre, NIT, teléfono)
+- Extrae IVA por producto y total
+- Opción galería además de cámara
+- Acepta PDF además de imagen
+- Crea proveedor automáticamente si no existe
+- Mapeo inteligente de SKUs integrado
 
 ### Fase 26: Asistente IA para Tendero ✅
+
 - src/lib/asistente.ts: prepararContexto (ventas, stock, morosos), consultarIA proxy
 - src/components/reportes/AsistenteIA.tsx: Chat flotante para consultas en la PWA
 - supabase/functions/asistente-ventas/index.ts: Proxy a Anthropic con claude-3-5-haiku-20241022 y System Prompt local
@@ -695,11 +720,11 @@ git add . && git commit -m "mensaje" && git push origin main
 
 ## 🔮 Roadmap (Pendiente)
 
-- Completar Fase 22: integración completa de notificaciones push (alertas de stock mínimo, recordatorios de fiado vencido)
-- Integración con impresoras térmicas Bluetooth (usar `useBluetooth.ts` ya creado)
-- Publicar en Google Play Store (ver `docs/fase-23-play-store.md`)
-- IA conversacional para análisis de ventas (usar VITE_ANTHROPIC_API_KEY)
-- Facturación electrónica DIAN (cuando sea obligatorio — preparado en ConfigFiscal)
+- Completar escáner código de barras (bug pendiente)
+- Play Store (Fase 25) — Android Studio requerido
+- IA conversacional análisis ventas (Fase 26)
+- Impresora térmica Bluetooth (Fase 27)
+- Preparación DIAN (Fase 28)
 
 ---
 
