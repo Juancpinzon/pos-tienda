@@ -3,9 +3,10 @@ import { X, AlertCircle } from 'lucide-react'
 import { useNomina } from '../../hooks/useNomina'
 import { calcularDeduccionesSS } from '../../utils/nomina'
 import { formatCOP } from '../../utils/moneda'
-import type { Empleado, AdelantoEmpleado } from '../../db/schema'
+import type { Empleado, AdelantoEmpleado, PeriodoNomina } from '../../db/schema'
 import { startOfMonth, endOfMonth, setDate, format } from 'date-fns'
 import { db } from '../../db/database'
+import { ColillaEmpleado } from './ColillaEmpleado'
 
 interface Props {
   empleado: Empleado
@@ -66,6 +67,7 @@ export function NuevaNomina({ empleado, onClose }: Props) {
   const netoAPagar = devengado - totalDeducciones
 
   const [guardando, setGuardando] = useState(false)
+  const [periodoGenerado, setPeriodoGenerado] = useState<PeriodoNomina | null>(null)
 
   const handleGuardar = async (estado: 'borrador' | 'pagado') => {
     setGuardando(true)
@@ -95,6 +97,14 @@ export function NuevaNomina({ empleado, onClose }: Props) {
         await Promise.all(adelantos.map(a => 
           db.adelantosEmpleado.update(a.id!, { descontadoEn: Number(periodoId) })
         ))
+      }
+      
+      if (estado === 'pagado') {
+        const pGuardado = await db.periodosNomina.get(periodoId as number)
+        if (pGuardado) {
+          setPeriodoGenerado(pGuardado)
+          return // no hacemos onClose aun, mostramos la colilla
+        }
       }
 
       onClose()
@@ -247,6 +257,18 @@ export function NuevaNomina({ empleado, onClose }: Props) {
           </button>
         </div>
       </div>
+
+      {/* Si se generó el periodo pagado, montamos el modal de la colilla encima */}
+      {periodoGenerado && (
+        <ColillaEmpleado 
+          empleado={empleado} 
+          periodo={periodoGenerado}
+          onClose={() => {
+            setPeriodoGenerado(null)
+            onClose() // cerramos todo
+          }}
+        />
+      )}
     </div>
   )
 }
