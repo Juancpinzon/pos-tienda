@@ -674,6 +674,475 @@ Ver guía completa de publicación en `docs/fase-23-play-store.md`.
 - supabase/functions/asistente-ventas/index.ts: Proxy a Anthropic con claude-3-5-haiku-20241022 y System Prompt local
 - Integrado directamente en ReportesPage.tsx exclusivo para el dueño
 
+# Fase 27: Módulo de Empleados y Nómina Básica
+
+> Agrega esta sección al CLAUDE.md existente del proyecto pos-tienda.
+> Lee el CLAUDE.md completo antes de tocar cualquier archivo.
+> Esta fase respeta todos los principios irrompibles ya definidos.
+
+---
+
+## 🧠 Contexto de esta Fase
+
+El tendero con 1-3 empleados hoy liquida prestaciones a ojo o le paga a un contador
+cada vez que necesita un desprendible. No usa Siigo ni Helisa — son caros, complejos
+y diseñados para empresas, no para tiendas.
+
+Este módulo resuelve exactamente eso: calcular las prestaciones correctamente y
+generar una colilla de pago en PDF, sin PILA, sin DIAN, sin archivos planos
+para bancos. Lo que el contador ya maneja, que lo siga manejando.
+
+**Alcance deliberadamente limitado:**
+
+- ✅ Registro de empleados
+- ✅ Cálculo de prima, cesantías, intereses de cesantías
+- ✅ Deducción de salud y pensión (cuota empleado)
+- ✅ Colilla de pago en PDF compartible por WhatsApp
+- ✅ Alertas de fechas críticas de prestaciones
+- ❌ PILA / aportes al sistema (fuera de alcance — lo hace el contador)
+- ❌ Archivo plano para bancos
+- ❌ Retención en la fuente (la mayoría de estos empleados no aplica)
+
+---
+
+## 💾 Schema de Base de Datos — Tablas Nuevas
+
+Agregar al archivo `src/db/schema.ts`:
+
+```typescript
+export interface Empleado {
+  id?: number;
+  nombre: string; // Nombre completo
+  cedula?: string; // Opcional — no bloquear si no tienen
+  cargo?: string; // "Cajero", "Aux. de bodega", etc.
+  salario: number; // Salario mensual en COP
+  tipoContrato: "indefinido" | "fijo" | "obra_labor";
+  fechaIngreso: Date; // Para calcular antigüedad
+  telefono?: string;
+  activo: boolean;
+  creadoEn: Date;
+}
+
+export interface PeriodoNomina {
+  id?: number;
+  empleadoId: number;
+  tipo: "quincenal" | "mensual";
+  fechaInicio: Date;
+  fechaFin: Date;
+  salarioBase: number; // Snapshot del salario en ese período
+  diasTrabajados: number; // Para ausencias o ingreso parcial
+  horasExtra?: number; // Opcional — calculadas aparte
+  bonificaciones: number; // Monto adicional libre
+  deduccionSalud: number; // 4% del IBC — calculado
+  deduccionPension: number; // 4% del IBC — calculado
+  otrasDeduciones: number; // Anticipos, préstamos, etc.
+  totalDevengado: number; // calculado
+  totalDeducciones: number; // calculado
+  netoAPagar: number; // calculado
+  estado: "borrador" | "pagado";
+  fechaPago?: Date;
+  notas?: string;
+  creadoEn: Date;
+}
+
+export interface LiquidacionPrestaciones {
+  id?: number;
+  empleadoId: number;
+  tipo: "prima" | "cesantias" | "intereses_cesantias" | "vacaciones";
+  periodo: string; // "2025-S1", "2025", "2025-S2"
+  baseCalculo: number; // Salario promedio del período
+  diasCalculo: number; // Días trabajados en el período
+  monto: number; // calculado
+  estado: "pendiente" | "pagado";
+  fechaPago?: Date;
+  creadoEn: Date;
+}
+
+export interface AdelantoEmpleado {
+  id?: number;
+  empleadoId: number;
+  monto: number;
+  descripcion?: string;
+  sesionCajaId?: number;
+  descontadoEn?: number; // ID del PeriodoNomina donde se descontó
+  creadoEn: Date;
+}
+```
+
+**Índices a agregar en `src/db/database.ts`:**
+
+```typescript
+empleados: "++id, activo, nombre",
+periodosNomina: "++id, empleadoId, estado, fechaInicio",
+liquidacionesPrestaciones: "++id, empleadoId, tipo, periodo, estado",
+adelantosEmpleado: "++id, empleadoId, descontadoEn",
+```
+
+---
+
+## 📐 Reglas de Negocio Irrompibles — Motor de Cálculo
+
+Estas fórmulas son legales en Colombia. No modificar sin verificar la norma vigente.
+
+### Deducciones del empleado (van al sistema de seguridad social)
+
+```
+IBC = Salario base (mínimo 1 SMMLV para el cálculo)
+Deducción salud     = IBC × 4%
+Deducción pensión   = IBC × 4%
+Total deducciones SS = IBC × 8%
+```
+
+### Prima de servicios (Ley 21/1982)
+
+```
+Períodos: 1 junio al 30 junio (se paga antes del 30 jun)
+          1 diciembre al 20 diciembre (se paga antes del 20 dic)
+
+Prima = (Salario × Días trabajados en semestre) / 360
+
+Ejemplo: salario $1.500.000, 180 días → Prima = $750.000
+```
+
+### Cesantías (Ley 50/1990)
+
+```
+Período: 1 enero al 31 diciembre
+Se consignan al fondo antes del 14 de febrero del año siguiente
+
+Cesantías = (Salario × Días trabajados en el año) / 360
+
+Ejemplo: salario $1.500.000, 360 días → Cesantías = $1.500.000
+```
+
+### Intereses sobre cesantías (Ley 52/1975)
+
+```
+Período: mismos días de las cesantías
+Se pagan directamente al empleado antes del 31 de enero
+
+Intereses = Cesantías × 12% × (Días / 360)
+
+Ejemplo: cesantías $1.500.000, 360 días → Intereses = $180.000
+```
+
+### Vacaciones (CST Art. 186)
+
+```
+15 días hábiles por cada año de servicio
+
+Vacaciones = (Salario × Días de vacaciones) / 360
+```
+
+### SMMLV 2025
+
+```typescript
+// src/utils/nomina.ts
+export const SMMLV_2025 = 1_423_500; // Salario Mínimo Mensual Legal Vigente 2025
+export const SUBSIDIO_TRANSPORTE_2025 = 200_000; // Solo para salarios <= 2 SMMLV
+```
+
+> ⚠️ Estos valores cambian cada enero por decreto. Deben ser configurables en
+> ConfigTienda, no hardcodeados en la lógica de cálculo.
+
+---
+
+## 🔄 Flujos de Negocio — Módulo Nómina
+
+### Flujo 1: Registrar un empleado (< 1 minuto)
+
+```
+1. Ir a /nomina → botón "Nuevo empleado"
+2. Ingresar: nombre (obligatorio), salario (obligatorio), fecha de ingreso (obligatorio)
+3. Tipo de contrato (indefinido por defecto)
+4. Cedula, cargo, teléfono (todos opcionales — no bloquear si falta)
+5. Guardar → empleado aparece en la lista
+```
+
+### Flujo 2: Generar colilla de pago quincenal/mensual
+
+```
+1. Seleccionar empleado
+2. Tocar "Nueva nómina"
+3. Sistema pre-rellena:
+   - Período (quincena actual o mes actual)
+   - Días trabajados (15 o 30 por defecto)
+   - Salario base (del empleado)
+   - Deducciones calculadas automáticamente
+4. Tendero ajusta si hay ausencias, bonificaciones o adelantos pendientes
+5. "Generar colilla" → PDF descargable + botón WhatsApp
+6. Marcar como "Pagado"
+```
+
+### Flujo 3: Calcular y registrar prestaciones
+
+```
+1. En la pantalla del empleado → pestaña "Prestaciones"
+2. Sistema muestra el estado actual:
+   - Prima: monto estimado para este semestre
+   - Cesantías: monto acumulado en el año
+   - Intereses cesantías: monto acumulado
+3. Botón "Registrar pago" → seleccionar tipo, confirmar monto, fecha
+4. Genera entrada en LiquidacionPrestaciones(estado='pagado')
+```
+
+### Flujo 4: Adelanto a empleado
+
+```
+1. En la pantalla del empleado → "Adelanto"
+2. Ingresar monto y descripción opcional
+3. Se descuenta de la próxima nómina automáticamente
+4. El tendero puede marcar si ya se descontó o dejarlo pendiente
+```
+
+---
+
+## 🖥️ Pantallas y Navegación
+
+### Nueva ruta
+
+| Ruta      | Página     | Roles            |
+| --------- | ---------- | ---------------- |
+| `/nomina` | NominaPage | dueño, encargado |
+
+### Estructura de NominaPage
+
+```
+┌─────────────────────────────────────────┐
+│  👥 Empleados y Nómina          [+ Nuevo]│
+├─────────────────────────────────────────┤
+│  [Alertas próximas fechas]              │
+│  ⚠️ Prima S2 vence en 12 días           │
+├─────────────────────────────────────────┤
+│  Carlos Pérez          $1.500.000/mes   │
+│  Cajero · 2 años 3 meses    [Ver →]     │
+├─────────────────────────────────────────┤
+│  María González        $1.423.500/mes   │
+│  Aux. bodega · 8 meses      [Ver →]     │
+└─────────────────────────────────────────┘
+```
+
+### Pantalla de empleado individual
+
+```
+┌─────────────────────────────────────────┐
+│  ← Carlos Pérez                         │
+│  Cajero · Indefinido · Desde ene 2023   │
+├─────────────────────────────────────────┤
+│  [Nueva nómina]  [Prestaciones]         │
+├─────────────────────────────────────────┤
+│  ÚLTIMA NÓMINA                          │
+│  Mar 1–15, 2026                         │
+│  Devengado:    $750.000                 │
+│  Deducciones:  -$120.000                │
+│  Neto pagado:  $630.000    [Ver PDF]    │
+├─────────────────────────────────────────┤
+│  PRESTACIONES ESTIMADAS (2026)          │
+│  Cesantías:     $1.423.500              │
+│  Int. cesantías:  $170.820              │
+│  Prima S1 (jun):  $711.750              │
+└─────────────────────────────────────────┘
+```
+
+---
+
+## 📁 Archivos Nuevos a Crear
+
+```
+src/
+├── hooks/
+│   └── useNomina.ts              # CRUD empleados + cálculos prestaciones
+├── utils/
+│   └── nomina.ts                 # SMMLV, fórmulas, constantes anuales
+├── components/
+│   └── nomina/
+│       ├── ListaEmpleados.tsx    # Lista con alertas de fechas
+│       ├── FormEmpleado.tsx      # Registro/edición de empleado
+│       ├── NuevaNomina.tsx       # Modal para generar período de nómina
+│       ├── ColillaEmpleado.tsx   # Vista previa colilla + PDF + WhatsApp
+│       └── PrestacionesEmpleado.tsx  # Resumen y registro de prestaciones
+└── pages/
+    └── NominaPage.tsx            # Página principal /nomina
+```
+
+---
+
+## 📋 Archivos Existentes a Modificar
+
+```
+src/db/schema.ts          → Agregar 4 interfaces nuevas
+src/db/database.ts        → Agregar 4 tablas con índices
+src/App.tsx               → Agregar ruta /nomina
+src/components/shared/
+  BottomNav.tsx            → Agregar ítem "Empleados" (icono Users)
+                             Solo visible para dueño y encargado
+```
+
+---
+
+## 🚀 Sub-sprints para Claude Code
+
+Ejecutar en este orden exacto. No pasar al siguiente sin probar el anterior.
+
+### Sub-sprint 27.1 — Schema y hook base
+
+```
+OBJETIVO: Dexie acepta las nuevas tablas sin errores
+
+Tareas:
+- Agregar interfaces Empleado, PeriodoNomina, LiquidacionPrestaciones,
+  AdelantoEmpleado a src/db/schema.ts
+- Agregar tablas con índices en src/db/database.ts
+- Crear src/utils/nomina.ts con SMMLV_2025, SUBSIDIO_TRANSPORTE_2025
+  y funciones: calcularDeduccionesSS(salario), calcularPrima(salario, diasTrabajados),
+  calcularCesantias(salario, diasTrabajados), calcularInteresesCesantias(cesantias, diasTrabajados),
+  calcularVacaciones(salario, diasVacaciones)
+- Crear src/hooks/useNomina.ts con: listarEmpleados(), crearEmpleado(),
+  actualizarEmpleado(), archivarEmpleado()
+
+Criterio de éxito: npm run build sin errores TypeScript.
+  Abrir DevTools → Application → IndexedDB → confirmar que las 4 tablas nuevas existen.
+```
+
+### Sub-sprint 27.2 — Lista de empleados y CRUD
+
+```
+OBJETIVO: El tendero puede registrar y ver sus empleados
+
+Tareas:
+- Crear NominaPage.tsx en src/pages/ con ruta /nomina
+- Crear ListaEmpleados.tsx — muestra nombre, cargo, salario, antigüedad calculada
+- Crear FormEmpleado.tsx — campos: nombre*, salario*, fechaIngreso*, tipoContrato*,
+  cargo (opcional), cedula (opcional), telefono (opcional)
+  Validación Zod: nombre y salario obligatorios, salario >= 0
+- Agregar /nomina a App.tsx (solo roles dueño y encargado)
+- Agregar "Empleados" al BottomNav con ícono Users de lucide-react
+
+Criterio de éxito: Crear un empleado, verlo en la lista, editarlo, archivarlo.
+  El cajero NO ve el ítem en el menú.
+```
+
+### Sub-sprint 27.3 — Nómina quincenal / mensual
+
+```
+OBJETIVO: Generar y guardar un período de nómina
+
+Tareas:
+- Crear NuevaNomina.tsx — modal con:
+  * Selector tipo: quincenal / mensual
+  * Fechas del período (pre-rellenadas con período actual)
+  * Días trabajados (editable — default 15 o 30)
+  * Bonificaciones (campo libre en COP)
+  * Adelantos pendientes del empleado (se muestran y se descuentan)
+  * Cálculo en tiempo real: devengado, deducciones SS, neto a pagar
+  * Botón "Guardar como borrador" y "Marcar como pagado"
+- Agregar a useNomina: crearPeriodoNomina(), listarPeriodosNomina(empleadoId),
+  marcarPagado(periodoId)
+
+Criterio de éxito: Generar nómina para un empleado. Verificar que los cálculos
+  de deduccionesSS baten con la fórmula (salario × 8%). Marcar como pagado.
+  Ver en el historial del empleado.
+```
+
+### Sub-sprint 27.4 — Colilla PDF y WhatsApp
+
+```
+OBJETIVO: El empleado recibe su colilla
+
+Tareas:
+- Crear ColillaEmpleado.tsx con jspdf + html2canvas (ya instalados en el proyecto)
+- La colilla muestra:
+  * Nombre tienda (de ConfigTienda)
+  * Nombre empleado, cargo, período
+  * Detalle devengado: salario base, bonificaciones
+  * Detalle deducciones: salud, pensión, adelantos, otras
+  * Neto a pagar (grande, destacado)
+  * Fecha de pago
+- Botón "Descargar PDF"
+- Botón "Compartir WhatsApp" → abre wa.me con texto preformateado +
+  enlace al PDF (mismo patrón que Fase 24 NotaVenta)
+
+Criterio de éxito: Generar PDF de una colilla. Abrir en el celular.
+  El botón de WhatsApp abre la app con el mensaje correcto.
+```
+
+### Sub-sprint 27.5 — Prestaciones y alertas
+
+```
+OBJETIVO: El tendero sabe cuánto debe en prestaciones y cuándo vencen
+
+Tareas:
+- Crear PrestacionesEmpleado.tsx con:
+  * Tabla de prestaciones estimadas para el año en curso
+  * Estado por tipo: pendiente / pagado
+  * Botón "Registrar pago" → modal simple (monto, fecha, tipo)
+- Agregar a useNomina: calcularPrestacionesEmpleado(empleadoId, año),
+  registrarPagoPrestacion()
+- Panel de alertas en NominaPage (parte superior):
+  * Prima S1: aviso 15 días antes del 30 de junio
+  * Prima S2: aviso 15 días antes del 20 de diciembre
+  * Intereses cesantías: aviso en enero
+  Usar el sistema de notificaciones ya existente (src/lib/notificaciones.ts)
+
+Criterio de éxito: Con un empleado con 6 meses de antigüedad, el sistema
+  muestra la prima estimada correcta. La alerta aparece en el panel cuando
+  faltan menos de 15 días para la fecha de pago.
+```
+
+---
+
+## 🚨 Reglas Específicas de esta Fase
+
+1. **Las fórmulas son sagradas.** Cualquier cambio en los porcentajes de SS o en las
+   fórmulas de prestaciones requiere actualizar `src/utils/nomina.ts` Y este CLAUDE.md.
+
+2. **SMMLV y subsidio de transporte** deben vivir en ConfigTienda como parámetros
+   editables. Cada enero cambian. El tendero o el contador los actualiza manualmente.
+
+3. **No bloquear si faltan datos opcionales.** Cédula, cargo y teléfono son opcionales.
+   El formulario no puede impedir guardar si faltan.
+
+4. **Offline primero.** Todo el módulo funciona sin Supabase. Si hay sync activo,
+   las tablas nuevas se sincronizan igual que las existentes.
+
+5. **Colilla en español colombiano.** Los textos de la colilla van en español.
+   Moneda siempre con `formatCOP()`. Fechas con el formato ya definido en `utils/fecha.ts`.
+
+6. **Roles respetados.** `/nomina` solo accesible para `dueño` y `encargado`.
+   El cajero no ve nada de este módulo — ni en el menú ni en rutas directas.
+
+7. **No tocar `ventaStore`, `cajaStore` ni `uiStore`.** Esta fase no modifica
+   el flujo de venta existente.
+
+---
+
+## ✅ Pruebas de Validación (Spec-Driven)
+
+Antes de cerrar la fase, verificar que estos casos dan el resultado correcto:
+
+| Caso                   | Input                           | Resultado esperado                               |
+| ---------------------- | ------------------------------- | ------------------------------------------------ |
+| Deducción SS           | Salario $1.500.000              | Salud $60.000 · Pensión $60.000 · Total $120.000 |
+| Deducción SS mínimo    | Salario $800.000 (< SMMLV)      | Calcular sobre SMMLV $1.423.500                  |
+| Prima semestral        | $1.500.000 · 180 días           | $750.000                                         |
+| Prima parcial          | $1.500.000 · 90 días            | $375.000                                         |
+| Cesantías año completo | $1.500.000 · 360 días           | $1.500.000                                       |
+| Intereses cesantías    | Cesantías $1.500.000 · 360 días | $180.000                                         |
+| Nómina quincenal       | $1.500.000 · 15 días            | Devengado $750.000 · SS $60.000 · Neto $690.000  |
+
+Si algún caso falla → no avanzar al siguiente sub-sprint.
+
+---
+
+## 🔮 Fuera de Alcance (para fases futuras)
+
+- Integración PILA / operadores de nómina electrónica
+- Retención en la fuente (aplica cuando salario > 95 UVT)
+- Archivo plano bancario para dispersión de nómina
+- Horas extra nocturnas, dominicales, festivas (requiere registro de turno)
+- Vacaciones con calendario (solo monto por ahora)
+- Liquidación definitiva de contrato (requiere cálculo de indemnizaciones)
+
 ---
 
 ## 🚨 Reglas de Código
