@@ -1,9 +1,12 @@
 import { z } from 'zod'
+import { useEffect } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { X } from 'lucide-react'
+import { toast } from 'react-hot-toast'
 import { useNomina } from '../../hooks/useNomina'
 import { SMMLV_2025 } from '../../utils/nomina'
+import { db } from '../../db/database'
 
 const empleadoSchema = z.object({
   nombre: z.string().min(1, 'El nombre es obligatorio'),
@@ -23,7 +26,7 @@ interface Props {
 }
 
 export function FormEmpleado({ onClose, empleadoId }: Props) {
-  const { crearEmpleado } = useNomina()
+  const { crearEmpleado, actualizarEmpleado } = useNomina()
   
   const form = useForm<EmpleadoForm>({
     resolver: zodResolver(empleadoSchema),
@@ -38,18 +41,44 @@ export function FormEmpleado({ onClose, empleadoId }: Props) {
     }
   })
 
+  useEffect(() => {
+    if (empleadoId) {
+      db.empleados.get(empleadoId).then((emp) => {
+        if (emp) {
+          form.reset({
+            nombre: emp.nombre,
+            salario: emp.salario,
+            fechaIngreso: typeof emp.fechaIngreso === 'string' 
+              ? (emp.fechaIngreso as string).split('T')[0] 
+              : emp.fechaIngreso.toISOString().split('T')[0],
+            tipoContrato: emp.tipoContrato,
+            cedula: emp.cedula || '',
+            cargo: emp.cargo || '',
+            telefono: emp.telefono || ''
+          })
+        }
+      })
+    }
+  }, [empleadoId, form])
+
   const onSubmit = async (data: EmpleadoForm) => {
     try {
-      await crearEmpleado({
+      const payload = {
         ...data,
         salario: Number(data.salario),
         fechaIngreso: new Date(data.fechaIngreso + 'T12:00:00'),
-        activo: true
-      })
-      alert('Empleado guardado exitosamente')
+      }
+
+      if (empleadoId) {
+        await actualizarEmpleado(empleadoId, payload)
+        toast.success('Empleado actualizado exitosamente')
+      } else {
+        await crearEmpleado({ ...payload, activo: true })
+        toast.success('Empleado guardado exitosamente')
+      }
       onClose()
     } catch (e: any) {
-      alert(e.message || 'Error al guardar')
+      toast.error(e.message || 'Error al guardar')
     }
   }
 

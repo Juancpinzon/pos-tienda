@@ -24,6 +24,7 @@ import ListaPedidoPage from './pages/ListaPedidoPage'
 import NominaPage from './pages/NominaPage'
 import LoginPage from './pages/LoginPage'
 import RegisterPage from './pages/RegisterPage'
+import { Toaster } from 'react-hot-toast'
 import { formatCOP } from './utils/moneda'
 import { useAuthStore, puedeAcceder, type TiendaResumen, type RolUsuario } from './stores/authStore'
 import { supabase, supabaseConfigurado } from './lib/supabase'
@@ -546,6 +547,7 @@ function AppLayout({ primerUso }: { primerUso: boolean }) {
       )}
 
       <BannerInstalacion />
+      <Toaster position="bottom-right" />
     </div>
   )
 }

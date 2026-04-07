@@ -1,15 +1,28 @@
 import { useState } from 'react'
 import { useNomina } from '../../hooks/useNomina'
 import { formatCOP } from '../../utils/moneda'
-import { User, Briefcase, Calendar, Calculator, Wallet } from 'lucide-react'
+import { User, Briefcase, Calendar, Calculator, Wallet, Edit2, Trash2 } from 'lucide-react'
+import { toast } from 'react-hot-toast'
+import { ConfirmDialog } from '../shared/ConfirmDialog'
+import { FormEmpleado } from './FormEmpleado'
 import { NuevaNomina } from './NuevaNomina'
 import { PrestacionesEmpleado } from './PrestacionesEmpleado'
 import type { Empleado } from '../../db/schema'
 
 export function ListaEmpleados() {
-  const { empleados } = useNomina()
+  const { empleados, archivarEmpleado } = useNomina()
   const [empleadoActivo, setEmpleadoActivo] = useState<Empleado | null>(null)
   const [empleadoPrestaciones, setEmpleadoPrestaciones] = useState<Empleado | null>(null)
+  const [empleadoEditando, setEmpleadoEditando] = useState<number | null>(null)
+  const [empleadoBorrando, setEmpleadoBorrando] = useState<Empleado | null>(null)
+
+  const handleBorrar = async () => {
+    if (empleadoBorrando?.id) {
+      await archivarEmpleado(empleadoBorrando.id)
+      toast.success('Empleado archivado correctamente')
+      setEmpleadoBorrando(null)
+    }
+  }
 
   if (!empleados) {
     return <div className="text-center p-8 text-suave text-sm">Cargando empleados...</div>
@@ -78,10 +91,25 @@ export function ListaEmpleados() {
             </button>
             <button 
               onClick={() => setEmpleadoActivo(emp)}
-              className="p-2 bg-primario/10 text-primario hover:bg-primario hover:text-white rounded-lg transition-colors ml-2"
+              className="p-2 bg-primario/10 text-primario hover:bg-primario hover:text-white rounded-lg transition-colors ml-2 border border-transparent shadow-sm"
               title="Liquidar Nómina"
             >
               <Calculator size={18} />
+            </button>
+            <div className="w-px h-6 bg-borde mx-1"></div>
+            <button 
+              onClick={() => setEmpleadoEditando(emp.id!)}
+              className="p-1.5 text-suave hover:bg-blue-50 hover:text-blue-600 rounded-lg transition-colors"
+              title="Editar"
+            >
+              <Edit2 size={16} />
+            </button>
+            <button 
+              onClick={() => setEmpleadoBorrando(emp)}
+              className="p-1.5 text-suave hover:bg-red-50 hover:text-red-500 rounded-lg transition-colors"
+              title="Eliminar"
+            >
+              <Trash2 size={16} />
             </button>
           </div>
         </div>
@@ -99,6 +127,22 @@ export function ListaEmpleados() {
         <PrestacionesEmpleado 
           empleado={empleadoPrestaciones} 
           onClose={() => setEmpleadoPrestaciones(null)} 
+        />
+      )}
+      {empleadoEditando && (
+        <FormEmpleado 
+          empleadoId={empleadoEditando}
+          onClose={() => setEmpleadoEditando(null)}
+        />
+      )}
+
+      {empleadoBorrando && (
+        <ConfirmDialog
+          isOpen={true}
+          titulo="Eliminar Empleado"
+          mensaje={`¿Estás seguro de que quieres eliminar a ${empleadoBorrando.nombre}? El empleado no se borrará, solo se archivará para conservar su historial de nómina.`}
+          onConfirm={handleBorrar}
+          onCancel={() => setEmpleadoBorrando(null)}
         />
       )}
     </>
