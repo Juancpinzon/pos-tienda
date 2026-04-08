@@ -88,7 +88,7 @@ export function ListaEmpleados() {
 
       <div className="flex flex-col gap-3">
         {rendersTotales.map((emp) => (
-          <div key={emp.id} className={`bg-white border ${emp.activo ? 'border-borde' : 'border-borde/50 opacity-60'} rounded-xl p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3 active:scale-[0.98] transition-all`}>
+          <div key={emp.id} className={`bg-white border ${emp.activo ? 'border-borde' : 'border-borde/50 opacity-60'} rounded-xl p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3 transition-all`}>
             <div className="flex gap-3">
             <div className="w-10 h-10 rounded-full bg-primario/10 flex flex-col items-center justify-center text-primario shrink-0">
               <span className="text-sm font-bold uppercase">{emp.nombre.substring(0, 2)}</span>
@@ -117,6 +117,7 @@ export function ListaEmpleados() {
             {emp.activo ? (
               <>
                 <button 
+                  type="button"
                   onClick={() => setEmpleadoPrestaciones(emp)}
                   className="p-2 bg-acento/10 text-acento hover:bg-acento hover:text-white rounded-lg transition-colors ml-2"
                   title="Ver Prestaciones"
@@ -124,6 +125,7 @@ export function ListaEmpleados() {
                   <Wallet size={18} />
                 </button>
                 <button 
+                  type="button"
                   onClick={() => setEmpleadoActivo(emp)}
                   className="p-2 bg-primario/10 text-primario hover:bg-primario hover:text-white rounded-lg transition-colors ml-2 border border-transparent shadow-sm"
                   title="Liquidar Nómina"
@@ -132,6 +134,7 @@ export function ListaEmpleados() {
                 </button>
                 <div className="w-px h-6 bg-borde mx-1"></div>
                 <button 
+                  type="button"
                   onClick={() => setEmpleadoEditando(emp)}
                   className="p-1.5 text-suave hover:bg-blue-50 hover:text-blue-600 rounded-lg transition-colors"
                   title="Editar"
@@ -139,6 +142,7 @@ export function ListaEmpleados() {
                   <Edit2 size={16} />
                 </button>
                 <button 
+                  type="button"
                   onClick={() => setEmpleadoBorrando(emp)}
                   className="p-1.5 text-suave hover:bg-red-50 hover:text-red-500 rounded-lg transition-colors"
                   title="Eliminar"
@@ -148,6 +152,7 @@ export function ListaEmpleados() {
               </>
             ) : (
               <button 
+                type="button"
                 onClick={() => setEmpleadoRestaurando(emp)}
                 className="p-1.5 text-suave hover:bg-emerald-50 hover:text-emerald-600 rounded-lg transition-colors flex items-center gap-1.5"
                 title="Restaurar"
