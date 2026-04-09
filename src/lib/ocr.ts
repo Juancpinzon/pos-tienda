@@ -128,6 +128,12 @@ async function analizarViaEdgeFunction(
   imagenBase64: string,
   mimeType: string,
 ): Promise<ResultadoOCR> {
+  // Verificar sesión activa antes de llamar a la Edge Function
+  const { data: { session } } = await supabase.auth.getSession()
+  if (!session) {
+    throw new Error('OFFLINE: Función disponible solo con conexión activa. Inicie sesión para usar el OCR.')
+  }
+
   const { data, error } = await supabase.functions.invoke('analizar-factura', {
     body: { imagenBase64, mimeType },
   })

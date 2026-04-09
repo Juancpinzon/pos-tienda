@@ -1,6 +1,6 @@
 import { db } from '../db/database'
 import { formatCOP } from '../utils/moneda'
-import { supabase } from './supabase'
+import { supabase, supabaseConfigurado } from './supabase'
 
 /**
  * Prepara el contexto de la tienda en formato texto para inyectarlo al prompt de Claude.
@@ -83,6 +83,17 @@ ${agotadosText || 'No hay productos marcados como agotados, inventario al día.'
  * Llama a la Edge Function pasándole el query y el contexto.
  */
 export async function consultarIA(pregunta: string): Promise<string> {
+  // Sin Supabase configurado no hay Edge Function disponible
+  if (!supabaseConfigurado) {
+    return 'Función disponible solo con conexión activa. Configure Supabase para usar el asistente IA.'
+  }
+
+  // Verificar sesión activa
+  const { data: { session } } = await supabase.auth.getSession()
+  if (!session) {
+    return 'Función disponible solo con conexión activa. Inicie sesión para usar el asistente IA.'
+  }
+
   const contexto = await prepararContextoIA()
 
   // Revisar si casi no hay datos
