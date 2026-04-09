@@ -50,6 +50,7 @@ const CATEGORIAS: Omit<Categoria, 'id'>[] = [
   { nombre: 'Pilas y Accesorios',   emoji: '🔋', orden: 45 }, // 38
   { nombre: 'Combos y Paquetes',    emoji: '🎁', orden: 46 }, // 39
   { nombre: 'Tabacos y Cigarros',   emoji: '🚬', orden: 47 }, // 40
+  { nombre: 'Mascotas',             emoji: '🐾', orden: 48 }, // 41
 ]
 
 // ─── Helper para construir productos ─────────────────────────────────────────
