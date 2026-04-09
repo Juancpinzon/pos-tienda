@@ -21,6 +21,8 @@ import type {
   PeriodoNomina,
   LiquidacionPrestaciones,
   AdelantoEmpleado,
+  PedidoDomicilio,
+  CatalogoPublico,
 } from './schema'
 
 // Singleton de Dexie — única instancia para toda la aplicación
@@ -52,6 +54,9 @@ class POSDatabase extends Dexie {
   periodosNomina!: EntityTable<PeriodoNomina, 'id'>
   liquidacionesPrestaciones!: EntityTable<LiquidacionPrestaciones, 'id'>
   adelantosEmpleado!: EntityTable<AdelantoEmpleado, 'id'>
+  // v8 — módulo de domicilios y catálogo público
+  pedidosDomicilio!: EntityTable<PedidoDomicilio, 'id'>
+  catalogoPublico!: EntityTable<CatalogoPublico, 'id'>
 
   constructor() {
     super('POSTienda')
@@ -106,6 +111,22 @@ class POSDatabase extends Dexie {
       liquidacionesPrestaciones: "++id, empleadoId, tipo, periodo, estado",
       adelantosEmpleado: "++id, empleadoId, descontadoEn",
     })
+
+    // Versión 8: módulo de domicilios y catálogo público
+    this.version(8).stores({
+      pedidosDomicilio: '++id, ventaId, estado, sesionCajaId, creadoEn',
+      catalogoPublico:  '++id',
+    })
+
+    // Versión 9: feature flags — plan básico / pro
+    // Migración: registros existentes de configTienda arrancan en "basico"
+    this.version(9).stores({}).upgrade(async (tx) => {
+      await tx.table('configTienda').toCollection().modify((cfg) => {
+        if (!cfg.planActivo) {
+          cfg.planActivo = 'basico'
+        }
+      })
+    })
   }
 }
 
@@ -135,4 +156,6 @@ export type {
   PeriodoNomina,
   LiquidacionPrestaciones,
   AdelantoEmpleado,
+  PedidoDomicilio,
+  CatalogoPublico,
 }

@@ -2,8 +2,9 @@ import { useEffect, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
-import { X, Store, Phone, MapPin, FileText, Receipt, BookOpen, Users, Send, CheckCircle, CheckCircle2, UserX, Loader2, Sun, Moon, Monitor, Plus, Pencil, Bell, BellOff, ShieldCheck } from 'lucide-react'
-import { useConfig, guardarConfig } from '../../hooks/useConfig'
+import { X, Store, Phone, MapPin, FileText, Receipt, BookOpen, Users, Send, CheckCircle, CheckCircle2, UserX, Loader2, Sun, Moon, Monitor, Plus, Pencil, Bell, BellOff, ShieldCheck, Bike, Copy, ExternalLink, Lock, Package } from 'lucide-react'
+import { useConfig, guardarConfig, usePlan } from '../../hooks/useConfig'
+import { ModalActivarPro } from './ModalActivarPro'
 import { supabase, supabaseConfigurado } from '../../lib/supabase'
 import { useAuthStore } from '../../stores/authStore'
 import { ConfirmDialog } from '../shared/ConfirmDialog'
@@ -788,6 +789,277 @@ function SeccionTema() {
   )
 }
 
+// ─── Sección de Domicilios y Catálogo Público ─────────────────────────────────
+
+function SeccionDomicilios() {
+  const usuario = useAuthStore((s) => s.usuario)
+
+  const [activo,              setActivo]              = useState(false)
+  const [slug,                setSlug]                = useState('')
+  const [whatsappNumero,      setWhatsappNumero]      = useState('')
+  const [mensajeBienvenida,   setMensajeBienvenida]   = useState('')
+  const [costoEnvio,          setCostoEnvio]          = useState('5000')
+  const [categoriasMostrar,   setCategoriasMostrar]   = useState<number[]>([])
+  const [todasCategorias,     setTodasCategorias]     = useState<Array<{ id: number; nombre: string; emoji: string }>>([])
+  const [guardando,           setGuardando]           = useState(false)
+  const [ok,                  setOk]                  = useState(false)
+  const [copiado,             setCopiado]             = useState(false)
+  const [error,               setError]               = useState<string | null>(null)
+
+  // Solo para dueño
+  if (usuario?.rol !== 'dueno') return null
+
+  const urlCatalogo = `https://pos-tienda-ten.vercel.app/catalogo/${slug || 'mi-tienda'}`
+
+  // Cargar config al montar
+  useEffect(() => {
+    db.catalogoPublico.get(1).then((cfg) => {
+      if (cfg) {
+        setActivo(cfg.activo)
+        setSlug(cfg.slug)
+        setWhatsappNumero(cfg.whatsappNumero)
+        setMensajeBienvenida(cfg.mensajeBienvenida ?? '')
+        setCostoEnvio(String(cfg.costoEnvioPorDefecto))
+        setCategoriasMostrar(cfg.categoriasMostrar)
+      }
+    }).catch(() => {})
+    db.categorias.orderBy('orden').toArray().then((cats) => {
+      setTodasCategorias(cats.filter((c) => c.id !== undefined) as Array<{ id: number; nombre: string; emoji: string }>)
+    }).catch(() => {})
+  }, [])  // eslint-disable-line react-hooks/exhaustive-deps
+
+  const slugValido = (v: string) => v.replace(/[^a-z0-9-]/g, '').slice(0, 50)
+
+  const toggleCategoria = (id: number) => {
+    setCategoriasMostrar((prev) =>
+      prev.includes(id) ? prev.filter((c) => c !== id) : [...prev, id]
+    )
+  }
+
+  const handleGuardar = async () => {
+    if (activo && !slug.trim()) {
+      setError('El slug es obligatorio para activar el catálogo')
+      return
+    }
+    setGuardando(true)
+    setError(null)
+    try {
+      await db.catalogoPublico.put({
+        id: 1,
+        activo,
+        slug: slug.trim(),
+        whatsappNumero: whatsappNumero.trim(),
+        mensajeBienvenida: mensajeBienvenida.trim() || undefined,
+        costoEnvioPorDefecto: parseInt(costoEnvio, 10) || 0,
+        categoriasMostrar,
+      })
+      setOk(true)
+      setTimeout(() => setOk(false), 2500)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Error al guardar')
+    } finally {
+      setGuardando(false)
+    }
+  }
+
+  const handleCopiarLink = async () => {
+    try {
+      await navigator.clipboard.writeText(urlCatalogo)
+      setCopiado(true)
+      setTimeout(() => setCopiado(false), 2000)
+    } catch {
+      setCopiado(false)
+    }
+  }
+
+  return (
+    <section>
+      <p className="text-xs font-semibold text-suave uppercase tracking-wider mb-3 flex items-center gap-1.5">
+        <Bike size={13} />
+        Domicilios y Catálogo Público
+      </p>
+
+      <div className="flex flex-col gap-3">
+
+        {/* Toggle activar catálogo */}
+        <div className="flex items-center justify-between p-3 bg-fondo rounded-xl border border-borde">
+          <div>
+            <p className="text-sm font-medium text-texto">Activar catálogo público</p>
+            <p className="text-xs text-suave">Los clientes pueden ver tus productos sin login</p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setActivo(!activo)}
+            className={[
+              'relative w-11 h-6 rounded-full transition-colors shrink-0',
+              activo ? 'bg-primario' : 'bg-gray-200',
+            ].join(' ')}
+          >
+            <span className={[
+              'absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform',
+              activo ? 'translate-x-5' : 'translate-x-0.5',
+            ].join(' ')} />
+          </button>
+        </div>
+
+        {/* Slug */}
+        <div className="flex flex-col gap-1">
+          <label className="text-sm font-medium text-texto flex items-center gap-1.5">
+            <MapPin size={14} className="text-suave" />
+            Slug del catálogo (URL)
+          </label>
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-suave shrink-0">…/catalogo/</span>
+            <input
+              type="text"
+              value={slug}
+              onChange={(e) => setSlug(slugValido(e.target.value.toLowerCase()))}
+              placeholder="mi-tienda-rosa"
+              maxLength={50}
+              className={INPUT_CLS}
+            />
+          </div>
+          <p className="text-[11px] text-suave px-1">Solo letras minúsculas, números y guiones. Sin espacios.</p>
+        </div>
+
+        {/* WhatsApp */}
+        <div className="flex flex-col gap-1">
+          <label className="text-sm font-medium text-texto flex items-center gap-1.5">
+            <Phone size={14} className="text-suave" />
+            Número WhatsApp
+          </label>
+          <input
+            type="tel"
+            value={whatsappNumero}
+            onChange={(e) => setWhatsappNumero(e.target.value.replace(/\D/g, '').slice(0, 12))}
+            placeholder="3001234567"
+            className={INPUT_CLS}
+          />
+          <p className="text-[11px] text-suave px-1">Sin +57. Los clientes te contactan directo para pedir.</p>
+        </div>
+
+        {/* Mensaje bienvenida */}
+        <div className="flex flex-col gap-1">
+          <label className="text-sm font-medium text-texto flex items-center gap-1.5">
+            <Receipt size={14} className="text-suave" />
+            Mensaje de bienvenida
+          </label>
+          <textarea
+            value={mensajeBienvenida}
+            onChange={(e) => setMensajeBienvenida(e.target.value.slice(0, 200))}
+            placeholder="Bienvenido! Aquí encontrás nuestros productos con precios actualizados."
+            rows={2}
+            className="w-full px-3 py-2.5 border border-borde rounded-xl text-sm text-texto resize-none
+                       focus:outline-none focus:ring-2 focus:ring-primario/40 focus:border-primario
+                       placeholder:text-suave"
+          />
+        </div>
+
+        {/* Costo envío */}
+        <div className="flex flex-col gap-1">
+          <label className="text-sm font-medium text-texto">Costo de envío por defecto</label>
+          <div className="relative">
+            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-suave text-sm font-medium">$</span>
+            <input
+              type="number"
+              value={costoEnvio}
+              onChange={(e) => setCostoEnvio(e.target.value)}
+              min={0}
+              step={500}
+              placeholder="5000"
+              className={`${INPUT_CLS} pl-7 moneda`}
+            />
+          </div>
+        </div>
+
+        {/* Categorías a mostrar */}
+        {todasCategorias.length > 0 && (
+          <div className="flex flex-col gap-2">
+            <p className="text-sm font-medium text-texto">Categorías visibles en el catálogo</p>
+            <div className="grid grid-cols-2 gap-1.5 max-h-44 overflow-y-auto">
+              {todasCategorias.map((cat) => (
+                <button
+                  key={cat.id}
+                  type="button"
+                  onClick={() => toggleCategoria(cat.id)}
+                  className={[
+                    'flex items-center gap-2 px-3 py-2 rounded-xl border text-xs font-medium transition-all text-left',
+                    categoriasMostrar.includes(cat.id)
+                      ? 'border-primario bg-primario/8 text-primario'
+                      : 'border-borde text-suave hover:border-gray-300 hover:text-texto',
+                  ].join(' ')}
+                >
+                  <span>{cat.emoji}</span>
+                  <span className="truncate">{cat.nombre}</span>
+                </button>
+              ))}
+            </div>
+            <p className="text-[11px] text-suave px-1">
+              {categoriasMostrar.length === 0
+                ? 'Sin selección: se muestran todas las categorías'
+                : `${categoriasMostrar.length} categoría${categoriasMostrar.length !== 1 ? 's' : ''} seleccionada${categoriasMostrar.length !== 1 ? 's' : ''}`}
+            </p>
+          </div>
+        )}
+
+        {/* Botón guardar */}
+        <button
+          type="button"
+          onClick={handleGuardar}
+          disabled={guardando}
+          className="h-10 bg-primario text-white rounded-xl text-sm font-semibold
+                     flex items-center justify-center gap-2
+                     hover:bg-primario-hover active:scale-95 transition-all
+                     disabled:opacity-40 disabled:cursor-not-allowed"
+        >
+          {guardando ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle2 size={14} />}
+          {guardando ? 'Guardando…' : 'Guardar configuración de domicilios'}
+        </button>
+
+        {ok && (
+          <p className="text-xs text-exito flex items-center gap-1.5 justify-center">
+            <CheckCircle2 size={13} /> Configuración guardada
+          </p>
+        )}
+        {error && <p className="text-xs text-peligro text-center">{error}</p>}
+
+        {/* Link del catálogo */}
+        {slug && (
+          <div className="bg-fondo rounded-xl border border-borde p-3 flex flex-col gap-2">
+            <p className="text-xs font-semibold text-suave uppercase tracking-wider">Link del catálogo</p>
+            <p className="text-xs font-mono text-texto break-all leading-relaxed bg-white border border-borde rounded-lg px-2 py-1.5">
+              {urlCatalogo}
+            </p>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={handleCopiarLink}
+                className="flex-1 h-9 border border-borde text-texto rounded-lg text-xs font-semibold
+                           flex items-center justify-center gap-1.5
+                           hover:bg-white active:scale-95 transition-all"
+              >
+                {copiado ? <CheckCircle2 size={13} className="text-exito" /> : <Copy size={13} />}
+                {copiado ? 'Copiado' : 'Copiar link'}
+              </button>
+              <a
+                href={urlCatalogo}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex-1 h-9 border border-primario/30 text-primario rounded-lg text-xs font-semibold
+                           flex items-center justify-center gap-1.5
+                           hover:bg-primario/5 active:scale-95 transition-all"
+              >
+                <ExternalLink size={13} />
+                Ver catálogo
+              </a>
+            </div>
+          </div>
+        )}
+      </div>
+    </section>
+  )
+}
+
 // ─── Sección de Facturación — Régimen Simple ─────────────────────────────────
 
 function SeccionFacturacion() {
@@ -917,6 +1189,97 @@ function SeccionFacturacion() {
   )
 }
 
+// ─── Sección Mi Plan ─────────────────────────────────────────────────────────
+
+function SeccionMiPlan() {
+  const { esPro, esBasico, planActivadoEn } = usePlan()
+  const [modalAbierto, setModalAbierto] = useState(false)
+  const usuario = useAuthStore((s) => s.usuario)
+  if (usuario?.rol !== 'dueno') return null
+
+  const fechaActivacion = planActivadoEn
+    ? new Date(planActivadoEn).toLocaleDateString('es-CO', { day: 'numeric', month: 'long', year: 'numeric' })
+    : null
+
+  return (
+    <>
+      <section>
+        <p className="text-xs font-semibold text-suave uppercase tracking-wider mb-3 flex items-center gap-1.5">
+          <Package size={13} />
+          Mi Plan
+        </p>
+
+        <div className="bg-fondo rounded-xl border border-borde p-4 flex flex-col gap-3">
+          {/* Badge del plan */}
+          <div className="flex items-center gap-2">
+            <span className={[
+              'px-2.5 py-1 rounded-lg text-xs font-bold',
+              esPro
+                ? 'bg-acento/15 text-acento'
+                : 'bg-gray-100 text-suave',
+            ].join(' ')}>
+              {esPro ? '⭐ Plan Pro' : '📦 Plan Básico'}
+            </span>
+            {esPro && fechaActivacion && (
+              <span className="text-xs text-suave">Activado el {fechaActivacion}</span>
+            )}
+          </div>
+
+          {/* Lista de features */}
+          <div className="flex flex-col gap-1.5">
+            {[
+              'Ventas y cobros',
+              'Fiados',
+              'Inventario y stock',
+              'Proveedores',
+              'Reportes',
+              'Multi-tienda',
+            ].map((f) => (
+              <div key={f} className="flex items-center gap-2 text-sm text-texto">
+                <CheckCircle2 size={14} className="text-exito shrink-0" />
+                {f}
+              </div>
+            ))}
+            <div className={['flex items-center gap-2 text-sm', esPro ? 'text-texto' : 'text-suave'].join(' ')}>
+              {esPro
+                ? <CheckCircle2 size={14} className="text-exito shrink-0" />
+                : <Lock size={14} className="text-suave shrink-0" />}
+              Domicilios y catálogo público
+              {esBasico && (
+                <span className="text-[10px] font-bold text-acento ml-1">(Plan Pro)</span>
+              )}
+            </div>
+            {esPro && (
+              <>
+                <div className="flex items-center gap-2 text-sm text-texto">
+                  <CheckCircle2 size={14} className="text-exito shrink-0" />
+                  Vista del repartidor
+                </div>
+              </>
+            )}
+          </div>
+
+          {/* Botón upgrade (solo si básico) */}
+          {esBasico && (
+            <button
+              type="button"
+              onClick={() => setModalAbierto(true)}
+              className="flex items-center justify-center gap-2 h-10 bg-acento text-white
+                         rounded-xl text-sm font-semibold
+                         hover:bg-acento-hover active:scale-95 transition-all"
+            >
+              <Lock size={14} />
+              Upgrade a Plan Pro
+            </button>
+          )}
+        </div>
+      </section>
+
+      {modalAbierto && <ModalActivarPro onClose={() => setModalAbierto(false)} />}
+    </>
+  )
+}
+
 // ─── Props del modal ──────────────────────────────────────────────────────────
 
 interface ConfigModalProps {
@@ -926,6 +1289,7 @@ interface ConfigModalProps {
 
 export function ConfigModal({ onClose, onReiniciarTour }: ConfigModalProps) {
   const config = useConfig()
+  const { esPro } = usePlan()
 
   const {
     register,
@@ -1006,6 +1370,9 @@ export function ConfigModal({ onClose, onReiniciarTour }: ConfigModalProps) {
         <form onSubmit={handleSubmit(onSubmit)} className="flex-1 overflow-y-auto">
           <div className="px-5 py-4 flex flex-col gap-5">
 
+            {/* Mi Plan (solo dueño) */}
+            <SeccionMiPlan />
+
             {/* Info de la tienda */}
             <section>
               <p className="text-xs font-semibold text-suave uppercase tracking-wider mb-3">
@@ -1079,6 +1446,9 @@ export function ConfigModal({ onClose, onReiniciarTour }: ConfigModalProps) {
               setValue={setValue as (field: string, value: unknown, opts?: { shouldDirty: boolean }) => void}
               register={register as (name: string) => object}
             />
+
+            {/* Domicilios y catálogo público (solo dueño + Plan Pro) */}
+            {esPro && <SeccionDomicilios />}
 
             {/* Facturación — Régimen Simple */}
             <SeccionFacturacion />

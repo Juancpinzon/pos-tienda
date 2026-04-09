@@ -17,7 +17,11 @@ export const CONFIG_DEFAULTS: Omit<ConfigTienda, 'id'> = {
   notifStock: true,
   notifCaja: false,
   horaCaja: '07:00',
+  planActivo: 'basico',
 }
+
+// Códigos válidos para activar el Plan Pro (hardcodeados)
+const CODIGOS_PRO = ['PROTIENDA2025', 'DOMICILIOS2025', 'UPGRADE2025']
 
 /**
  * Configuración reactiva de la tienda. Retorna defaults si aún no se ha guardado.
@@ -41,6 +45,37 @@ export function useConfig() {
   }, [])
 
   return config
+}
+
+/**
+ * Hook reactivo que expone esPro y esBasico para uso en componentes.
+ */
+export function usePlan() {
+  const config = useConfig()
+  const esPro    = (config?.planActivo ?? 'basico') === 'pro'
+  const esBasico = !esPro
+  return { esPro, esBasico, planActivadoEn: config?.planActivadoEn }
+}
+
+/**
+ * Activa el Plan Pro si el código es válido.
+ * Retorna true si activó, false si el código es inválido.
+ */
+export async function activarPlanPro(codigo: string): Promise<boolean> {
+  if (!CODIGOS_PRO.includes(codigo.trim().toUpperCase())) return false
+  await guardarConfig({
+    planActivo: 'pro',
+    planActivadoEn: new Date(),
+    codigoActivacion: codigo.trim().toUpperCase(),
+  })
+  return true
+}
+
+/**
+ * Vuelve al Plan Básico (solo para testing/admin).
+ */
+export async function volverABasico(): Promise<void> {
+  await guardarConfig({ planActivo: 'basico', planActivadoEn: undefined, codigoActivacion: undefined })
 }
 
 /**

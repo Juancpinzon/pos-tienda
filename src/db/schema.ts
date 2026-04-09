@@ -62,6 +62,7 @@ export interface Venta {
   subtipoTarjeta?: 'debito' | 'credito'   // Solo cuando tipoPago='tarjeta'
   efectivoRecibido?: number
   cambio?: number
+  canal?: 'mostrador' | 'domicilio'       // Canal de venta (default: mostrador)
   estado: 'completada' | 'anulada'
   notas?: string
   creadaEn: Date
@@ -120,6 +121,10 @@ export interface ConfigTienda {
   notifStock?: boolean            // Alertas de productos agotados
   notifCaja?: boolean             // Recordatorio de apertura de caja
   horaCaja?: string               // Hora configurada para el recordatorio, ej "07:00"
+  // ── Feature flags — Plan comercial ─────────────────────────────────────────
+  planActivo?: 'basico' | 'pro'   // Plan del POS. Default: "basico"
+  planActivadoEn?: Date           // Cuándo se activó el plan Pro
+  codigoActivacion?: string       // Código usado para activar Pro
 }
 
 // ─── Módulo de Proveedores y Compras (v2) ─────────────────────────────────────
@@ -293,5 +298,34 @@ export interface AdelantoEmpleado {
   sesionCajaId?: number;
   descontadoEn?: number; // ID del PeriodoNomina donde se descontó
   creadoEn: Date;
+}
+
+// ─── Módulo de Domicilios y Catálogo Público (v8) ─────────────────────────────
+
+export interface PedidoDomicilio {
+  id?: number
+  ventaId?: number             // Se asocia tras confirmar la venta
+  nombre: string               // Nombre del cliente
+  telefono?: string
+  direccion: string            // Dirección de entrega
+  barrio?: string              // Barrio o sector
+  indicaciones?: string        // Indicaciones adicionales (apto, color de puerta, etc.)
+  repartidor?: string          // Nombre del repartidor asignado
+  costoEnvio: number           // En COP
+  estado: 'pendiente' | 'en_camino' | 'entregado' | 'cancelado'
+  notas?: string
+  sesionCajaId?: number
+  creadoEn: Date
+  actualizadoEn: Date
+}
+
+export interface CatalogoPublico {
+  id?: number                  // Siempre 1 (singleton)
+  activo: boolean
+  slug: string                 // URL-friendly: "tienda-dona-rosa"
+  whatsappNumero: string       // Número sin +57, ej: "3001234567"
+  mensajeBienvenida?: string
+  costoEnvioPorDefecto: number // En COP
+  categoriasMostrar: number[]  // IDs de categorías visibles — JSON en Dexie
 }
 

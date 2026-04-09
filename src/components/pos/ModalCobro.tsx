@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { X, Banknote, BookOpen, Smartphone, CheckCircle2, AlertCircle, MessageCircle, ShoppingCart, Printer, Settings, CreditCard, FileText } from 'lucide-react'
+import { X, Banknote, BookOpen, Smartphone, CheckCircle2, AlertCircle, MessageCircle, ShoppingCart, Printer, Settings, CreditCard, FileText, MapPin } from 'lucide-react'
 import { db } from '../../db/database'
 import { useVentaStore, selectTotal } from '../../stores/ventaStore'
 import { TecladoNumerico } from '../shared/TecladoNumerico'
@@ -19,8 +19,10 @@ import {
 import type { Venta, DetalleVenta } from '../../db/schema'
 import { ModalNotaVenta } from './ModalNotaVenta'
 import { siguienteConsecutivo } from '../../lib/notaVenta'
+import { ModalPedidoDomicilio } from '../domicilios/ModalPedidoDomicilio'
 
 type MetodoPago = 'efectivo' | 'fiado' | 'transferencia' | 'tarjeta'
+type CanalVenta = 'mostrador' | 'domicilio'
 type PlataformaTransferencia = 'Nequi' | 'Daviplata' | 'Dale'
 type SubtipoTarjeta = 'debito' | 'credito'
 type EstadoModal = 'seleccion' | 'confirmando' | 'exito' | 'error'
@@ -465,6 +467,10 @@ export function ModalCobro({ onClose, onVentaExitosa }: ModalCobroProps) {
   const [tieneDatafono, setTieneDatafono] = useState(false)
   const [estado, setEstado] = useState<EstadoModal>('seleccion')
   const [mensajeError, setMensajeError] = useState('')
+  // Canal de venta (mostrador / domicilio)
+  const [canal, setCanal] = useState<CanalVenta>('mostrador')
+  const [direccionRapida, setDireccionRapida] = useState('')
+  const [mostrarModalDomicilio, setMostrarModalDomicilio] = useState(false)
 
   // Advertencia de stock insuficiente (no bloqueante — el tendero siempre puede vender)
   const [alertasStock, setAlertasStock] = useState<Array<{ nombre: string; stockActual: number; faltante: number }>>([])
@@ -561,6 +567,7 @@ export function ModalCobro({ onClose, onVentaExitosa }: ModalCobroProps) {
             subtipoTarjeta: metodo === 'tarjeta' && subtipoTarjeta ? subtipoTarjeta : undefined,
             efectivoRecibido: recibido,
             cambio: recibido !== undefined ? recibido - total : undefined,
+            canal: canal,
             estado: 'completada',
             notas: metodo === 'transferencia' && plataforma ? plataforma : undefined,
             creadaEn: ahora,
@@ -626,6 +633,7 @@ export function ModalCobro({ onClose, onVentaExitosa }: ModalCobroProps) {
         subtipoTarjeta: metodo === 'tarjeta' && subtipoTarjeta ? subtipoTarjeta : undefined,
         efectivoRecibido: recibido,
         cambio: recibido !== undefined ? recibido - total : undefined,
+        canal: canal,
         notas: metodo === 'transferencia' && plataforma ? plataforma : undefined,
         estado: 'completada',
         creadaEn: ahora,
@@ -641,6 +649,11 @@ export function ModalCobro({ onClose, onVentaExitosa }: ModalCobroProps) {
 
       limpiarCarrito()
       onVentaExitosa?.()
+
+      // Si es domicilio, abrir el modal de pedido antes de mostrar éxito
+      if (canal === 'domicilio') {
+        setMostrarModalDomicilio(true)
+      }
       setEstado('exito')
     } catch (err) {
       setMensajeError(err instanceof Error ? err.message : 'Error desconocido')
@@ -652,13 +665,26 @@ export function ModalCobro({ onClose, onVentaExitosa }: ModalCobroProps) {
 
   if (estado === 'exito' && ventaGuardada) {
     return (
-      <PantallaExito
-        venta={ventaGuardada}
-        detalles={detallesGuardados}
-        consecutivoNota={consecutivoNota}
-        nombreCliente={nombreClienteGuardado}
-        onNuevaVenta={onClose}
-      />
+      <>
+        <PantallaExito
+          venta={ventaGuardada}
+          detalles={detallesGuardados}
+          consecutivoNota={consecutivoNota}
+          nombreCliente={nombreClienteGuardado}
+          onNuevaVenta={onClose}
+        />
+        {/* Modal domicilio se abre sobre PantallaExito cuando el canal es domicilio */}
+        {mostrarModalDomicilio && ventaGuardada.id !== undefined && (
+          <ModalPedidoDomicilio
+            ventaId={ventaGuardada.id}
+            totalVenta={ventaGuardada.total}
+            direccionInicial={direccionRapida}
+            nombreClienteInicial={nombreClienteGuardado ?? ''}
+            onGuardado={() => setMostrarModalDomicilio(false)}
+            onSaltar={() => setMostrarModalDomicilio(false)}
+          />
+        )}
+      </>
     )
   }
 
@@ -707,6 +733,54 @@ export function ModalCobro({ onClose, onVentaExitosa }: ModalCobroProps) {
             <X size={20} />
           </button>
         </div>
+
+        {/* Selector de canal — Mostrador vs Domicilio */}
+        <div className="flex gap-2 px-4 pt-3">
+          <button
+            type="button"
+            onClick={() => setCanal('mostrador')}
+            className={[
+              'flex-1 h-16 rounded-xl border-2 font-semibold text-sm flex flex-col items-center justify-center gap-1 transition-all active:scale-95',
+              canal === 'mostrador'
+                ? 'border-primario bg-primario/8 text-primario'
+                : 'border-borde text-suave hover:border-gray-300',
+            ].join(' ')}
+          >
+            <ShoppingCart size={20} />
+            Mostrador
+          </button>
+          <button
+            type="button"
+            onClick={() => setCanal('domicilio')}
+            className={[
+              'flex-1 h-16 rounded-xl border-2 font-semibold text-sm flex flex-col items-center justify-center gap-1 transition-all active:scale-95',
+              canal === 'domicilio'
+                ? 'border-acento bg-acento/8 text-acento'
+                : 'border-borde text-suave hover:border-gray-300',
+            ].join(' ')}
+          >
+            <span className="text-lg leading-none">🛵</span>
+            Domicilio
+          </button>
+        </div>
+
+        {/* Campo dirección rápida — solo cuando canal = domicilio */}
+        {canal === 'domicilio' && (
+          <div className="px-4 pt-2">
+            <div className="relative">
+              <MapPin size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-suave pointer-events-none" />
+              <input
+                type="text"
+                value={direccionRapida}
+                onChange={(e) => setDireccionRapida(e.target.value)}
+                placeholder="Dirección de entrega…"
+                className="w-full h-11 pl-9 pr-3 border border-acento/40 rounded-xl text-sm text-texto
+                           focus:outline-none focus:ring-2 focus:ring-acento/40 focus:border-acento
+                           placeholder:text-suave bg-acento/5"
+              />
+            </div>
+          </div>
+        )}
 
         {/* Tabs */}
         <div className="flex border-b border-borde px-4 pt-3 gap-2">

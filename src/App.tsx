@@ -1,10 +1,11 @@
 import { useState, useEffect, useRef } from 'react'
 import { BrowserRouter, Routes, Route, NavLink, Navigate, useLocation, useNavigate } from 'react-router-dom'
-import { ShoppingCart, BookOpen, Package, DollarSign, BarChart2, AlertCircle, Settings, Truck, Archive, LogOut, RefreshCw, Moon, Sun, Store, ChevronDown, Receipt, ClipboardList, Users } from 'lucide-react'
+import { ShoppingCart, BookOpen, Package, DollarSign, BarChart2, AlertCircle, Settings, Truck, Archive, LogOut, RefreshCw, Moon, Sun, Store, ChevronDown, Receipt, ClipboardList, Users, Bike } from 'lucide-react'
 import { useThemeStore, esModoOscuroActivo } from './stores/themeStore'
 import { useSeed } from './hooks/useSeed'
 import { useSesionActual, useResumenCaja } from './hooks/useCaja'
-import { useConfig } from './hooks/useConfig'
+import { useConfig, usePlan } from './hooks/useConfig'
+import { ModalActivarPro } from './components/config/ModalActivarPro'
 import { useProductosBajoStock } from './hooks/useStock'
 import { useOnboarding } from './hooks/useOnboarding'
 import { useSyncStatus } from './hooks/useSyncStatus'
@@ -22,6 +23,8 @@ import DashboardMultitienda from './pages/DashboardMultitienda'
 import HistorialVentasPage from './pages/HistorialVentasPage'
 import ListaPedidoPage from './pages/ListaPedidoPage'
 import NominaPage from './pages/NominaPage'
+import DomiciliosPage from './pages/DomiciliosPage'
+import CatalogoPublicoPage from './pages/CatalogoPublicoPage'
 import LoginPage from './pages/LoginPage'
 import RegisterPage from './pages/RegisterPage'
 import { Toaster } from 'react-hot-toast'
@@ -383,6 +386,17 @@ export default function App() {
     return <PantallaError error={error ?? 'Error desconocido'} />
   }
 
+  // ── Catálogo público — ruta sin auth, sin layout del POS
+  if (typeof window !== 'undefined' && window.location.pathname.startsWith('/catalogo/')) {
+    return (
+      <BrowserRouter>
+        <Routes>
+          <Route path="/catalogo/:slug" element={<CatalogoPublicoPage />} />
+        </Routes>
+      </BrowserRouter>
+    )
+  }
+
   // ── Auth gate (solo si Supabase está configurado)
   if (supabaseConfigurado) {
     if (isLoading) return <PantallaCarga mensaje="Verificando sesión…" />
@@ -427,8 +441,11 @@ function AppLayout({ primerUso }: { primerUso: boolean }) {
   const hayBajoStock = (bajoStock?.length ?? 0) > 0
   const tour         = useOnboarding()
   const mostrarTour  = tour.tourCompletado === false
+  const { esPro }    = usePlan()
 
   const rol = usuario?.rol ?? 'dueno'
+
+  const [modalActivarPro, setModalActivarPro] = useState(false)
 
   // Pull manual al hacer clic en el indicador de sync
   const [sincronizando, setSincronizando] = useState(false)
@@ -446,6 +463,7 @@ function AppLayout({ primerUso }: { primerUso: boolean }) {
   const navItemsTodos = [
     { to: '/',              icon: ShoppingCart,  label: 'POS',       badge: false,        tourId: undefined,    roles: ['dueno', 'encargado', 'empleado'] },
     { to: '/fiados',        icon: BookOpen,      label: 'Fiados',    badge: false,        tourId: 'nav-fiados', roles: ['dueno', 'encargado', 'empleado'] },
+    { to: '/domicilios',    icon: Bike,          label: 'Domicil.',  badge: false,        tourId: undefined,    roles: ['dueno', 'encargado']             },
     { to: '/productos',     icon: Package,       label: 'Productos', badge: hayBajoStock, tourId: undefined,    roles: ['dueno', 'encargado']             },
     { to: '/inventario',    icon: Archive,       label: 'Stock',     badge: hayBajoStock, tourId: undefined,    roles: ['dueno']                          },
     { to: '/proveedores',   icon: Truck,         label: 'Proveed.',  badge: false,        tourId: undefined,    roles: ['dueno', 'encargado']             },
@@ -469,26 +487,46 @@ function AppLayout({ primerUso }: { primerUso: boolean }) {
       <div className="flex flex-1 overflow-hidden">
         {/* Barra de navegación lateral */}
         <nav className="w-16 bg-primario flex flex-col items-center py-3 gap-1 shrink-0">
-          {navItems.map(({ to, icon: Icon, label, badge, tourId }) => (
-            <NavLink
-              key={to}
-              to={to}
-              end={to === '/'}
-              {...(tourId ? { 'data-tour': tourId } : {})}
-              className={({ isActive }) =>
-                `relative flex flex-col items-center justify-center w-12 h-12 rounded-xl text-xs gap-1 transition-colors
-                 ${isActive
-                   ? 'bg-white/20 text-white'
-                   : 'text-white/60 hover:text-white hover:bg-white/10'}`
-              }
-            >
-              <Icon size={20} />
-              <span className="text-[10px] leading-none">{label}</span>
-              {badge && (
-                <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-yellow-400 rounded-full animate-pulse" />
-              )}
-            </NavLink>
-          ))}
+          {navItems.map(({ to, icon: Icon, label, badge, tourId }) => {
+            const esDomiciliosBasico = to === '/domicilios' && !esPro
+            if (esDomiciliosBasico) {
+              return (
+                <button
+                  key={to}
+                  type="button"
+                  onClick={() => setModalActivarPro(true)}
+                  className="relative flex flex-col items-center justify-center w-12 h-12 rounded-xl text-xs gap-1 transition-colors text-white/40 hover:text-white hover:bg-white/10"
+                  title="Domicilios — exclusivo Plan Pro"
+                >
+                  <div className="relative">
+                    <Icon size={20} />
+                    <span className="absolute -top-1 -right-1 text-[8px] leading-none">🔒</span>
+                  </div>
+                  <span className="text-[10px] leading-none">{label}</span>
+                </button>
+              )
+            }
+            return (
+              <NavLink
+                key={to}
+                to={to}
+                end={to === '/'}
+                {...(tourId ? { 'data-tour': tourId } : {})}
+                className={({ isActive }) =>
+                  `relative flex flex-col items-center justify-center w-12 h-12 rounded-xl text-xs gap-1 transition-colors
+                   ${isActive
+                     ? 'bg-white/20 text-white'
+                     : 'text-white/60 hover:text-white hover:bg-white/10'}`
+                }
+              >
+                <Icon size={20} />
+                <span className="text-[10px] leading-none">{label}</span>
+                {badge && (
+                  <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-yellow-400 rounded-full animate-pulse" />
+                )}
+              </NavLink>
+            )
+          })}
 
           {/* Spacer */}
           <div className="flex-1" />
@@ -522,6 +560,7 @@ function AppLayout({ primerUso }: { primerUso: boolean }) {
             <Route path="/historial"     element={<HistorialVentasPage />}                                             />
             <Route path="/pedido"        element={<RutaProtegida><ListaPedidoPage /></RutaProtegida>}                  />
             <Route path="/nomina"        element={<RutaProtegida><NominaPage /></RutaProtegida>}                       />
+            <Route path="/domicilios"   element={<RutaProtegida>{esPro ? <DomiciliosPage /> : <Navigate to="/" replace />}</RutaProtegida>}  />
             <Route path="/multi-tienda" element={<RutaProtegida><DashboardMultitienda /></RutaProtegida>}             />
           </Routes>
         </main>
@@ -545,6 +584,8 @@ function AppLayout({ primerUso }: { primerUso: boolean }) {
           completarTour={tour.completarTour}
         />
       )}
+
+      {modalActivarPro && <ModalActivarPro onClose={() => setModalActivarPro(false)} />}
 
       <BannerInstalacion />
       <Toaster position="bottom-right" />

@@ -20,6 +20,12 @@ const CATEGORIAS: Omit<Categoria, 'id'>[] = [
   { nombre: 'Enlatados',          emoji: '🥫', orden: 11 },
   { nombre: 'Condimentos',        emoji: '🧂', orden: 12 },
   { nombre: 'Varios',             emoji: '📦', orden: 13 },
+  // Salsamentaria (catId 14–16)
+  { nombre: 'Carnes Frías',       emoji: '🥩', orden: 20 },
+  { nombre: 'Quesos',             emoji: '🧀', orden: 21 },
+  { nombre: 'Embutidos',          emoji: '🌭', orden: 22 },
+  // Cigarrería (catId 17)
+  { nombre: 'Licores',            emoji: '🥃', orden: 24 },
 ]
 
 // ─── Helper para construir productos ─────────────────────────────────────────
@@ -470,6 +476,49 @@ const PRODUCTOS_SEED: SeedProducto[] = [
   p('Espadrapo 1" x1 rollo',          13, 3500),
   p('Hilo Nylon 50m',                 13, 2200),
   p('Aguja de Coser x5',              13, 1500),
+
+  // ── 14. CARNES FRÍAS — Salsamentaria (8 productos) ───────────────────────
+  p('Pechuga Ahumada (x100g)',        14,  4800, 'gramo'),
+  p('Pernil Ahumado (x100g)',         14,  4500, 'gramo'),
+  p('Lomo de Cerdo Ahumado (x100g)', 14,  5200, 'gramo'),
+  p('Pollo Asado Entero',             14, 28000),
+  p('Pechuga de Pollo Asada',         14, 15000),
+  p('Costilla Ahumada (x250g)',       14, 12500, 'gramo'),
+  p('Chicharrón de Cerdo (x100g)',    14,  6500, 'gramo'),
+  p('Tocino Ahumado (x100g)',         14,  4800, 'gramo'),
+
+  // ── 15. QUESOS — Salsamentaria (10 productos) ────────────────────────────
+  p('Queso Campesino Bloque (x100g)', 15,  3800, 'gramo'),
+  p('Queso Doble Crema (x100g)',      15,  4500, 'gramo'),
+  p('Queso Mozarela Bloque (x100g)', 15,  6200, 'gramo'),
+  p('Queso Costeño (x100g)',         15,  3500, 'gramo'),
+  p('Queso Holandés (x100g)',         15,  5800, 'gramo'),
+  p('Queso Pera (x100g)',             15,  5500, 'gramo'),
+  p('Queso Ricotta 250g',             15,  7500),
+  p('Queso Brie 125g',                15, 18000),
+  p('Queso Parmesano Rallado 100g',   15,  9500),
+  p('Queso Crema Untable 220g',       15,  8200),
+
+  // ── 16. EMBUTIDOS — Salsamentaria (8 productos) ──────────────────────────
+  p('Salami Milano (x100g)',          16,  6800, 'gramo'),
+  p('Pepperoni (x100g)',              16,  6200, 'gramo'),
+  p('Prosciutto (x100g)',             16,  9500, 'gramo'),
+  p('Pastrami (x100g)',               16,  7500, 'gramo'),
+  p('Longaniza Española (x100g)',     16,  5800, 'gramo'),
+  p('Chorizo Ibérico (x100g)',        16,  7200, 'gramo'),
+  p('Butifarra Blanca x3',            16,  5500),
+  p('Salchichón Cervecero (x100g)',   16,  3800, 'gramo'),
+
+  // ── 17. LICORES — Cigarrería (9 productos) ───────────────────────────────
+  p('Aguardiente Antioqueño 375ml',   17, 22000),
+  p('Aguardiente Antioqueño 750ml',   17, 38000),
+  p('Ron Medellín 375ml',             17, 24000),
+  p('Ron Medellín 750ml',             17, 42000),
+  p('Club Colombia Botella 330ml',    17,  4500),
+  p('Poker Botella 330ml',            17,  3800),
+  p('Cerveza Heineken 330ml',         17,  6500),
+  p('Vino San Telmo Tinto 750ml',     17, 28000),
+  p('Whisky Old Parr 750ml',          17, 95000),
 ]
 
 // ─── Configuración por defecto de la tienda ───────────────────────────────────
@@ -481,6 +530,7 @@ const CONFIG_DEFAULT = {
   impuestoIVA: 0,
   permitirStockNegativo: true,
   limiteFiadoPorDefecto: 0,
+  planActivo: 'basico' as const,
 }
 
 // ─── Función principal de seed ────────────────────────────────────────────────
