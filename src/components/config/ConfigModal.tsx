@@ -1,9 +1,12 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
-import { X, Store, Phone, MapPin, FileText, Receipt, BookOpen, Users, Send, CheckCircle, CheckCircle2, UserX, Loader2, Sun, Moon, Monitor, Plus, Pencil, Bell, BellOff, ShieldCheck, Bike, Copy, ExternalLink, Lock, Package } from 'lucide-react'
+import { X, Store, Phone, MapPin, FileText, Receipt, BookOpen, Users, Send, CheckCircle, CheckCircle2, UserX, Loader2, Sun, Moon, Monitor, Plus, Pencil, Bell, BellOff, ShieldCheck, Bike, Copy, ExternalLink, Lock, Package, Download } from 'lucide-react'
 import { useConfig, guardarConfig, usePlan } from '../../hooks/useConfig'
+import { importarProductosNuevos } from '../../hooks/useSeed'
+import { useLiveQuery } from 'dexie-react-hooks'
+import toast from 'react-hot-toast'
 import { ModalActivarPro } from './ModalActivarPro'
 import { supabase, supabaseConfigurado } from '../../lib/supabase'
 import { useAuthStore } from '../../stores/authStore'
@@ -1189,6 +1192,80 @@ function SeccionFacturacion() {
   )
 }
 
+// ─── Sección Catálogo ─────────────────────────────────────────────────────────
+
+function SeccionCatalogo() {
+  const [importando, setImportando] = useState(false)
+  const totalProductos = useLiveQuery(() => db.productos.count(), [])
+
+  const handleImportar = useCallback(async () => {
+    setImportando(true)
+    try {
+      const { categoriasAgregadas, productosAgregados } = await importarProductosNuevos()
+      if (productosAgregados === 0) {
+        toast.success('Ya tienes el catálogo actualizado ✅')
+      } else {
+        toast.success(
+          `Importación completa: ${categoriasAgregadas > 0 ? `${categoriasAgregadas} categorías y ` : ''}${productosAgregados} productos nuevos agregados`,
+          { duration: 5000 }
+        )
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Error desconocido'
+      toast.error(`Error al importar: ${msg}`)
+    } finally {
+      setImportando(false)
+    }
+  }, [])
+
+  return (
+    <section>
+      <p className="text-xs font-semibold text-suave uppercase tracking-wider mb-3 flex items-center gap-1.5">
+        <Package size={13} />
+        Catálogo de productos
+      </p>
+
+      <div className="bg-fondo rounded-xl border border-borde p-4 flex flex-col gap-3">
+        <div>
+          <p className="text-sm text-texto">
+            Tienes{' '}
+            <span className="font-bold text-primario">
+              {totalProductos?.toLocaleString('es-CO') ?? '…'}
+            </span>{' '}
+            productos en tu catálogo.
+          </p>
+          <p className="text-xs text-suave mt-1">
+            Importa productos nuevos del catálogo base sin borrar lo que ya tienes.
+            No duplica productos existentes.
+          </p>
+        </div>
+
+        <button
+          type="button"
+          onClick={handleImportar}
+          disabled={importando}
+          className="flex items-center justify-center gap-2 h-11 w-full
+                     bg-primario text-white rounded-xl text-sm font-semibold
+                     hover:bg-primario-hover active:scale-95 transition-all
+                     disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          {importando ? (
+            <>
+              <Loader2 size={15} className="animate-spin" />
+              Importando productos…
+            </>
+          ) : (
+            <>
+              <Download size={15} />
+              Importar productos del catálogo
+            </>
+          )}
+        </button>
+      </div>
+    </section>
+  )
+}
+
 // ─── Sección Mi Plan ─────────────────────────────────────────────────────────
 
 function SeccionMiPlan() {
@@ -1372,6 +1449,9 @@ export function ConfigModal({ onClose, onReiniciarTour }: ConfigModalProps) {
 
             {/* Mi Plan (solo dueño) */}
             <SeccionMiPlan />
+
+            {/* Catálogo de productos */}
+            <SeccionCatalogo />
 
             {/* Info de la tienda */}
             <section>

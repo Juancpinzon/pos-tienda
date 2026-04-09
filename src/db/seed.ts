@@ -1395,3 +1395,6 @@ export function contarProductosPorCategoria() {
 }
 
 export const TOTAL_PRODUCTOS_SEED = PRODUCTOS_SEED.length
+
+// Exportar arrays del seed para importación incremental
+export { CATEGORIAS, PRODUCTOS_SEED }
