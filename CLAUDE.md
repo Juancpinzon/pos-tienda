@@ -102,7 +102,7 @@ pos-tienda/
 │   ├── db/
 │   │   ├── schema.ts              # Definición de tablas Dexie
 │   │   ├── database.ts            # Instancia singleton de Dexie
-│   │   └── seed.ts                # Carga inicial de 400 productos
+│   │   └── seed.ts                # Catálogo de 2.712 productos en 41 categorías
 │   ├── stores/
 │   │   ├── ventaStore.ts          # Estado de la venta activa
 │   │   ├── cajaStore.ts           # Estado de la sesión de caja
@@ -538,7 +538,7 @@ Ver guía completa de publicación en `docs/fase-23-play-store.md`.
 
 ### Fase 1: Base de Datos ✅
 
-- Dexie singleton, schema completo, seed de 400 productos
+- Dexie singleton, schema completo, seed de 2.712 productos en 41 categorías
 
 ### Fase 2: POS Core ✅
 
@@ -1195,15 +1195,68 @@ git add . && git commit -m "mensaje" && git push origin main
 
 ---
 
+## 📦 Catálogo de Productos
+
+El seed (`src/db/seed.ts`) contiene **2.712 productos** distribuidos en **41 categorías**.
+
+| # | Categoría | Ejemplos |
+|---|-----------|----------|
+| 1 | Lácteos | Leche, yogurt, queso blanco |
+| 2 | Huevos | Huevo rojo, blanco, codorniz |
+| 3 | Panadería | Pan, arepas, mogollas |
+| 4 | Granos y harinas | Arroz, frijol, harina de trigo |
+| 5 | Agua y bebidas sin gas | Agua Cristal, Hatsu, infusadas |
+| 6 | Snacks | Margarita, chitos, galletas |
+| 7 | Aseo personal | Shampoo, jabón, desodorante |
+| 8 | Aseo hogar | Detergente, limpiadores, desechables |
+| 9 | Frutas y verduras | Aguacate, tomate, papa |
+| 10 | Carnes frías (charcutería) | Jamón, salchichón, mortadela |
+| 11 | Enlatados | Atún, sardinas, Spam |
+| 12 | Condimentos | Salsas, especias, aderezos |
+| 13 | Papelería y varios | Cuadernos, pilas, USB |
+| 14 | Carnes y procesados | Res, pollo, hamburguesas |
+| 15 | Quesos | Campesino, doble crema, mozzarella |
+| 16 | Huevos de codorniz | – |
+| 17 | Cócteles | Mezclas premezcladas |
+| 18 | Licores nacionales | Aguardiente, ron, whisky |
+| 19 | Cervezas | Águila, Poker, Club Colombia |
+| 20 | Vinos | Gato Negro, Concha y Toro |
+| 21 | Café y aromáticas | Sello Rojo, teteras, kombuchas |
+| 22 | Chocolates y maltas | Nutella, Lindt, Chocolate Corona |
+| 23 | Pañales y bebé | Huggies, Pampers, teteros |
+| 24 | Medicamentos OTC | Acetaminofén, ibuprofeno, vitaminas |
+| 25 | Energizantes | Monster, Red Bull, Celsius |
+| 26 | Gaseosas | Coca-Cola, Postobon, Pepsi |
+| 27 | Jugos y néctares | Hit, natura, frescos naturales |
+| 28 | Helados y paletas | Bon Ice, Cremhelado |
+| 29 | Salchichas y frankfurters | Zenú, Suizo |
+| 30 | Jamones y fiambres | Jamón de cerdo, pavo |
+| 31 | Chorizos y longanizas | Chorizo casero, parrillero |
+| 32 | Tocineta y costillas | Cerdo ahumado, baby-back |
+| 33 | Sal, sopas y caldos | Knorr, noodles, gelatinas |
+| 34 | Aceites y grasas | Soya, girasol, oliva, aguacate |
+| 35 | Pastas y arroces | Espaguetis, linguine, risotto |
+| 36 | Azúcar y endulzantes | Azúcar, panela, miel, stevia |
+| 37 | Cuidado adulto mayor | Pañal adulto, tensiómetro, glucómetro |
+| 38 | Pilas y accesorios | Pilas AA, bombillos, cables |
+| 39 | Combos y paquetes | Combos desayuno, asado, escolar |
+| 40 | Tabacos y cigarros | Cigarrillos, encendedores |
+| 41 | Mascotas | Pedigree, Whiskas, arena gato |
+
+> **⚠️ Nota:** La categoría 41 (Mascotas) es nueva y debe existir en la tabla `categorias`  
+> antes de que el seed la asigne. Si no existe, agregar en `CATEGORIAS[]` dentro del seed  
+> o crearla manualmente desde el panel de productos.
+
+---
+
 ## 🔮 Roadmap (Pendiente)
 
-- Completar escáner código de barras (bug pendiente)
-- Play Store (Fase 25) — Android Studio requerido
-- IA conversacional análisis ventas (Fase 26)
-- Impresora térmica Bluetooth (Fase 27)
-- Preparación DIAN (Fase 28)
+- Play Store — Android Studio requerido (Fase 25)
+- Impresora térmica Bluetooth (completar flujo)
+- Preparación DIAN (Factura electrónica)
+- Integración PILA / nómina electrónica (Fase futura)
 
 ---
 
 _Este documento es la fuente de verdad del proyecto._
-_Versión: 2.0 — Actualizado Marzo 2026 — Juan Camilo Pinzón_
+_Versión: 2.1 — Actualizado Abril 2026 — Juan Camilo Pinzón_
