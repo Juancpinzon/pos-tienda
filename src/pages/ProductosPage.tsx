@@ -249,7 +249,7 @@ export default function ProductosPage() {
 
     return (
       <div className={[
-        'flex items-center gap-3 px-4 py-3 border-b border-borde/50 last:border-0',
+        'flex items-start gap-3 px-4 py-3 min-h-[56px] border-b border-borde/50 last:border-0',
         !p.activo ? 'opacity-50' : '',
       ].join(' ')}>
 
@@ -258,7 +258,7 @@ export default function ProductosPage() {
 
         {/* Nombre + badges */}
         <div className="flex-1 min-w-0">
-          <p className="text-sm font-medium text-texto truncate">{p.nombre}</p>
+          <p className="text-sm font-medium text-texto break-words">{p.nombre}</p>
           <div className="flex items-center gap-2 mt-0.5">
             {p.unidad !== 'unidad' && (
               <span className="text-xs text-suave capitalize">{p.unidad}</span>
@@ -275,12 +275,12 @@ export default function ProductosPage() {
         </div>
 
         {/* Precio */}
-        <span className="moneda font-bold text-sm text-primario shrink-0">
+        <span className="moneda font-bold text-sm text-primario shrink-0 pt-[1px]">
           {formatCOP(p.precio)}
         </span>
 
         {/* Acciones */}
-        <div className="flex items-center gap-1 shrink-0">
+        <div className="flex items-center gap-1 shrink-0 -mt-1">
           <button
             type="button"
             onClick={() => abrirEdicion(p)}
