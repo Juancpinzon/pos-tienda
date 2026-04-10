@@ -55,10 +55,13 @@ function ModalConfirmarAnulacion({
   anulando,
 }: {
   venta: Venta & { id: number }
-  onConfirmar: () => void
+  onConfirmar: (motivo: string) => void
   onCancelar: () => void
   anulando: boolean
 }) {
+  const [motivo, setMotivo] = useState('')
+  const motivoValido = motivo.trim().length >= 10
+
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 p-4">
       <div className="bg-white rounded-2xl shadow-2xl max-w-sm w-full p-6 flex flex-col gap-5">
@@ -78,6 +81,32 @@ function ModalConfirmarAnulacion({
             )}
           </p>
         </div>
+
+        {/* Motivo de anulación — obligatorio */}
+        <div className="flex flex-col gap-1.5">
+          <label className="text-sm font-semibold text-texto">
+            Motivo de anulación <span className="text-peligro">*</span>
+          </label>
+          <textarea
+            value={motivo}
+            onChange={(e) => setMotivo(e.target.value)}
+            placeholder="Ej: Cliente canceló el pedido, error en el precio cobrado…"
+            rows={3}
+            className={[
+              'w-full px-3 py-2.5 border rounded-xl text-sm text-texto placeholder:text-suave',
+              'focus:outline-none focus:ring-2 resize-none',
+              motivo.length > 0 && !motivoValido
+                ? 'border-peligro/50 focus:ring-peligro/30'
+                : 'border-borde focus:ring-primario/30 focus:border-primario/50',
+            ].join(' ')}
+          />
+          {motivo.length > 0 && !motivoValido && (
+            <p className="text-xs text-peligro">
+              Mínimo 10 caracteres ({motivo.trim().length}/10)
+            </p>
+          )}
+        </div>
+
         <div className="flex gap-3">
           <button
             type="button"
@@ -90,8 +119,8 @@ function ModalConfirmarAnulacion({
           </button>
           <button
             type="button"
-            onClick={onConfirmar}
-            disabled={anulando}
+            onClick={() => motivoValido && onConfirmar(motivo.trim())}
+            disabled={anulando || !motivoValido}
             className="flex-1 h-11 bg-peligro text-white rounded-xl font-semibold text-sm
                        hover:bg-peligro/90 active:scale-95 transition-all disabled:opacity-50
                        flex items-center justify-center gap-2"
@@ -124,6 +153,7 @@ function ModalDetalleVenta({
   onClose: () => void
   onAnulada: () => void
 }) {
+  const usuario = useAuthStore((s) => s.usuario)
   const { venta, detalles, nombreCliente } = item
   const [confirmarAnular, setConfirmarAnular] = useState(false)
   const [anulando, setAnulando] = useState(false)
@@ -131,10 +161,15 @@ function ModalDetalleVenta({
   const [mostrarNota, setMostrarNota] = useState(false)
   const [consecutivoNota, setConsecutivoNota] = useState<string | undefined>(undefined)
 
-  const handleAnular = async () => {
+  const handleAnular = async (motivo: string) => {
     setAnulando(true)
     try {
-      await anularVenta(venta.id)
+      await anularVenta(
+        venta.id,
+        motivo,
+        usuario?.nombre ?? 'Sin sesión',
+        usuario?.rol ?? 'desconocido',
+      )
       onAnulada()
       onClose()
     } catch (err) {
@@ -271,8 +306,8 @@ function ModalDetalleVenta({
               📄 Nota de venta
             </button>
 
-            {/* Botón anular — solo duéño en ventas completadas */}
-            {esDueno && venta.estado === 'completada' && (
+            {/* Botón anular — cualquier rol en ventas completadas; queda registrado en auditoría */}
+            {venta.estado === 'completada' && (
               <button
                 type="button"
                 onClick={() => setConfirmarAnular(true)}

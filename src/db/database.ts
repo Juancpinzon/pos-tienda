@@ -23,6 +23,7 @@ import type {
   AdelantoEmpleado,
   PedidoDomicilio,
   CatalogoPublico,
+  AuditoriaAnulacion,
 } from './schema'
 
 // Singleton de Dexie — única instancia para toda la aplicación
@@ -57,6 +58,8 @@ class POSDatabase extends Dexie {
   // v8 — módulo de domicilios y catálogo público
   pedidosDomicilio!: EntityTable<PedidoDomicilio, 'id'>
   catalogoPublico!: EntityTable<CatalogoPublico, 'id'>
+  // v10 — auditoría de anulaciones
+  auditoriaAnulaciones!: EntityTable<AuditoriaAnulacion, 'id'>
 
   constructor() {
     super('POSTienda')
@@ -127,6 +130,11 @@ class POSDatabase extends Dexie {
         }
       })
     })
+
+    // Versión 10: auditoría de anulaciones
+    this.version(10).stores({
+      auditoriaAnulaciones: '++id, ventaId, usuarioRol, usuarioNombre, creadoEn',
+    })
   }
 }
 
@@ -158,4 +166,5 @@ export type {
   AdelantoEmpleado,
   PedidoDomicilio,
   CatalogoPublico,
+  AuditoriaAnulacion,
 }

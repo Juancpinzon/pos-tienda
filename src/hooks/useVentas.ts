@@ -76,13 +76,19 @@ export function useVentasPeriodo(inicio: Date, fin: Date) {
 
 /**
  * Anula una venta completada.
+ * - Registra en auditoriaAnulaciones quién anuló, por qué y qué venta era
  * - Marca la venta como 'anulada' en Dexie
  * - Si era fiado: crea un MovimientoFiado de tipo 'pago' para revertir el cargo
  *   y reduce la totalDeuda del cliente
  * - Restaura stock para productos con control activo
  * Las ventas anuladas nunca se borran — quedan visibles en el historial.
  */
-export async function anularVenta(ventaId: number): Promise<void> {
+export async function anularVenta(
+  ventaId: number,
+  motivo: string,
+  usuarioNombre: string,
+  usuarioRol: string,
+): Promise<void> {
   const venta = await db.ventas.get(ventaId)
   if (!venta) throw new Error('Venta no encontrada')
   if (venta.estado === 'anulada') throw new Error('La venta ya está anulada')
@@ -130,6 +136,17 @@ export async function anularVenta(ventaId: number): Promise<void> {
       )
     }
   }
+
+  // Registro de auditoría — quién anuló, cuándo y por qué
+  await db.auditoriaAnulaciones.add({
+    ventaId,
+    ventaTotal: venta.total,
+    ventaTipoPago: venta.tipoPago,
+    usuarioNombre,
+    usuarioRol,
+    motivo,
+    creadoEn: ahora,
+  })
 }
 
 // ─── Utilidades de período ────────────────────────────────────────────────────

@@ -6,6 +6,7 @@ import { formatCOP } from '../utils/moneda'
 import { getBucketMora } from '../hooks/useFiados'
 import { DashboardUtilidadNeta } from '../components/reportes/DashboardUtilidadNeta'
 import { AsistenteIA } from '../components/reportes/AsistenteIA'
+import { LogAnulaciones } from '../components/reportes/LogAnulaciones'
 import { useAuthStore } from '../stores/authStore'
 import type { Cliente } from '../db/schema'
 
@@ -589,6 +590,9 @@ export default function ReportesPage() {
               </div>
             )}
           </div>
+
+          {/* Auditoría de anulaciones — solo para dueño */}
+          {esDueno && <LogAnulaciones />}
 
           <div className="h-8" />
         </div>

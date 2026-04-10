@@ -4,6 +4,10 @@ import { db } from '../../db/database'
 import type { Producto } from '../../db/schema'
 import { useVentaStore } from '../../stores/ventaStore'
 import { formatCOP } from '../../utils/moneda'
+import { ModalCantidadProducto } from './ModalCantidadProducto'
+
+/** Unidades que requieren el modal de cantidad/valor */
+const UNIDADES_PESABLES: Producto['unidad'][] = ['gramo', 'mililitro', 'porcion']
 
 // Productos fijos más vendidos en tienda bogotana — nombre exacto del seed
 const PRODUCTOS_RAPIDOS: { nombre: string; emoji: string }[] = [
@@ -24,12 +28,19 @@ const PRODUCTOS_RAPIDOS: { nombre: string; emoji: string }[] = [
 interface CardProps {
   producto: Producto
   emoji: string
+  onPesable: (producto: Producto) => void
 }
 
-function CardProducto({ producto, emoji }: CardProps) {
+function CardProducto({ producto, emoji, onPesable }: CardProps) {
   const agregarItem = useVentaStore((s) => s.agregarItem)
 
   const handleClick = () => {
+    // Pesable → delegar al modal de cantidad (+valor inverso)
+    if (UNIDADES_PESABLES.includes(producto.unidad)) {
+      onPesable(producto)
+      return
+    }
+    // Unidad → agregar directo
     agregarItem({
       productoId: producto.id,
       nombreProducto: producto.nombre,
@@ -65,6 +76,8 @@ type GridItem = { producto: Producto; emoji: string }
 export function GridProductosRapidos() {
   // undefined = cargando, [] = sin resultados, [...] = datos listos
   const [gridItems, setGridItems] = useState<GridItem[] | undefined>(undefined)
+  // Producto pesable seleccionado para el modal
+  const [productoModal, setProductoModal] = useState<Producto | null>(null)
 
   useEffect(() => {
     // Usamos liveQuery directamente para controlar el ciclo de vida
@@ -129,12 +142,25 @@ export function GridProductosRapidos() {
     )
   }
 
-  // ── Grid ─────────────────────────────────────────────────────────────────────
+  // ── Grid ───────────────────────────────────────────────────────────────────────
   return (
-    <div className="grid grid-cols-3 gap-2">
-      {gridItems.map(({ producto, emoji }) => (
-        <CardProducto key={producto.id} producto={producto} emoji={emoji} />
-      ))}
-    </div>
+    <>
+      {productoModal && (
+        <ModalCantidadProducto
+          producto={productoModal}
+          onClose={() => setProductoModal(null)}
+        />
+      )}
+      <div className="grid grid-cols-3 gap-2">
+        {gridItems.map(({ producto, emoji }) => (
+          <CardProducto
+            key={producto.id}
+            producto={producto}
+            emoji={emoji}
+            onPesable={setProductoModal}
+          />
+        ))}
+      </div>
+    </>
   )
 }

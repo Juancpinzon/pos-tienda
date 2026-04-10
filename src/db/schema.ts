@@ -329,3 +329,16 @@ export interface CatalogoPublico {
   categoriasMostrar: number[]  // IDs de categorías visibles — JSON en Dexie
 }
 
+// ─── Módulo de Auditoría de Anulaciones (v10) ────────────────────────────────
+
+export interface AuditoriaAnulacion {
+  id?: number
+  ventaId: number
+  ventaTotal: number          // Snapshot del total anulado
+  ventaTipoPago: string       // Snapshot del tipo de pago
+  usuarioNombre: string       // Nombre del usuario que anuló
+  usuarioRol: string          // Rol: dueno | encargado | empleado
+  motivo: string              // Obligatorio — mínimo 10 caracteres
+  creadoEn: Date
+}
+

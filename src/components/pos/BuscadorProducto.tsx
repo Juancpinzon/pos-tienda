@@ -6,6 +6,10 @@ import type { Producto } from '../../db/schema'
 import { useVentaStore } from '../../stores/ventaStore'
 import { formatCOP, parsearEntero } from '../../utils/moneda'
 import { EscanerCodigoBarras } from './EscanerCodigoBarras'
+import { ModalCantidadProducto } from './ModalCantidadProducto'
+
+/** Unidades que activan el modal de cantidad/valor inverso */
+const UNIDADES_PESABLES: Producto['unidad'][] = ['gramo', 'mililitro', 'porcion']
 
 // Resultado de búsqueda por código de barras
 type ResultadoScan =
@@ -23,6 +27,8 @@ export function BuscadorProducto() {
   const [fantasmaPrecio, setFantasmaPrecio] = useState('')
   const [mostrarEscaner, setMostrarEscaner] = useState(false)
   const [resultadoScan, setResultadoScan] = useState<ResultadoScan>(null)
+  // Producto pesable seleccionado → abre ModalCantidadProducto
+  const [productoModal, setProductoModal] = useState<Producto | null>(null)
 
   const inputRef = useRef<HTMLInputElement>(null)
   const contenedorRef = useRef<HTMLDivElement>(null)
@@ -65,6 +71,17 @@ export function BuscadorProducto() {
   }, [])
 
   const seleccionarProducto = (producto: Producto) => {
+    setQuery('')
+    setResultados([])
+    setAbierto(false)
+
+    // Productos por peso/volumen/porción → abrir modal de cantidad
+    if (UNIDADES_PESABLES.includes(producto.unidad)) {
+      setProductoModal(producto)
+      return
+    }
+
+    // Producto por unidad → agregar directo al carrito (comportamiento original)
     agregarItem({
       productoId: producto.id,
       nombreProducto: producto.nombre,
@@ -73,9 +90,6 @@ export function BuscadorProducto() {
       descuento: 0,
       esProductoFantasma: false,
     })
-    setQuery('')
-    setResultados([])
-    setAbierto(false)
     inputRef.current?.focus()
   }
 
@@ -108,7 +122,13 @@ export function BuscadorProducto() {
       .first()
 
     if (producto) {
-      // Encontrado → agregar al carrito directamente
+      setResultadoScan(null)
+      // Pesable → abrir modal de cantidad
+      if (UNIDADES_PESABLES.includes(producto.unidad)) {
+        setProductoModal(producto)
+        return
+      }
+      // Unidad → agregar directo
       agregarItem({
         productoId: producto.id,
         nombreProducto: producto.nombre,
@@ -117,7 +137,6 @@ export function BuscadorProducto() {
         descuento: 0,
         esProductoFantasma: false,
       })
-      setResultadoScan(null)
     } else {
       // No encontrado → mostrar opciones
       setResultadoScan({ tipo: 'no_encontrado', codigo })
@@ -125,6 +144,14 @@ export function BuscadorProducto() {
   }, [agregarItem])
 
   return (
+    <>
+    {/* Modal para productos pesables */}
+    {productoModal && (
+      <ModalCantidadProducto
+        producto={productoModal}
+        onClose={() => { setProductoModal(null); inputRef.current?.focus() }}
+      />
+    )}
     <div ref={contenedorRef} className="relative w-full">
       {/* Input de búsqueda */}
       <div className="flex gap-2">
@@ -329,5 +356,6 @@ export function BuscadorProducto() {
         </div>
       )}
     </div>
+    </>
   )
 }
