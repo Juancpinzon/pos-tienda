@@ -113,6 +113,7 @@ pos-tienda/
 │   │   ├── useProductos.ts        # Búsqueda y CRUD de productos
 │   │   ├── useFiados.ts           # Gestión de cartera
 │   │   ├── useVentas.ts           # Registro de transacciones
+│   │   ├── useMermas.ts           # Gestión de pérdidas (Fase 36)
 │   │   ├── useCaja.ts             # Sesiones de caja
 │   │   ├── useStock.ts            # Control de stock y alertas
 │   │   ├── useProveedores.ts      # Gestión de proveedores y compras
@@ -136,11 +137,16 @@ pos-tienda/
 │   │   ├── domicilios/            # Módulo de domicilios
 │   │   │   ├── ModalPedidoDomicilio.tsx
 │   │   │   └── PanelDomicilios.tsx
+│   │   ├── inventario/            # Módulo de inventario y mermas
+│   │   │   ├── ModalRegistrarMerma.tsx
+│   │   │   └── AlertasCaducidad.tsx
 │   │   ├── fiado/                 # Módulo de cartera
 │   │   ├── productos/             # Gestión de inventario
 │   │   ├── proveedores/           # Módulo de proveedores
 │   │   ├── stock/                 # Alertas y control de stock
 │   │   ├── reportes/              # Gráficos y reportes
+│   │   │   ├── AsistenteIA.tsx
+│   │   │   └── LogAnulaciones.tsx
 │   │   ├── caja/                  # Sesiones de caja
 │   │   ├── config/                # ConfigModal + ajustes de tienda
 │   │   │   └── ModalActivarPro.tsx
@@ -214,6 +220,8 @@ export interface Producto {
   activo: boolean;
   creadoEn: Date;
   actualizadoEn: Date;
+  fechaVencimiento?: Date;  // Opcional — para productos perecederos
+  loteNumero?: string;      // Número de lote opcional
 }
 
 export interface Cliente {
@@ -253,6 +261,7 @@ export interface Venta {
   efectivoRecibido?: number;
   cambio?: number;
   estado: "completada" | "anulada";
+  estadoPago?: "verificado" | "pendiente_verificacion"; // Solo aplica cuando tipoPago === "transferencia"
   notas?: string;
   creadaEn: Date;
 }
@@ -303,6 +312,8 @@ export interface ConfigTienda {
   planActivo: "basico" | "pro";
   planActivadoEn?: Date;
   codigoActivacion?: string;
+  smmlv: number;                // Default: 1_423_500 (2025)
+  subsidioTransporte: number;   // Default: 200_000 (2025)
 }
 
 // ─── Módulo de Domicilios ─────────────────────────────────────────────────────
@@ -379,6 +390,63 @@ export interface PagoProveedor {
   sesionCajaId?: number;
   notas?: string;
   creadoEn: Date;
+}
+
+export interface AuditoriaAnulacion {
+  id?: number;
+  ventaId: number;
+  ventaTotal: number;
+  ventaTipoPago: string;
+  usuarioNombre: string;
+  usuarioRol: string;
+  motivo: string;           // Mínimo 10 caracteres, obligatorio
+  creadoEn: Date;
+}
+
+export interface Merma {
+  id?: number;
+  productoId?: number;
+  nombreProducto: string;
+  cantidad: number;
+  unidad: string;
+  precioCompra: number;
+  costoTotal: number;
+  tipo: "vencido" | "dañado" | "consumo_interno" | "otro";
+  sesionCajaId?: number;
+  notas?: string;
+  creadoEn: Date;
+}
+
+export interface MovimientoStock {
+  id?: number;
+  productoId: number;
+  delta: number;            // Positivo = entrada, negativo = salida
+  origen: "venta" | "compra" | "ajuste" | "merma";
+  referenciaId?: number;
+  deviceId: string;
+  sincronizado: boolean;
+  creadoEn: Date;
+}
+
+export interface SugeridoCompra {
+  productoId: number;
+  nombreProducto: string;
+  stockActual: number;
+  stockMinimo: number;
+  velocidadDiaria: number;
+  diasRestantes: number;
+  cantidadSugerida: number;
+  prioridad: "urgente" | "pronto" | "planificar";
+}
+
+export interface ProductoPorVencer {
+  productoId: number;
+  nombreProducto: string;
+  fechaVencimiento: Date;
+  diasRestantes: number;
+  stockActual: number;
+  costoTotal: number;
+  estado: "vencido" | "critico" | "proximo";
 }
 ```
 
@@ -777,14 +845,64 @@ Ver guía completa de publicación en `docs/fase-23-play-store.md`.
 - Validación JWT manual antes de cualquier lógica de negocio
 - Cliente verifica sesión activa antes de invocar Edge Functions
 
-### Fase 33: Módulo de Mermas ✅
+### Fase 33: Log de Auditoría de Anulaciones ✅
+- Tabla auditoriaAnulaciones en Dexie
+- Motivo obligatorio (≥10 chars) antes de cualquier anulación
+- Registro inmutable: quién, cuándo, rol y motivo
+- Panel LogAnulaciones en ReportesPage solo para dueño
+- Alerta roja si mismo usuario anula >3 ventas en efectivo/día
 
-- Interfaz `Merma` en `src/db/schema.ts` (v11 Dexie)
-- Tabla `mermas` indexada por `productoId, tipo, sesionCajaId, creadoEn`
-- Hook `useMermas.ts`: suscripciones reactivas, `registrarMerma()` descuenta stock automáticamente
-- `ModalRegistrarMerma.tsx`: búsqueda de producto, 4 tipos de merma, cálculo de pérdida en tiempo real, botón 60px
-- `InventarioPage`: botón "📦 Merma" en header + sección "Mermas del mes" con costo total
-- `DashboardUtilidadNeta`: mermas del período se restan en la cascada → utilidad neta real
+### Fase 34: Calculadora Inversa para Granel ✅
+- Toggle "Por cantidad" / "Por valor" en productos por peso
+- Cliente ingresa valor en pesos → sistema calcula gramos
+- Fórmula: cantidad = valorIngresado / precioUnitarioPorGramo
+- Solo aplica a unidad === "gramo" | "mililitro" | "porcion"
+- Stock se descuenta en gramos correctos
+
+### Fase 35: SMMLV Editable ✅
+- smmlv y subsidioTransporte en ConfigTienda (no hardcodeados)
+- Sección "⚖️ Valores Legales" en ConfigModal
+- calcularDeduccionesSS() recibe smmlv como parámetro
+- Sin constantes hardcodeadas en nomina.ts
+
+### Fase 36: Módulo de Mermas ✅
+- Tabla mermas en Dexie con hook useMermas
+- ModalRegistrarMerma: producto, tipo, cantidad, costo total
+- Stock se descuenta automáticamente al registrar merma
+- Mermas restan de la utilidad neta en ReportesPage
+- Sección "Mermas del mes" en InventarioPage
+
+### Fase 37: Sugerido de Compra Predictivo ✅
+- Velocidad de venta: promedio últimos 30 días
+- Sugerido para 15 días de cobertura
+- Prioridades: Urgente (<3 días) / Pronto (3-7) / Planificar (7-15)
+- ListaPedidoPage rediseñada con indicadores de prioridad
+- WhatsApp agrupa productos por proveedor
+- Productos sin historial de ventas no aparecen
+
+### Fase 38: Conciliación de Pagos Digitales ✅
+- Campo estadoPago en Venta para transferencias
+- Toggle post-venta: "¿Ya llegó la transferencia?"
+- Badge "⏳ Por verificar" en HistorialVentasPage
+- Advertencia en CajaPage si hay transferencias pendientes
+- Desglose verificadas vs. pendientes en ReportesPage
+
+### Fase 39: Race Conditions en Sync ✅
+- resolverConflictos() con 3 estrategias:
+  conservar-ambos (ventas), suma-movimientos (stock), last-write-wins (config)
+- MovimientoStock: sync por deltas, nunca por valor absoluto
+- deviceId único por instalación en localStorage
+- pullMovimientosStock() y pushMovimientosStock()
+- pullProductos() NO sobreescribe stockActual
+
+### Fase 40: Alertas de Caducidad ✅
+- Campo fechaVencimiento opcional en Producto
+- getProductosPorVencer(): vencido / crítico / próximo
+- AlertasCaducidad en InventarioPage con tarjetas por estado
+- Badge en navegación si hay productos vencidos o críticos
+- "Registrar como merma" pre-selecciona el producto
+- Precio remate sugerido: 50% del precio de venta
+- Notificación diaria integrada en src/lib/notificaciones.ts
 
 # Fase 27: Módulo de Empleados y Nómina Básica
 
@@ -1363,4 +1481,4 @@ El seed (`src/db/seed.ts`) contiene **2.712 productos** distribuidos en **41 cat
 ---
 
 _Este documento es la fuente de verdad del proyecto._
-_Versión: 3.0 — Actualizado 9 abril 2026 — Juan Camilo Pinzón_
+_Versión: 4.0 — Actualizado 9 abril 2026 — Juan Camilo Pinzón_
