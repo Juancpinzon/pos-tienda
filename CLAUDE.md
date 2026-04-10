@@ -124,14 +124,18 @@ pos-tienda/
 │   │   ├── usePWAInstall.ts       # Prompt de instalación PWA
 │   │   ├── useCapacitor.ts        # Detección nativo vs. web (Fase 23)
 │   │   ├── usePushNotifications.ts # Push dual: nativo + web (Fase 22-23)
-│   │   └── useBluetooth.ts        # BLE dual: nativo + web (Fase 23)
+│   │   ├── useBluetooth.ts        # BLE dual: nativo + web (Fase 23)
+│   │   └── useDomicilios.ts       # CRUD pedidos domicilio + catálogo público
 │   ├── lib/
 │   │   ├── supabase.ts            # Cliente Supabase + flag supabaseConfigurado
 │   │   ├── sync.ts                # Auto-sync bidireccional con Supabase
 │   │   └── notificaciones.ts      # Lógica de notificaciones
 │   ├── components/
 │   │   ├── pos/                   # Pantalla principal de venta
-  │   │   └── ModalNotaVenta.tsx # Preview nota de venta (Fase 24)
+│   │   │   └── ModalNotaVenta.tsx # Preview nota de venta (Fase 24)
+│   │   ├── domicilios/            # Módulo de domicilios
+│   │   │   ├── ModalPedidoDomicilio.tsx
+│   │   │   └── PanelDomicilios.tsx
 │   │   ├── fiado/                 # Módulo de cartera
 │   │   ├── productos/             # Gestión de inventario
 │   │   ├── proveedores/           # Módulo de proveedores
@@ -139,8 +143,10 @@ pos-tienda/
 │   │   ├── reportes/              # Gráficos y reportes
 │   │   ├── caja/                  # Sesiones de caja
 │   │   ├── config/                # ConfigModal + ajustes de tienda
+│   │   │   └── ModalActivarPro.tsx
 │   │   ├── onboarding/            # TourOverlay para nuevos usuarios
 │   │   └── shared/                # Componentes reutilizables
+│   │       └── ProGuard.tsx       # Wrapper que oculta contenido Pro
 │   ├── pages/
 │   │   ├── POSPage.tsx            # Pantalla principal (ruta /)
 │   │   ├── FiadosPage.tsx         # Cartera de clientes (/fiados)
@@ -152,6 +158,9 @@ pos-tienda/
 │   │   ├── HistorialVentasPage.tsx# Historial de ventas (/historial)
 │   │   ├── ListaPedidoPage.tsx    # Lista de pedido a proveedor (/pedido)
 │   │   ├── DashboardMultitienda.tsx # Vista general multi-tienda (/multi-tienda)
+│   │   ├── DomiciliosPage.tsx     # Gestión de pedidos (/domicilios)
+│   │   ├── CatalogoPublicoPage.tsx# Catálogo público (/catalogo/:slug)
+│   │   ├── EntregaRepartidorPage.tsx # Confirmar entrega (/entrega/:token)
 │   │   ├── LoginPage.tsx          # Login Supabase (/login)
 │   │   └── RegisterPage.tsx       # Registro de tienda (/registro)
 │   ├── types/
@@ -240,6 +249,7 @@ export interface Venta {
   descuento: number;
   total: number;
   tipoPago: "efectivo" | "fiado" | "transferencia" | "mixto";
+  canal: "mostrador" | "domicilio"; // default "mostrador"
   efectivoRecibido?: number;
   cambio?: number;
   estado: "completada" | "anulada";
@@ -290,6 +300,40 @@ export interface ConfigTienda {
   impuestoIVA: number; // 0 = no aplica IVA
   permitirStockNegativo: boolean; // true para tiendas sin control estricto
   limiteFiadoPorDefecto: number; // COP. 0 = sin límite por defecto
+  planActivo: "basico" | "pro";
+  planActivadoEn?: Date;
+  codigoActivacion?: string;
+}
+
+// ─── Módulo de Domicilios ─────────────────────────────────────────────────────
+
+export interface PedidoDomicilio {
+  id?: number;
+  ventaId?: number;
+  clienteNombre: string;
+  clienteTelefono: string;
+  direccionEntrega: string;
+  barrio?: string;
+  estado: "recibido" | "preparando" | "en_camino" | "entregado" | "cancelado";
+  repartidorNombre?: string;
+  notasEntrega?: string;
+  costoEnvio: number;
+  pagoContraentrega: boolean;
+  tokenRepartidor?: string;
+  fotoEntrega?: string;
+  confirmedAt?: Date;
+  creadoEn: Date;
+  actualizadoEn: Date;
+}
+
+export interface CatalogoPublico {
+  id?: number; // Siempre 1 (singleton)
+  activo: boolean;
+  slug: string;
+  whatsappNumero: string;
+  mensajeBienvenida: string;
+  categoriasMostrar: number[];
+  costoEnvioPorDefecto: number;
 }
 
 // ─── Módulo de Proveedores y Compras ──────────────────────────────────────────
@@ -465,18 +509,21 @@ CIERRE:
 
 ### Rutas disponibles
 
-| Ruta            | Página                                        | Roles              |
-| --------------- | --------------------------------------------- | ------------------ |
-| `/`             | POSPage — POS principal                       | dueño, empleado    |
-| `/fiados`       | FiadosPage — Cartera de clientes              | dueño, empleado    |
-| `/productos`    | ProductosPage — CRUD de productos             | dueño              |
-| `/inventario`   | InventarioPage — Stock y alertas              | dueño              |
-| `/proveedores`  | ProveedoresPage — Compras a proveedores       | dueño              |
-| `/caja`         | CajaPage — Apertura/cierre de caja            | dueño              |
-| `/reportes`     | ReportesPage — Métricas del negocio           | dueño              |
-| `/historial`    | HistorialVentasPage — Todas las ventas        | dueño, empleado    |
-| `/pedido`       | ListaPedidoPage — Lista de pedido a proveedor | dueño              |
-| `/multi-tienda` | DashboardMultitienda — Vista consolidada      | dueño (+2 tiendas) |
+| Ruta              | Página                                        | Roles                    |
+| ----------------- | --------------------------------------------- | ------------------------ |
+| `/`               | POSPage — POS principal                       | dueño, empleado          |
+| `/fiados`         | FiadosPage — Cartera de clientes              | dueño, empleado          |
+| `/productos`      | ProductosPage — CRUD de productos             | dueño                    |
+| `/inventario`     | InventarioPage — Stock y alertas              | dueño                    |
+| `/proveedores`    | ProveedoresPage — Compras a proveedores       | dueño                    |
+| `/caja`           | CajaPage — Apertura/cierre de caja            | dueño                    |
+| `/reportes`       | ReportesPage — Métricas del negocio           | dueño                    |
+| `/historial`      | HistorialVentasPage — Todas las ventas        | dueño, empleado          |
+| `/pedido`         | ListaPedidoPage — Lista de pedido a proveedor | dueño                    |
+| `/multi-tienda`   | DashboardMultitienda — Vista consolidada      | dueño (+2 tiendas)       |
+| `/domicilios`     | DomiciliosPage — Gestión de pedidos           | dueño, encargado         |
+| `/catalogo/:slug` | CatalogoPublicoPage — Catálogo público        | **público** (sin auth)   |
+| `/entrega/:token` | EntregaRepartidorPage — Confirmar entrega     | **público** (sin auth)   |
 
 ### Sistema de roles
 
@@ -674,13 +721,61 @@ Ver guía completa de publicación en `docs/fase-23-play-store.md`.
 - supabase/functions/asistente-ventas/index.ts: Proxy a Anthropic con claude-3-5-haiku-20241022 y System Prompt local
 - Integrado directamente en ReportesPage.tsx exclusivo para el dueño
 
-### Fase 27: Módulo de Empleados y Nómina Básica (Sub-sprints 27.1 - 27.4) ✅
+### Fase 27.A: Módulo de Empleados y Nómina Básica ✅
 
 - **Schema & DB**: Tablas `empleados`, `periodosNomina`, `liquidacionesPrestaciones`, `adelantosEmpleado` en Dexie.
-- **Hook de Nómina (`useNomina.ts`)**: Funciones base y helper unificadas para el manejo de CRUD empleados y creación de nominas periódicas integrando adelantos.
-- **Formulario y Gestión**: Validaciones correctas en `FormEmpleado`, `ListaEmpleados` con calculos de antiguedad.
-- **Panel de Liquidación**: `NuevaNomina` maneja quincenal/mensual, deducciones de Seguridad Social automáticas (8%), bonificaciones, e importación iterativa de adelantos pendientes.
-- **Colillas PDF & WhatsApp**: `ColillaEmpleado.tsx` creado para autogenerar desprendibles usando `html2canvas` y `jspdf` (estilo comprobante de banco ligero), mostrando NIT, cargo del empleado e integrando WhatsApp local en un IFrame adaptado.
+- **Hook**: `useNomina.ts` — CRUD empleados y creación de nóminas periódicas con adelantos.
+- **Formulario y Gestión**: `FormEmpleado`, `ListaEmpleados` con cálculo de antigüedad.
+- **Panel de Liquidación**: `NuevaNomina` — quincenal/mensual, deducciones SS (8%), bonificaciones.
+- **Colillas PDF & WhatsApp**: `ColillaEmpleado.tsx` con `html2canvas` + `jspdf`.
+
+### Fase 27.B: Módulo de Domicilios ✅
+
+- `useDomicilios.ts`: CRUD pedidos, `generarTokenRepartidor`, `generarLinkWhatsApp`
+- `ModalPedidoDomicilio.tsx`: captura datos post-venta (nombre, tel, dirección, envío)
+- `PanelDomicilios.tsx`: kanban de pedidos activos con estados
+- `CatalogoPublicoPage.tsx`: ruta pública `/catalogo/:slug` sin auth
+- `EntregaRepartidorPage.tsx`: ruta pública `/entrega/:token` para confirmar entrega
+- Campo `canal: "mostrador" | "domicilio"` en tabla `Venta`
+- Sección Domicilios en `ConfigModal` con slug, WhatsApp, costo envío por defecto
+
+### Fase 28: Feature Flags Plan Básico / Pro ✅
+
+- `planActivo: "basico" | "pro"` en `ConfigTienda`
+- `ProGuard.tsx`: wrapper que oculta contenido Pro con banner de upgrade
+- `ModalActivarPro.tsx`: modal con código de activación + botón WhatsApp
+- Códigos válidos: `PROTIENDA2025`, `DOMICILIOS2025`, `UPGRADE2025`
+- Instalaciones nuevas arrancan en Plan Básico
+- Ícono Domicilios muestra 🔒 en Plan Básico
+- Sección "Mi Plan" al inicio de ConfigModal
+
+### Fase 29: Vista del Repartidor ✅
+
+- Token único por pedido (8 caracteres alfanuméricos)
+- `/entrega/:token`: página pública mobile-first para confirmar entrega
+- Foto de confirmación opcional (comprimida a <200KB en base64)
+- Panel actualiza estado automáticamente al confirmar
+- Link compartible por WhatsApp desde `ModalPedidoDomicilio`
+
+### Fase 30: Catálogo 2.712 productos ✅
+
+- `seed.ts` expandido de 404 a 2.712 productos en 41 categorías
+- Botón "Importar productos del catálogo" en ConfigModal
+- Importación sin duplicados (detecta por nombre case-insensitive)
+- No borra datos existentes (ventas, fiados, configuración)
+
+### Fase 31: UX Móvil ProductosPage ✅
+
+- Categorías verticales con emoji + contador (reemplaza tabs horizontales)
+- Nombres de productos completos sin truncar (wrap a segunda línea)
+- Altura mínima 56px mantenida en todas las filas
+
+### Fase 32: Seguridad Edge Functions ✅
+
+- `analizar-factura`: `verify_jwt=true`, versión 12
+- `asistente-ventas`: `verify_jwt=true`, versión 2
+- Validación JWT manual antes de cualquier lógica de negocio
+- Cliente verifica sesión activa antes de invocar Edge Functions
 
 # Fase 27: Módulo de Empleados y Nómina Básica
 
@@ -1259,4 +1354,4 @@ El seed (`src/db/seed.ts`) contiene **2.712 productos** distribuidos en **41 cat
 ---
 
 _Este documento es la fuente de verdad del proyecto._
-_Versión: 2.1 — Actualizado Abril 2026 — Juan Camilo Pinzón_
+_Versión: 3.0 — Actualizado 9 abril 2026 — Juan Camilo Pinzón_
