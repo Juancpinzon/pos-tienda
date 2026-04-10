@@ -1615,6 +1615,9 @@ export function ConfigModal({ onClose, onReiniciarTour }: ConfigModalProps) {
             {/* Facturación — Régimen Simple */}
             <SeccionFacturacion />
 
+            {/* Valores Legales — SMMLV y Subsidio de Transporte (nómina) */}
+            <SeccionValoresLegales />
+
             {/* Apariencia — selector de tema */}
             <SeccionTema />
 
