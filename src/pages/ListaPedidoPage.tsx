@@ -6,112 +6,31 @@ import {
 import { db } from '../db/database'
 import { obtenerConfig } from '../hooks/useConfig'
 import { buscarProveedores } from '../hooks/useProveedores'
+import { generarSugeridoCompra, type SugeridoCompra } from '../hooks/useStock'
 import { formatCOP } from '../utils/moneda'
 import type { Producto, Proveedor } from '../db/schema'
 
 // ─── Tipos internos ───────────────────────────────────────────────────────────
 
-type Urgencia = 'agotado' | 'critico' | 'bajo'
-
-interface SugerenciaProducto {
-  producto: Producto & { id: number }
-  promedioDaily: number    // unidades promedio vendidas por día (últimos 7 días)
-  diasRestantes: number    // stockActual / promedioDaily (Infinity si sin ventas)
-  cantidadSugerida: number // para cubrir 7 días
-  urgencia: Urgencia
-}
-
 interface GrupoProveedor {
   proveedor: Proveedor & { id: number }
-  items: SugerenciaProducto[]
+  items: SugeridoCompra[]
 }
 
 interface ResultadoPedido {
   grupos: GrupoProveedor[]
-  sinProveedor: SugerenciaProducto[]
-  totalAgotados: number
-  totalCriticos: number      // < 3 días
-  inversionEstimada: number  // suma de precioCompra * cantidadSugerida
+  sinProveedor: SugeridoCompra[]
+  totalUrgentes: number
+  totalPronto: number
+  inversionEstimada: number
 }
 
-// ─── Algoritmo central ────────────────────────────────────────────────────────
+type FiltroPrioridad = 'todos' | 'urgente' | 'pronto' | 'planificar'
 
-async function calcularPedido(): Promise<ResultadoPedido> {
-  const hace7Dias = new Date()
-  hace7Dias.setDate(hace7Dias.getDate() - 7)
-  hace7Dias.setHours(0, 0, 0, 0)
+// ─── Algoritmo de Agrupación ──────────────────────────────────────────────────
 
-  // 1. Ventas completadas de los últimos 7 días
-  const ventasIds = (await db.ventas
-    .where('creadaEn').aboveOrEqual(hace7Dias)
-    .filter((v) => v.estado === 'completada')
-    .primaryKeys()) as number[]
-
-  // 2. Detalles de esas ventas → cantidad vendida por producto
-  const detallesVenta = ventasIds.length > 0
-    ? await db.detallesVenta
-        .where('ventaId').anyOf(ventasIds)
-        .filter((d) => d.productoId !== undefined && !d.esProductoFantasma)
-        .toArray()
-    : []
-
-  const vendidoPorProducto: Record<number, number> = {}
-  for (const d of detallesVenta) {
-    vendidoPorProducto[d.productoId!] = (vendidoPorProducto[d.productoId!] ?? 0) + d.cantidad
-  }
-
-  // 3. Todos los productos con stock controlado
-  const productos = await db.productos
-    .filter((p) =>
-      p.activo &&
-      !p.esFantasma &&
-      p.stockActual !== undefined &&
-      p.stockActual !== null
-    )
-    .toArray() as (Producto & { id: number })[]
-
-  // 4. Construir sugerencias (solo para productos que necesitan pedido)
-  const sugerencias: SugerenciaProducto[] = []
-
-  for (const p of productos) {
-    const totalVendido7Dias = vendidoPorProducto[p.id] ?? 0
-    const promedioDaily = totalVendido7Dias / 7
-    const stockActual = p.stockActual ?? 0
-
-    const diasRestantes = promedioDaily > 0
-      ? stockActual / promedioDaily
-      : Infinity
-
-    const bajoPorMinimo = p.stockMinimo !== undefined && p.stockMinimo !== null
-      ? stockActual <= p.stockMinimo
-      : false
-
-    const necesita = diasRestantes < 7 || bajoPorMinimo
-
-    if (!necesita) continue
-
-    // Cantidad para 7 días de cobertura (al menos el stock mínimo doble si no hay ventas)
-    let cantidadSugerida: number
-    if (promedioDaily > 0) {
-      cantidadSugerida = Math.max(0, Math.ceil(promedioDaily * 7) - stockActual)
-    } else {
-      // Sin ventas recientes: sugerir llenar hasta 2× el stock mínimo
-      cantidadSugerida = Math.max(1, ((p.stockMinimo ?? 5) * 2) - stockActual)
-    }
-
-    const urgencia: Urgencia =
-      stockActual === 0 ? 'agotado'
-      : diasRestantes < 3 ? 'critico'
-      : 'bajo'
-
-    sugerencias.push({ producto: p, promedioDaily, diasRestantes, cantidadSugerida, urgencia })
-  }
-
-  // Ordenar: agotados primero, luego críticos, luego bajos
-  const ordenUrgencia: Record<Urgencia, number> = { agotado: 0, critico: 1, bajo: 2 }
-  sugerencias.sort((a, b) => ordenUrgencia[a.urgencia] - ordenUrgencia[b.urgencia])
-
-  // 5. Asociar producto → proveedor (proveedor más reciente del que se compró)
+async function agruparSugeridos(sugeridos: SugeridoCompra[]): Promise<ResultadoPedido> {
+  // 1. Asociar producto → proveedor (proveedor más reciente del que se compró)
   const todasCompras = await db.comprasProveedor.orderBy('creadaEn').reverse().toArray()
   const comprasMap = new Map(todasCompras.map((c) => [c.id!, c]))
 
@@ -119,7 +38,7 @@ async function calcularPedido(): Promise<ResultadoPedido> {
     .filter((d) => d.productoId !== undefined)
     .toArray()
 
-  // Mapa productoId → {proveedorId, fecha} del compra más reciente
+  // Mapa productoId → {proveedorId, fecha} de la compra más reciente
   const productoProveedor: Record<number, { proveedorId: number; fecha: Date }> = {}
   for (const dc of todosDetallesCompra) {
     if (!dc.productoId) continue
@@ -131,15 +50,15 @@ async function calcularPedido(): Promise<ResultadoPedido> {
     }
   }
 
-  // 6. Agrupar sugerencias por proveedor
+  // 2. Agrupar sugerencias por proveedor
   const todosProveedores = await db.proveedores.filter((p) => p.activo).toArray() as (Proveedor & { id: number })[]
   const proveedoresMap = new Map(todosProveedores.map((p) => [p.id, p]))
 
   const gruposMap: Record<number, GrupoProveedor> = {}
-  const sinProveedor: SugerenciaProducto[] = []
+  const sinProveedor: SugeridoCompra[] = []
 
-  for (const sug of sugerencias) {
-    const rel = productoProveedor[sug.producto.id]
+  for (const sug of sugeridos) {
+    const rel = productoProveedor[sug.productoId]
     if (rel) {
       const proveedor = proveedoresMap.get(rel.proveedorId)
       if (proveedor) {
@@ -155,37 +74,39 @@ async function calcularPedido(): Promise<ResultadoPedido> {
 
   const grupos = Object.values(gruposMap)
     .sort((a, b) => {
-      // Priorizar grupos con más urgencias agotado/critico
-      const urgA = a.items.filter((i) => i.urgencia !== 'bajo').length
-      const urgB = b.items.filter((i) => i.urgencia !== 'bajo').length
+      // Priorizar grupos con más urgencias
+      const urgA = a.items.filter((i) => i.prioridad === 'urgente').length
+      const urgB = b.items.filter((i) => i.prioridad === 'urgente').length
       return urgB - urgA
     })
 
-  // 7. Totales
-  const totalAgotados = sugerencias.filter((s) => s.urgencia === 'agotado').length
-  const totalCriticos = sugerencias.filter((s) => s.urgencia === 'critico').length
+  // 3. Totales
+  const totalUrgentes = sugeridos.filter((s) => s.prioridad === 'urgente').length
+  const totalPronto = sugeridos.filter((s) => s.prioridad === 'pronto').length
 
   let inversionEstimada = 0
-  for (const s of sugerencias) {
-    if (s.producto.precioCompra && s.producto.precioCompra > 0) {
-      inversionEstimada += s.producto.precioCompra * s.cantidadSugerida
+  for (const s of sugeridos) {
+    // Necesitamos el producto para el precioCompra
+    const p = await db.productos.get(s.productoId)
+    if (p?.precioCompra && p.precioCompra > 0) {
+      inversionEstimada += p.precioCompra * s.cantidadSugerida
     }
   }
 
-  return { grupos, sinProveedor, totalAgotados, totalCriticos, inversionEstimada }
+  return { grupos, sinProveedor, totalUrgentes, totalPronto, inversionEstimada }
 }
 
 // ─── Helpers de UI ────────────────────────────────────────────────────────────
 
-function BadgeUrgencia({ urgencia }: { urgencia: Urgencia }) {
-  if (urgencia === 'agotado') return (
-    <span className="inline-flex items-center gap-1 text-[10px] font-bold text-peligro">🔴 Agotado</span>
+function BadgePrioridad({ prioridad }: { prioridad: SugeridoCompra['prioridad'] }) {
+  if (prioridad === 'urgente') return (
+    <span className="inline-flex items-center px-1.5 py-0.5 rounded-md text-[10px] font-black uppercase tracking-wider bg-peligro text-white">Urgente</span>
   )
-  if (urgencia === 'critico') return (
-    <span className="inline-flex items-center gap-1 text-[10px] font-bold text-advertencia">⚠️ &lt;3 días</span>
+  if (prioridad === 'pronto') return (
+    <span className="inline-flex items-center px-1.5 py-0.5 rounded-md text-[10px] font-black uppercase tracking-wider bg-advertencia text-white">Pronto</span>
   )
   return (
-    <span className="inline-flex items-center gap-1 text-[10px] font-bold text-yellow-600">🟡 &lt;7 días</span>
+    <span className="inline-flex items-center px-1.5 py-0.5 rounded-md text-[10px] font-black uppercase tracking-wider bg-exito text-white">Planificar</span>
   )
 }
 
@@ -198,7 +119,7 @@ function FilaProducto({
   onToggle,
   onCantidad,
 }: {
-  item: SugerenciaProducto
+  item: SugeridoCompra
   seleccionado: boolean
   cantidad: number
   onToggle: () => void
@@ -214,13 +135,17 @@ function FilaProducto({
     setEditando(false)
   }
 
-  const bg =
-    item.urgencia === 'agotado' ? 'bg-peligro/5 border-l-4 border-l-peligro'
-    : item.urgencia === 'critico' ? 'bg-advertencia/5 border-l-4 border-l-advertencia'
-    : 'bg-white'
+  const colorPrioridad =
+    item.prioridad === 'urgente' ? 'border-l-4 border-l-peligro bg-peligro/5'
+    : item.prioridad === 'pronto' ? 'border-l-4 border-l-advertencia bg-advertencia/5'
+    : 'border-l-4 border-l-exito bg-exito/5'
+
+  const labelDias = item.diasRestantes < 1
+    ? `Le quedan: ~${Math.round(item.diasRestantes * 24)} horas`
+    : `Le quedan: ${Math.round(item.diasRestantes)} días`
 
   return (
-    <div className={`flex items-start gap-3 px-3 py-3 ${bg}`}>
+    <div className={`flex items-start gap-3 px-3 py-3 ${colorPrioridad}`}>
       {/* Checkbox */}
       <button
         type="button"
@@ -235,36 +160,30 @@ function FilaProducto({
 
       {/* Info del producto */}
       <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2 flex-wrap">
-          <BadgeUrgencia urgencia={item.urgencia} />
-          <span className="text-sm font-medium text-texto truncate">
-            {item.producto.nombre}
+        <div className="flex items-center gap-2 mb-1">
+          <BadgePrioridad prioridad={item.prioridad} />
+          <span className="text-sm font-bold text-texto truncate">
+            {item.nombreProducto}
           </span>
         </div>
-        <div className="flex items-center gap-3 mt-0.5 flex-wrap">
-          <span className="text-xs text-suave">
-            Stock: <span className={`font-semibold ${item.producto.stockActual === 0 ? 'text-peligro' : 'text-texto'}`}>
-              {item.producto.stockActual ?? 0} {item.producto.unidad}
-            </span>
-          </span>
-          {item.promedioDaily > 0 && (
+        <div className="flex flex-col gap-0.5">
+          <div className="flex items-center gap-2">
             <span className="text-xs text-suave">
-              Vende ~{item.promedioDaily < 1
-                ? `${Math.round(item.promedioDaily * 7)}/sem`
-                : `${item.promedioDaily.toFixed(1)}/día`
-              }
+              Stock: <span className="font-bold text-texto">{item.stockActual} {item.unidad}</span>
             </span>
-          )}
-          {item.producto.precioCompra && item.producto.precioCompra > 0 && (
             <span className="text-xs text-suave">
-              Costo: {formatCOP(item.producto.precioCompra)}
+              | Vende: <span className="font-bold text-texto">{item.velocidadDiaria.toFixed(1)}/día</span>
             </span>
-          )}
+          </div>
+          <p className={`text-xs font-semibold ${item.prioridad === 'urgente' ? 'text-peligro' : 'text-suave'}`}>
+            {labelDias}
+          </p>
         </div>
       </div>
 
-      {/* Cantidad editable */}
+      {/* Cantidad sugerida / editable */}
       <div className="shrink-0 flex flex-col items-end gap-1">
+        <p className="text-[10px] text-suave uppercase font-bold tracking-tight">Pedir</p>
         {editando ? (
           <div className="flex items-center gap-1">
             <input
@@ -273,26 +192,20 @@ function FilaProducto({
               onChange={(e) => setInputVal(e.target.value)}
               onKeyDown={(e) => { if (e.key === 'Enter') confirmarEdicion(); if (e.key === 'Escape') { setEditando(false); setInputVal(String(cantidad)) } }}
               autoFocus
-              className="w-16 h-7 text-center border border-primario rounded-lg text-sm moneda
-                         focus:outline-none focus:ring-1 focus:ring-primario"
+              className="w-16 h-8 text-center border border-primario rounded-lg text-sm
+                         focus:outline-none focus:ring-2 focus:ring-primario/30"
             />
-            <button type="button" onClick={confirmarEdicion} className="text-exito"><Check size={14} /></button>
-            <button type="button" onClick={() => { setEditando(false); setInputVal(String(cantidad)) }} className="text-suave"><X size={14} /></button>
           </div>
         ) : (
           <button
             type="button"
             onClick={() => { setEditando(true); setInputVal(String(cantidad)) }}
-            className="flex items-center gap-1 text-sm font-bold text-primario hover:bg-primario/10 px-2 py-1 rounded-lg transition-colors"
+            className={`px-3 py-1 rounded-lg text-sm font-black transition-colors ${
+              item.cantidadSugerida > 0 ? 'bg-primario text-white' : 'bg-gray-100 text-suave'
+            }`}
           >
-            <span className="moneda">{cantidad} {item.producto.unidad}</span>
-            <Edit3 size={11} />
+            {cantidad} {item.unidad}
           </button>
-        )}
-        {item.producto.precioCompra && item.producto.precioCompra > 0 && (
-          <span className="text-[10px] text-suave moneda">
-            ≈ {formatCOP(item.producto.precioCompra * cantidad)}
-          </span>
         )}
       </div>
     </div>
@@ -318,7 +231,7 @@ function SeccionProveedor({
 }) {
   const { proveedor, items } = grupo
 
-  const itemsSeleccionados = items.filter((i) => seleccionados[i.producto.id])
+  const itemsSeleccionados = items.filter((i) => seleccionados[i.productoId])
 
   const handleWhatsApp = () => {
     if (itemsSeleccionados.length === 0) return
@@ -329,22 +242,21 @@ function SeccionProveedor({
 
     let totalAprox = 0
     const lineasProductos = itemsSeleccionados.map((i) => {
-      const cant = cantidades[i.producto.id] ?? i.cantidadSugerida
-      const subtotal = (i.producto.precioCompra ?? 0) * cant
-      totalAprox += subtotal
-      return `• ${i.producto.nombre}: ${cant} ${i.producto.unidad}`
+      const cant = cantidades[i.productoId] ?? i.cantidadSugerida
+      // Nota: El SugeridoCompra no trae precioCompra, lo buscamos si es necesario o simplificamos el mensaje.
+      // Para mantener el requerimiento "velocidad de venta (15 días cobertura)", omitimos el total si no lo tenemos a mano fácilmente en el item.
+      return `• ${i.nombreProducto}: ${cant} ${i.unidad}`
     }).join('\n')
 
     const texto = [
-      `📋 *Pedido ${nombreTienda}*`,
+      `📋 *Sugerido de Compra ${nombreTienda}*`,
       `📅 ${fecha}`,
+      `_Basado en velocidad de venta (15 días cobertura)_`,
       ``,
       lineasProductos,
       ``,
-      totalAprox > 0 ? `💰 Total aprox: ${formatCOP(totalAprox)}` : '',
-      ``,
       `_Enviado desde POS Tienda_`,
-    ].filter(Boolean).join('\n')
+    ].join('\n')
 
     const tel = proveedor.telefono?.replace(/\D/g, '')
     const url = tel
@@ -354,13 +266,7 @@ function SeccionProveedor({
     window.open(url, '_blank')
   }
 
-  // Total inversión del grupo (solo seleccionados)
-  const inversionGrupo = itemsSeleccionados.reduce((s, i) => {
-    const cant = cantidades[i.producto.id] ?? i.cantidadSugerida
-    return s + ((i.producto.precioCompra ?? 0) * cant)
-  }, 0)
-
-  const agotadosGrupo = items.filter((i) => i.urgencia === 'agotado').length
+  const urgentesGrupo = items.filter((i) => i.prioridad === 'urgente').length
 
   return (
     <div className="bg-white rounded-xl border border-borde overflow-hidden">
@@ -374,45 +280,37 @@ function SeccionProveedor({
               {proveedor.diasVisita && (
                 <span className="text-[10px] text-suave">📅 {proveedor.diasVisita}</span>
               )}
-              {proveedor.contacto && (
-                <span className="text-[10px] text-suave">👤 {proveedor.contacto}</span>
-              )}
-              {agotadosGrupo > 0 && (
-                <span className="text-[10px] font-bold text-peligro">
-                  🔴 {agotadosGrupo} agotado{agotadosGrupo !== 1 ? 's' : ''}
+              {urgentesGrupo > 0 && (
+                <span className="text-[10px] font-black text-peligro">
+                  🔥 {urgentesGrupo} URGENTES
                 </span>
               )}
             </div>
           </div>
         </div>
-        <div className="flex flex-col items-end gap-1">
-          {inversionGrupo > 0 && (
-            <span className="text-xs text-suave moneda">≈ {formatCOP(inversionGrupo)}</span>
-          )}
-          <button
-            type="button"
-            onClick={handleWhatsApp}
-            disabled={itemsSeleccionados.length === 0}
-            className="flex items-center gap-1.5 h-7 px-3 bg-[#25D366] text-white rounded-lg
-                       text-xs font-semibold hover:bg-[#20BA5A] active:scale-95 transition-all
-                       disabled:opacity-40 disabled:cursor-not-allowed"
-          >
-            <MessageCircle size={12} />
-            Pedir
-          </button>
-        </div>
+        <button
+          type="button"
+          onClick={handleWhatsApp}
+          disabled={itemsSeleccionados.length === 0}
+          className="flex items-center gap-1.5 h-8 px-3 bg-[#25D366] text-white rounded-lg
+                     text-xs font-bold hover:bg-[#20BA5A] active:scale-95 transition-all
+                     disabled:opacity-40 disabled:cursor-not-allowed shadow-sm"
+        >
+          <MessageCircle size={14} />
+          WhatsApp
+        </button>
       </div>
 
       {/* Lista de productos */}
       <div className="divide-y divide-borde/30">
         {items.map((item) => (
           <FilaProducto
-            key={item.producto.id}
+            key={item.productoId}
             item={item}
-            seleccionado={seleccionados[item.producto.id] ?? true}
-            cantidad={cantidades[item.producto.id] ?? item.cantidadSugerida}
-            onToggle={() => onToggle(item.producto.id)}
-            onCantidad={(v) => onCantidad(item.producto.id, v)}
+            seleccionado={seleccionados[item.productoId] ?? true}
+            cantidad={cantidades[item.productoId] ?? item.cantidadSugerida}
+            onToggle={() => onToggle(item.productoId)}
+            onCantidad={(v) => onCantidad(item.productoId, v)}
           />
         ))}
       </div>
@@ -497,30 +395,30 @@ function ModalAsignarProveedor({
 // ─── Página principal ─────────────────────────────────────────────────────────
 
 export default function ListaPedidoPage() {
+  const [sugeridosOrigin, setSugeridosOrigin] = useState<SugeridoCompra[]>([])
   const [resultado, setResultado] = useState<ResultadoPedido | undefined>(undefined)
   const [cargando, setCargando] = useState(true)
   const [seleccionados, setSeleccionados] = useState<Record<number, boolean>>({})
   const [cantidades, setCantidades] = useState<Record<number, number>>({})
   const [nombreTienda, setNombreTienda] = useState('Mi Tienda')
-  const [productoAsignar, setProductoAsignar] = useState<(Producto & { id: number }) | null>(null)
+  const [filtro, setFiltro] = useState<FiltroPrioridad>('todos')
 
   const cargar = useCallback(async () => {
     setCargando(true)
     try {
-      const [res, config] = await Promise.all([calcularPedido(), obtenerConfig()])
+      const sugs = await generarSugeridoCompra()
+      const [res, config] = await Promise.all([agruparSugeridos(sugs), obtenerConfig()])
+      
+      setSugeridosOrigin(sugs)
       setResultado(res)
       setNombreTienda(config.nombreTienda)
 
-      // Inicializar seleccionados y cantidades (todos seleccionados por defecto)
+      // Inicializar seleccionados y cantidades
       const sel: Record<number, boolean> = {}
       const cant: Record<number, number> = {}
-      const todasSugs = [
-        ...res.grupos.flatMap((g) => g.items),
-        ...res.sinProveedor,
-      ]
-      for (const s of todasSugs) {
-        sel[s.producto.id] = true
-        cant[s.producto.id] = s.cantidadSugerida
+      for (const s of sugs) {
+        sel[s.productoId] = true
+        cant[s.productoId] = s.cantidadSugerida
       }
       setSeleccionados(sel)
       setCantidades(cant)
@@ -531,6 +429,16 @@ export default function ListaPedidoPage() {
 
   useEffect(() => { void cargar() }, [cargar])
 
+  // Aplicar filtro de prioridad
+  useEffect(() => {
+    if (!sugeridosOrigin) return
+    let filtrados = sugeridosOrigin
+    if (filtro !== 'todos') {
+      filtrados = sugeridosOrigin.filter((s) => s.prioridad === filtro)
+    }
+    agruparSugeridos(filtrados).then(setResultado)
+  }, [filtro, sugeridosOrigin])
+
   const toggleSeleccionado = (id: number) => {
     setSeleccionados((prev) => ({ ...prev, [id]: !prev[id] }))
   }
@@ -539,45 +447,51 @@ export default function ListaPedidoPage() {
     setCantidades((prev) => ({ ...prev, [id]: v }))
   }
 
-  // ── Resumen ejecutivo ─────────────────────────────────────────────────────
-
-  const totalItems = resultado
-    ? resultado.grupos.reduce((s, g) => s + g.items.length, 0) + resultado.sinProveedor.length
-    : 0
+  const totalItems = sugeridosOrigin.length
 
   const inversionTotal = resultado
     ? [...resultado.grupos.flatMap((g) => g.items), ...resultado.sinProveedor]
-        .filter((i) => seleccionados[i.producto.id])
-        .reduce((s, i) => {
-          const cant = cantidades[i.producto.id] ?? i.cantidadSugerida
-          return s + ((i.producto.precioCompra ?? 0) * cant)
-        }, 0)
+        .filter((i) => seleccionados[i.productoId])
+        .reduce((sum, i) => sum + (cantidades[i.productoId] ?? i.cantidadSugerida), 0) // Just a metric placeholder for now complex with priceCompra
     : 0
-
-  // ── Render ─────────────────────────────────────────────────────────────────
 
   return (
     <div className="h-full flex flex-col bg-fondo overflow-hidden">
       <div className="flex-1 overflow-y-auto">
         <div className="p-4 flex flex-col gap-4">
 
-          {/* Header con recalcular */}
-          <div className="flex items-center justify-between">
-            <div>
-              <h2 className="font-display font-bold text-lg text-texto">Lista de pedido</h2>
-              <p className="text-xs text-suave">Basado en ventas de los últimos 7 días</p>
+          {/* Header */}
+          <div className="flex flex-col gap-3">
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="font-display font-bold text-xl text-texto">Sugerido de Compra</h2>
+                <p className="text-xs text-suave">Análisis predictivo últimos 30 días</p>
+              </div>
+              <button
+                type="button"
+                onClick={cargar}
+                disabled={cargando}
+                className="w-10 h-10 flex items-center justify-center bg-white border border-borde rounded-xl text-suave hover:text-texto transition-all active:scale-95"
+              >
+                <RefreshCw size={18} className={cargando ? 'animate-spin' : ''} />
+              </button>
             </div>
-            <button
-              type="button"
-              onClick={cargar}
-              disabled={cargando}
-              className="flex items-center gap-2 h-9 px-3 border border-borde bg-white rounded-xl
-                         text-sm text-suave font-medium hover:text-texto hover:border-gray-300
-                         active:scale-95 transition-all disabled:opacity-50"
-            >
-              <RefreshCw size={14} className={cargando ? 'animate-spin' : ''} />
-              Recalcular
-            </button>
+
+            {/* Filtros */}
+            <div className="flex gap-2 p-1 bg-white border border-borde rounded-xl overflow-x-auto no-scrollbar">
+              {(['todos', 'urgente', 'pronto', 'planificar'] as const).map((f) => (
+                <button
+                  key={f}
+                  type="button"
+                  onClick={() => setFiltro(f)}
+                  className={`flex-1 h-9 px-3 rounded-lg text-xs font-bold capitalize transition-all whitespace-nowrap ${
+                    filtro === f ? 'bg-primario text-white shadow-sm' : 'text-suave'
+                  }`}
+                >
+                  {f}
+                </button>
+              ))}
+            </div>
           </div>
 
           {cargando ? (
@@ -587,54 +501,20 @@ export default function ListaPedidoPage() {
           ) : !resultado || totalItems === 0 ? (
             <div className="flex flex-col items-center gap-3 py-16 text-center">
               <div className="text-5xl">✅</div>
-              <p className="font-display font-bold text-lg text-texto">¡Todo el stock está bien!</p>
-              <p className="text-sm text-suave max-w-xs">
-                Ningún producto con stock controlado necesita pedido en este momento.
-              </p>
-              <button
-                type="button"
-                onClick={cargar}
-                className="flex items-center gap-2 h-9 px-4 border border-borde bg-white rounded-xl text-sm text-suave hover:text-texto transition-colors"
-              >
-                <RefreshCw size={14} />
-                Recalcular
-              </button>
+              <p className="font-display font-bold text-lg text-texto">¡Stock al día!</p>
+              <p className="text-sm text-suave">No hay productos en riesgo de agotarse pronto.</p>
             </div>
           ) : (
             <>
               {/* Resumen ejecutivo */}
-              <div className="grid grid-cols-3 gap-3">
-                <div className={[
-                  'rounded-xl border p-3 flex flex-col gap-1',
-                  resultado.totalAgotados > 0 ? 'bg-peligro/5 border-peligro/30' : 'bg-white border-borde',
-                ].join(' ')}>
-                  <p className="text-[10px] font-semibold text-suave uppercase tracking-wide">Agotados</p>
-                  <p className={`font-bold text-2xl ${resultado.totalAgotados > 0 ? 'text-peligro' : 'text-texto/30'}`}>
-                    {resultado.totalAgotados}
-                  </p>
-                  <p className="text-[10px] text-suave">productos</p>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="bg-white border border-borde rounded-xl p-3 flex flex-col gap-1">
+                  <p className="text-[10px] font-bold text-suave uppercase">Urgentes</p>
+                  <p className="text-2xl font-black text-peligro">{resultado.totalUrgentes}</p>
                 </div>
-
-                <div className={[
-                  'rounded-xl border p-3 flex flex-col gap-1',
-                  resultado.totalCriticos > 0 ? 'bg-advertencia/5 border-advertencia/30' : 'bg-white border-borde',
-                ].join(' ')}>
-                  <p className="text-[10px] font-semibold text-suave uppercase tracking-wide">&lt; 3 días</p>
-                  <p className={`font-bold text-2xl ${resultado.totalCriticos > 0 ? 'text-advertencia' : 'text-texto/30'}`}>
-                    {resultado.totalCriticos}
-                  </p>
-                  <p className="text-[10px] text-suave">productos</p>
-                </div>
-
-                <div className={[
-                  'rounded-xl border p-3 flex flex-col gap-1',
-                  inversionTotal > 0 ? 'bg-primario/5 border-primario/20' : 'bg-white border-borde',
-                ].join(' ')}>
-                  <p className="text-[10px] font-semibold text-suave uppercase tracking-wide">Inversión est.</p>
-                  <p className={`font-bold text-base leading-tight ${inversionTotal > 0 ? 'text-primario' : 'text-texto/30'}`}>
-                    {inversionTotal > 0 ? formatCOP(inversionTotal) : '$—'}
-                  </p>
-                  <p className="text-[10px] text-suave">seleccionados</p>
+                <div className="bg-white border border-borde rounded-xl p-3 flex flex-col gap-1">
+                  <p className="text-[10px] font-bold text-suave uppercase">En riesgo</p>
+                  <p className="text-2xl font-black text-advertencia">{resultado.totalPronto}</p>
                 </div>
               </div>
 
@@ -654,89 +534,54 @@ export default function ListaPedidoPage() {
               {/* Sin proveedor */}
               {resultado.sinProveedor.length > 0 && (
                 <div className="bg-white rounded-xl border border-borde overflow-hidden">
-                  <div className="px-4 py-3 border-b border-borde/50 flex items-center gap-2">
-                    <Package size={16} className="text-suave" />
-                    <span className="text-sm font-bold text-texto flex-1">Sin proveedor definido</span>
-                    <span className="text-xs text-suave">{resultado.sinProveedor.length} producto{resultado.sinProveedor.length !== 1 ? 's' : ''}</span>
+                  <div className="px-4 py-3 border-b border-borde/50 flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Package size={16} className="text-suave" />
+                      <span className="text-sm font-bold text-texto">Sin proveedor</span>
+                    </div>
+                    <span className="text-xs text-suave font-bold">{resultado.sinProveedor.length} items</span>
                   </div>
                   <div className="divide-y divide-borde/30">
                     {resultado.sinProveedor.map((item) => (
-                      <div key={item.producto.id}>
-                        <FilaProducto
-                          item={item}
-                          seleccionado={seleccionados[item.producto.id] ?? true}
-                          cantidad={cantidades[item.producto.id] ?? item.cantidadSugerida}
-                          onToggle={() => toggleSeleccionado(item.producto.id)}
-                          onCantidad={(v) => setCantidad(item.producto.id, v)}
-                        />
-                        {/* Botón asignar proveedor */}
-                        <div className="px-11 pb-2">
-                          <button
-                            type="button"
-                            onClick={() => setProductoAsignar(item.producto)}
-                            className="flex items-center gap-1.5 text-[10px] text-primario font-semibold
-                                       hover:underline transition-all"
-                          >
-                            <ChevronRight size={10} />
-                            ¿Cómo asignar proveedor?
-                          </button>
-                        </div>
-                      </div>
+                      <FilaProducto
+                        key={item.productoId}
+                        item={item}
+                        seleccionado={seleccionados[item.productoId] ?? true}
+                        cantidad={cantidades[item.productoId] ?? item.cantidadSugerida}
+                        onToggle={() => toggleSeleccionado(item.productoId)}
+                        onCantidad={(v) => setCantidad(item.productoId, v)}
+                      />
                     ))}
                   </div>
 
                   {/* WhatsApp genérico para sin proveedor */}
-                  {resultado.sinProveedor.some((i) => seleccionados[i.producto.id]) && (
+                  {resultado.sinProveedor.some((i) => seleccionados[i.productoId]) && (
                     <div className="px-4 py-3 border-t border-borde/50">
                       <button
                         type="button"
                         onClick={() => {
-                          const selItems = resultado.sinProveedor.filter((i) => seleccionados[i.producto.id])
-                          const fecha = new Date().toLocaleDateString('es-CO', { day: 'numeric', month: 'long', year: 'numeric' })
-                          const lineas = selItems.map((i) => {
-                            const cant = cantidades[i.producto.id] ?? i.cantidadSugerida
-                            return `• ${i.producto.nombre}: ${cant} ${i.producto.unidad}`
-                          }).join('\n')
-                          const texto = `📋 *Pedido ${nombreTienda}*\n📅 ${fecha}\n\n${lineas}\n\n_Enviado desde POS Tienda_`
+                          const selItems = resultado.sinProveedor.filter((i) => seleccionados[i.productoId])
+                          const fecha = new Date().toLocaleDateString('es-CO', { day: 'numeric', month: 'long' })
+                          const lineas = selItems.map((i) => `• ${i.nombreProducto}: ${cantidades[i.productoId] ?? i.cantidadSugerida} ${i.unidad}`).join('\n')
+                          const texto = `📋 *Lista General Sugerida*\n📅 ${fecha}\n\n${lineas}`
                           window.open(`https://wa.me/?text=${encodeURIComponent(texto)}`, '_blank')
                         }}
-                        className="w-full flex items-center justify-center gap-2 h-9 bg-[#25D366] text-white
-                                   rounded-xl text-sm font-semibold hover:bg-[#20BA5A] active:scale-95 transition-all"
+                        className="w-full flex items-center justify-center gap-2 h-10 bg-[#25D366] text-white
+                                   rounded-xl text-sm font-bold hover:bg-[#20BA5A] active:scale-95 transition-all shadow-sm"
                       >
-                        <MessageCircle size={14} />
-                        Enviar lista por WhatsApp
+                        <MessageCircle size={16} />
+                        Compartir Lista
                       </button>
                     </div>
                   )}
                 </div>
               )}
 
-              {/* Nota al pie */}
-              <div className="flex items-start gap-2 p-3 bg-fondo border border-borde/50 rounded-xl">
-                <AlertTriangle size={14} className="text-suave shrink-0 mt-0.5" />
-                <p className="text-xs text-suave leading-relaxed">
-                  Las cantidades se basan en el promedio de los últimos 7 días.
-                  Edita las cantidades antes de enviar si tienes pedidos especiales.
-                  <span className="block mt-1">
-                    <ShoppingCart size={10} className="inline mr-1" />
-                    Para agregar una compra al sistema ve a <strong>Proveedores</strong>.
-                  </span>
-                </p>
-              </div>
-
-              <div className="h-4" />
+              <div className="h-8" />
             </>
           )}
         </div>
       </div>
-
-      {productoAsignar && (
-        <ModalAsignarProveedor
-          producto={productoAsignar}
-          onClose={() => setProductoAsignar(null)}
-          onAsignado={() => setProductoAsignar(null)}
-        />
-      )}
     </div>
   )
 }

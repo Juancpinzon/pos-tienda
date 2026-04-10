@@ -248,3 +248,104 @@ export async function verificarStockInsuficiente(
 
   return alertas
 }
+
+// ─── Funciones predictivas (Supply Chain) ─────────────────────────────────────
+
+export interface SugeridoCompra {
+  productoId: number
+  nombreProducto: string
+  stockActual: number
+  stockMinimo: number
+  velocidadDiaria: number      // unidades/día promedio
+  diasRestantes: number        // stockActual / velocidadDiaria
+  cantidadSugerida: number     // para 15 días de cobertura
+  prioridad: 'urgente' | 'pronto' | 'planificar'
+  unidad: string
+}
+
+/**
+ * Calcula la velocidad de venta de un producto (unidades por día).
+ * Analiza los detalles de ventas completadas en el rango de días especificado.
+ */
+export async function calcularVelocidadVenta(
+  productoId: number,
+  diasAnalisis = 30
+): Promise<number> {
+  const fechaCorte = new Date()
+  fechaCorte.setDate(fechaCorte.getDate() - diasAnalisis)
+  fechaCorte.setHours(0, 0, 0, 0)
+
+  // 1. Obtener IDs de ventas completadas en el rango
+  const ventasIds = (await db.ventas
+    .where('creadaEn').aboveOrEqual(fechaCorte)
+    .filter((v) => v.estado === 'completada')
+    .primaryKeys()) as number[]
+
+  if (ventasIds.length === 0) return 0
+
+  // 2. Sumar cantidades vendidas para este producto
+  const detalles = await db.detallesVenta
+    .where('ventaId').anyOf(ventasIds)
+    .filter((d) => d.productoId === productoId && !d.esProductoFantasma)
+    .toArray()
+
+  const totalVendido = detalles.reduce((sum, d) => sum + d.cantidad, 0)
+  return totalVendido / diasAnalisis
+}
+
+/**
+ * Genera el sugerido de compra predictivo para todos los productos activos con stock controlado.
+ * Solo incluye productos que han tenido al menos una venta en los últimos 30 días.
+ */
+export async function generarSugeridoCompra(): Promise<SugeridoCompra[]> {
+  const productos = await db.productos
+    .filter((p) =>
+      p.activo &&
+      !p.esFantasma &&
+      p.stockActual !== undefined &&
+      p.stockActual !== null
+    )
+    .toArray()
+
+  const sugeridos: SugeridoCompra[] = []
+
+  for (const p of productos) {
+    const velocidadDiaria = await calcularVelocidadVenta(p.id!)
+
+    // Si nunca ha tenido ventas, no incluimos en el sugerido (según requerimiento)
+    if (velocidadDiaria === 0) continue
+
+    const stockActual = p.stockActual ?? 0
+    const diasRestantes = stockActual / velocidadDiaria
+
+    // Prioridad basada en días restantes
+    let prioridad: 'urgente' | 'pronto' | 'planificar'
+    if (diasRestantes < 3) prioridad = 'urgente'
+    else if (diasRestantes < 7) prioridad = 'pronto'
+    else prioridad = 'planificar'
+
+    // Cantidad sugerida para 15 días de cobertura
+    // Fómula: (velocidadDiaria * 15) - stockActual
+    // Mínimo: stockMinimo * 2 (si el stockActual es muy bajo)
+    let sugerido = (velocidadDiaria * 15) - stockActual
+    const minimoLlenado = ((p.stockMinimo ?? 0) * 2) - stockActual
+
+    sugerido = Math.max(sugerido, minimoLlenado)
+    sugerido = Math.ceil(Math.max(0, sugerido))
+
+    sugeridos.push({
+      productoId: p.id!,
+      nombreProducto: p.nombre,
+      stockActual,
+      stockMinimo: p.stockMinimo ?? 0,
+      velocidadDiaria,
+      diasRestantes,
+      cantidadSugerida: sugerido,
+      prioridad,
+      unidad: p.unidad,
+    })
+  }
+
+  // Ordenar por urgencia (diasRestantes)
+  return sugeridos.sort((a, b) => a.diasRestantes - b.diasRestantes)
+}
