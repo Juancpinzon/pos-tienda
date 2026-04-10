@@ -1,11 +1,10 @@
 import { z } from 'zod'
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { X } from 'lucide-react'
 import { toast } from 'react-hot-toast'
 import { useNomina } from '../../hooks/useNomina'
-import { SMMLV_2025 } from '../../utils/nomina'
 import { db } from '../../db/database'
 
 const empleadoSchema = z.object({
@@ -26,13 +25,14 @@ interface Props {
 }
 
 export function FormEmpleado({ onClose, empleadoId }: Props) {
-  const { crearEmpleado, actualizarEmpleado } = useNomina()
-  
+  const { crearEmpleado, actualizarEmpleado, smmlv } = useNomina()
+  const salarioDefaultAplicado = useRef(false)
+
   const form = useForm<EmpleadoForm>({
     resolver: zodResolver(empleadoSchema),
     defaultValues: {
       nombre: '',
-      salario: SMMLV_2025,
+      salario: 0,
       fechaIngreso: new Date().toISOString().split('T')[0],
       tipoContrato: 'indefinido',
       cedula: '',
@@ -40,6 +40,14 @@ export function FormEmpleado({ onClose, empleadoId }: Props) {
       telefono: ''
     }
   })
+
+  // Aplica smmlv como salario inicial solo cuando es un empleado nuevo y config cargó
+  useEffect(() => {
+    if (!empleadoId && smmlv > 0 && !salarioDefaultAplicado.current) {
+      form.setValue('salario', smmlv, { shouldDirty: false })
+      salarioDefaultAplicado.current = true
+    }
+  }, [smmlv, empleadoId, form])
 
   useEffect(() => {
     if (empleadoId) {

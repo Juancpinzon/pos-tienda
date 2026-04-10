@@ -777,6 +777,15 @@ Ver guía completa de publicación en `docs/fase-23-play-store.md`.
 - Validación JWT manual antes de cualquier lógica de negocio
 - Cliente verifica sesión activa antes de invocar Edge Functions
 
+### Fase 33: Módulo de Mermas ✅
+
+- Interfaz `Merma` en `src/db/schema.ts` (v11 Dexie)
+- Tabla `mermas` indexada por `productoId, tipo, sesionCajaId, creadoEn`
+- Hook `useMermas.ts`: suscripciones reactivas, `registrarMerma()` descuenta stock automáticamente
+- `ModalRegistrarMerma.tsx`: búsqueda de producto, 4 tipos de merma, cálculo de pérdida en tiempo real, botón 60px
+- `InventarioPage`: botón "📦 Merma" en header + sección "Mermas del mes" con costo total
+- `DashboardUtilidadNeta`: mermas del período se restan en la cascada → utilidad neta real
+
 # Fase 27: Módulo de Empleados y Nómina Básica
 
 > Agrega esta sección al CLAUDE.md existente del proyecto pos-tienda.

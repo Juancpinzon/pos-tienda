@@ -25,6 +25,7 @@ export interface DatosUtilidadNeta {
   cogs:              number   // Costo de ventas calculado desde snapshots
   utilidadBruta:     number
   pctBruta:          number   // % sobre ventas
+  mermas:            number   // Costo total de mermas del período
   gastos:            number
   utilidadNeta:      number
   pctNeta:           number   // % sobre ventas
@@ -81,16 +82,22 @@ export function useDatosUtilidadNeta(inicio: Date): DatosUtilidadNeta | null | u
         .toArray()
       const gastos = gastosBD.reduce((s, g) => s + g.monto, 0)
 
+      // Mermas del período
+      const mermasBD = await db.mermas
+        .where('creadoEn').aboveOrEqual(inicio)
+        .toArray()
+      const mermas = mermasBD.reduce((s, m) => s + m.costoTotal, 0)
+
       // Cascada
       const utilidadBruta = totalVentas - cogs
-      const utilidadNeta  = utilidadBruta - gastos
+      const utilidadNeta  = utilidadBruta - gastos - mermas
       const pctBruta  = totalVentas > 0 ? Math.round((utilidadBruta / totalVentas) * 100) : 0
       const pctNeta   = totalVentas > 0 ? Math.round((utilidadNeta  / totalVentas) * 100) : 0
       const pctSinCosto = totalVentas > 0 ? Math.round((ventasSinCosto / totalVentas) * 100) : 0
 
       return {
         totalVentas, cogs, utilidadBruta, pctBruta,
-        gastos, utilidadNeta, pctNeta,
+        mermas, gastos, utilidadNeta, pctNeta,
         itemsConCosto, itemsSinCosto, pctSinCosto,
       }
     }).subscribe({
@@ -266,6 +273,17 @@ export function DashboardUtilidadNeta({ inicio, compacto = false }: DashboardUti
               icono="🔧"
               label="Gastos operativos"
               valor={datos.gastos}
+              color="text-peligro"
+              negativo
+            />
+          )}
+
+          {/* Mermas del período */}
+          {datos.mermas > 0 && (
+            <FilaCascada
+              icono="🗑️"
+              label="Mermas del período"
+              valor={datos.mermas}
               color="text-peligro"
               negativo
             />

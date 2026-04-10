@@ -14,7 +14,7 @@ interface Props {
 }
 
 export function NuevaNomina({ empleado, onClose }: Props) {
-  const { crearPeriodoNomina, getAdelantosPendientes } = useNomina()
+  const { crearPeriodoNomina, getAdelantosPendientes, smmlv } = useNomina()
   
   const [tipo, setTipo] = useState<'quincenal' | 'mensual'>('quincenal')
   // Pre-fill dates based on current day and 'tipo'
@@ -59,7 +59,7 @@ export function NuevaNomina({ empleado, onClose }: Props) {
   const salarioPeriodo = empleado.salario * proporcionDias
   const devengado = salarioPeriodo + bonificaciones
   
-  const deduccionesSS = calcularDeduccionesSS(empleado.salario * proporcionDias)
+  const deduccionesSS = calcularDeduccionesSS(empleado.salario * proporcionDias, smmlv)
   const totalAdelantos = adelantos.reduce((acc, a) => acc + a.monto, 0)
   const otrasDeduciones = totalAdelantos // Can be extended
   

@@ -18,6 +18,8 @@ export const CONFIG_DEFAULTS: Omit<ConfigTienda, 'id'> = {
   notifCaja: false,
   horaCaja: '07:00',
   planActivo: 'basico',
+  smmlv: 1_423_500,
+  subsidioTransporte: 200_000,
 }
 
 // Códigos válidos para activar el Plan Pro (hardcodeados)

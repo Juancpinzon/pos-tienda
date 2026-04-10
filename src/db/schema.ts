@@ -125,6 +125,9 @@ export interface ConfigTienda {
   planActivo?: 'basico' | 'pro'   // Plan del POS. Default: "basico"
   planActivadoEn?: Date           // Cuándo se activó el plan Pro
   codigoActivacion?: string       // Código usado para activar Pro
+  // ── Valores legales — Nómina ────────────────────────────────────────────────
+  smmlv?: number                  // Salario Mínimo Mensual Legal Vigente. Default: 1_423_500 (2025)
+  subsidioTransporte?: number     // Subsidio de transporte. Default: 200_000 (2025)
 }
 
 // ─── Módulo de Proveedores y Compras (v2) ─────────────────────────────────────
@@ -339,6 +342,22 @@ export interface AuditoriaAnulacion {
   usuarioNombre: string       // Nombre del usuario que anuló
   usuarioRol: string          // Rol: dueno | encargado | empleado
   motivo: string              // Obligatorio — mínimo 10 caracteres
+  creadoEn: Date
+}
+
+// ─── Módulo de Mermas (v11) ───────────────────────────────────────────────────
+
+export interface Merma {
+  id?: number
+  productoId?: number         // undefined = producto no catalogado
+  nombreProducto: string      // Snapshot del nombre al registrar
+  cantidad: number            // Unidades o gramos perdidos
+  unidad: string              // Snapshot de la unidad del producto
+  precioCompra: number        // Costo unitario al momento del registro
+  costoTotal: number          // cantidad × precioCompra
+  tipo: 'vencido' | 'dañado' | 'consumo_interno' | 'otro'
+  sesionCajaId?: number       // Sesión de caja activa al registrar
+  notas?: string
   creadoEn: Date
 }
 

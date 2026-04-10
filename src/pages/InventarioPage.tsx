@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Search, Plus, RotateCcw, ChevronDown, X, Share2 } from 'lucide-react'
+import { Search, Plus, RotateCcw, ChevronDown, X, Share2, Trash2 } from 'lucide-react'
 import {
   useProductosConStock,
   useMovimientosStock,
@@ -10,6 +10,8 @@ import { obtenerConfig } from '../hooks/useConfig'
 import { compartirPorWhatsApp } from '../utils/impresion'
 import { formatCOP } from '../utils/moneda'
 import type { Producto, MovimientoStock } from '../db/schema'
+import { ModalRegistrarMerma } from '../components/inventario/ModalRegistrarMerma'
+import { useMermas } from '../hooks/useMermas'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -36,8 +38,10 @@ export default function InventarioPage() {
   const [productoEntrada, setProductoEntrada] = useState<Producto | null>(null)
   const [productoAjuste, setProductoAjuste] = useState<Producto | null>(null)
   const [exportando, setExportando] = useState(false)
+  const [mostrarModalMerma, setMostrarModalMerma] = useState(false)
 
   const productos = useProductosConStock(query)
+  const { costoTotalMermasMes, mermas } = useMermas()
 
   // Filtro adicional: solo bajo mínimo
   const productosFiltrados = soloBajoMinimo
@@ -95,6 +99,18 @@ export default function InventarioPage() {
                        focus:outline-none focus:ring-2 focus:ring-primario/30 focus:border-primario/50"
           />
         </div>
+        {/* Botón registrar merma */}
+        <button
+          id="btn-registrar-merma-inventario"
+          type="button"
+          onClick={() => setMostrarModalMerma(true)}
+          className="h-10 px-3 rounded-xl text-xs font-semibold border transition-colors shrink-0
+                     whitespace-nowrap bg-peligro/10 text-peligro border-peligro/30
+                     hover:bg-peligro/20 flex items-center gap-1.5"
+        >
+          <Trash2 size={13} />
+          Merma
+        </button>
         <button
           type="button"
           onClick={() => setSoloBajoMinimo((v) => !v)}
@@ -174,11 +190,52 @@ export default function InventarioPage() {
             />
           ))}
 
+          {/* ── Sección mermas del mes ──────────────────────────────────────────── */}
+          <div className="mt-2 bg-white rounded-xl border border-peligro/20 overflow-hidden">
+            <div className="flex items-center justify-between px-4 py-3 border-b border-peligro/10">
+              <div className="flex items-center gap-2">
+                <Trash2 size={15} className="text-peligro" />
+                <span className="text-sm font-semibold text-texto">Mermas del mes</span>
+              </div>
+              <div className="text-right">
+                <p className="text-xs text-suave">Costo total</p>
+                <p className="moneda font-bold text-sm text-peligro">
+                  {formatCOP(costoTotalMermasMes)}
+                </p>
+              </div>
+            </div>
+
+            {/* Botón ver detalle / registrar */}
+            <div className="px-4 py-3 flex items-center justify-between gap-3">
+              <p className="text-xs text-suave">
+                {mermas.length === 0
+                  ? 'No hay mermas registradas este mes'
+                  : `${mermas.filter((m) => {
+                    const now = new Date()
+                    return m.creadoEn >= new Date(now.getFullYear(), now.getMonth(), 1)
+                  }).length} merma(s) registradas este mes`}
+              </p>
+              <button
+                type="button"
+                onClick={() => setMostrarModalMerma(true)}
+                className="h-9 px-4 bg-peligro/10 text-peligro border border-peligro/30
+                           rounded-xl text-xs font-semibold hover:bg-peligro/20 transition-colors
+                           whitespace-nowrap flex items-center gap-1.5 shrink-0"
+              >
+                <Trash2 size={12} />
+                Registrar merma
+              </button>
+            </div>
+          </div>
+
           <div className="h-4" />
         </div>
       </div>
 
       {/* Modales */}
+      {mostrarModalMerma && (
+        <ModalRegistrarMerma onClose={() => setMostrarModalMerma(false)} />
+      )}
       {productoEntrada && (
         <ModalEntradaStock
           producto={productoEntrada}

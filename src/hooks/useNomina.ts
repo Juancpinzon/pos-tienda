@@ -1,8 +1,13 @@
 import { useLiveQuery } from 'dexie-react-hooks'
 import { db } from '../db/database'
+import { useConfig } from './useConfig'
 import type { Empleado, PeriodoNomina, LiquidacionPrestaciones } from '../db/schema'
 
+const SMMLV_DEFAULT = 1_423_500
+const SUBSIDIO_DEFAULT = 200_000
+
 export function useNomina() {
+  const config = useConfig()
   const empleados = useLiveQuery(() => 
     db.empleados.filter(e => e.activo).sortBy('nombre')
   )
@@ -133,6 +138,10 @@ export function useNomina() {
     }
   }
 
+  // Valores legales leídos desde ConfigTienda (editables por el dueño cada enero)
+  const smmlv = config?.smmlv ?? SMMLV_DEFAULT
+  const subsidioTransporte = config?.subsidioTransporte ?? SUBSIDIO_DEFAULT
+
   return {
     empleados,
     empleadosArchivados,
@@ -145,6 +154,8 @@ export function useNomina() {
     marcarPagado,
     getAdelantosPendientes,
     calcularPrestacionesEmpleado,
-    registrarPagoPrestacion
+    registrarPagoPrestacion,
+    smmlv,
+    subsidioTransporte,
   }
 }

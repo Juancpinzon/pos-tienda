@@ -24,6 +24,7 @@ import type {
   PedidoDomicilio,
   CatalogoPublico,
   AuditoriaAnulacion,
+  Merma,
 } from './schema'
 
 // Singleton de Dexie — única instancia para toda la aplicación
@@ -60,6 +61,8 @@ class POSDatabase extends Dexie {
   catalogoPublico!: EntityTable<CatalogoPublico, 'id'>
   // v10 — auditoría de anulaciones
   auditoriaAnulaciones!: EntityTable<AuditoriaAnulacion, 'id'>
+  // v11 — módulo de mermas
+  mermas!: EntityTable<Merma, 'id'>
 
   constructor() {
     super('POSTienda')
@@ -135,6 +138,19 @@ class POSDatabase extends Dexie {
     this.version(10).stores({
       auditoriaAnulaciones: '++id, ventaId, usuarioRol, usuarioNombre, creadoEn',
     })
+
+    // Versión 11: módulo de mermas — pérdidas por vencimiento, daño o consumo
+    this.version(11).stores({
+      mermas: '++id, productoId, tipo, sesionCajaId, creadoEn',
+    })
+
+    // Versión 12: valores legales de nómina editables por el dueño
+    this.version(12).stores({}).upgrade(async (tx) => {
+      await tx.table('configTienda').toCollection().modify((cfg) => {
+        if (!cfg.smmlv) cfg.smmlv = 1_423_500
+        if (!cfg.subsidioTransporte) cfg.subsidioTransporte = 200_000
+      })
+    })
   }
 }
 
@@ -167,4 +183,5 @@ export type {
   PedidoDomicilio,
   CatalogoPublico,
   AuditoriaAnulacion,
+  Merma,
 }

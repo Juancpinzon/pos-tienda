@@ -2,8 +2,9 @@ import { useEffect, useState, useCallback } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
-import { X, Store, Phone, MapPin, FileText, Receipt, BookOpen, Users, Send, CheckCircle, CheckCircle2, UserX, Loader2, Sun, Moon, Monitor, Plus, Pencil, Bell, BellOff, ShieldCheck, Bike, Copy, ExternalLink, Lock, Package, Download } from 'lucide-react'
+import { X, Store, Phone, MapPin, FileText, Receipt, BookOpen, Users, Send, CheckCircle, CheckCircle2, UserX, Loader2, Sun, Moon, Monitor, Plus, Pencil, Bell, BellOff, ShieldCheck, Bike, Copy, ExternalLink, Lock, Package, Download, Scale } from 'lucide-react'
 import { useConfig, guardarConfig, usePlan } from '../../hooks/useConfig'
+import { formatCOP } from '../../utils/moneda'
 import { importarProductosNuevos } from '../../hooks/useSeed'
 import { useLiveQuery } from 'dexie-react-hooks'
 import toast from 'react-hot-toast'
@@ -1354,6 +1355,87 @@ function SeccionMiPlan() {
 
       {modalAbierto && <ModalActivarPro onClose={() => setModalAbierto(false)} />}
     </>
+  )
+}
+
+// ─── Sección Valores Legales — SMMLV y Subsidio de Transporte ────────────────
+
+function SeccionValoresLegales() {
+  const config = useConfig()
+  const [smmlv, setSmmlv] = useState<number>(1_423_500)
+  const [subsidio, setSubsidio] = useState<number>(200_000)
+  const [guardando, setGuardando] = useState(false)
+
+  // Sincronizar con config cuando carga
+  useEffect(() => {
+    if (config) {
+      setSmmlv(config.smmlv ?? 1_423_500)
+      setSubsidio(config.subsidioTransporte ?? 200_000)
+    }
+  }, [config])
+
+  const handleGuardar = async () => {
+    if (guardando) return
+    setGuardando(true)
+    try {
+      await guardarConfig({ smmlv, subsidioTransporte: subsidio })
+      toast.success('Valores legales actualizados')
+    } catch {
+      toast.error('Error al guardar')
+    } finally {
+      setGuardando(false)
+    }
+  }
+
+  return (
+    <section>
+      <p className="text-xs font-semibold text-suave uppercase tracking-wider mb-3">
+        Valores Legales (actualizar en enero)
+      </p>
+      <div className="flex flex-col gap-3 p-4 bg-fondo rounded-xl border border-borde">
+        <Campo label="SMMLV" icon={<Scale size={14} />}>
+          <div className="relative">
+            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-suave text-sm font-medium">$</span>
+            <input
+              type="number"
+              value={smmlv || ''}
+              onChange={(e) => setSmmlv(Number(e.target.value))}
+              className={`${INPUT_CLS} pl-7 moneda`}
+              min={0}
+              step={1000}
+            />
+          </div>
+        </Campo>
+        <Campo label="Subsidio de Transporte" icon={<Scale size={14} />}>
+          <div className="relative">
+            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-suave text-sm font-medium">$</span>
+            <input
+              type="number"
+              value={subsidio || ''}
+              onChange={(e) => setSubsidio(Number(e.target.value))}
+              className={`${INPUT_CLS} pl-7 moneda`}
+              min={0}
+              step={1000}
+            />
+          </div>
+        </Campo>
+        {smmlv > 0 && (
+          <p className="text-xs text-suave">
+            Aplica para salarios ≤ 2 SMMLV ({formatCOP(smmlv * 2)})
+          </p>
+        )}
+        <button
+          type="button"
+          onClick={handleGuardar}
+          disabled={guardando || smmlv <= 0}
+          className="w-full h-10 bg-primario text-white rounded-xl font-semibold text-sm
+                     hover:bg-primario-hover active:scale-95 transition-all
+                     disabled:opacity-40 disabled:cursor-not-allowed"
+        >
+          {guardando ? 'Guardando…' : 'Guardar valores'}
+        </button>
+      </div>
+    </section>
   )
 }
 
