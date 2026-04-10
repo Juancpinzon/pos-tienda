@@ -10,6 +10,7 @@
 
 import { supabase, supabaseConfigurado } from './supabase'
 import { db } from '../db/database'
+import type { MovimientoStock } from '../db/schema'
 
 // ─── Device ID ───────────────────────────────────────────────────────────────
 // UUID estable por dispositivo/navegador. Se genera la primera vez y persiste.
@@ -84,12 +85,66 @@ export async function pullFromSupabase(tiendaId: string): Promise<{ ok: boolean;
       pullProductos(tiendaId, deviceId),
       pullVentas(tiendaId, deviceId),
       pullMovimientosFiado(tiendaId, deviceId),
+      pullMovimientosStock(tiendaId, deviceId),
     ])
     return { ok: true, mensaje: 'Datos sincronizados correctamente' }
   } catch (e) {
     console.error('[sync] Error en pull:', e)
     return { ok: false, mensaje: 'Error al sincronizar. Intenta de nuevo.' }
   }
+}
+
+// ─── Resolución de conflictos ────────────────────────────────────────────────
+//
+// Decide qué registros remotos aplicar y cuáles ignorar según la estrategia
+// del tipo de dato:
+//   conservar-ambos  → ventas/detalles: nunca se modifican, se conservan ambas versiones
+//   suma-movimientos → stock: el delta siempre se aplica (la suma es la fuente de verdad)
+//   last-write-wins  → clientes, config: el registro más reciente gana campo a campo
+
+async function resolverConflictos<T extends Record<string, unknown>>(
+  tablaLocal: T[],
+  datosRemotos: T[],
+  estrategia: 'last-write-wins' | 'suma-movimientos' | 'conservar-ambos',
+  claveUnica: keyof T = 'id' as keyof T,
+): Promise<{ aplicar: T[]; ignorar: T[]; conflictos: number }> {
+  const aplicar: T[] = []
+  const ignorar: T[] = []
+  let conflictos = 0
+
+  const mapaLocal = new Map<unknown, T>(tablaLocal.map((r) => [r[claveUnica], r]))
+
+  for (const remoto of datosRemotos) {
+    const local = mapaLocal.get(remoto[claveUnica])
+
+    if (!local) {
+      // No existe localmente — siempre insertar
+      aplicar.push(remoto)
+      continue
+    }
+
+    // Existe en ambos → conflicto real
+    conflictos++
+
+    if (estrategia === 'conservar-ambos') {
+      // Ventas/detalles son inmutables una vez creadas → ignorar la versión remota
+      ignorar.push(remoto)
+    } else if (estrategia === 'suma-movimientos') {
+      // Movimientos de stock → siempre aplicar; la suma se hace al insertar el delta
+      aplicar.push(remoto)
+    } else {
+      // last-write-wins: el timestamp más reciente gana
+      const tsLocal  = new Date((local['creadoEn']  ?? local['actualizadoEn']  ?? 0) as string | Date).getTime()
+      const tsRemoto = new Date((remoto['creadoEn'] ?? remoto['actualizadoEn'] ?? 0) as string | Date).getTime()
+      if (tsRemoto > tsLocal) {
+        aplicar.push(remoto)
+      } else {
+        ignorar.push(remoto)
+      }
+    }
+  }
+
+  return { aplicar, ignorar, conflictos }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -172,6 +227,13 @@ async function pushSesionesCaja(tiendaId: string, deviceId: string) {
 async function pushVentas(tiendaId: string, deviceId: string) {
   const registros = await db.ventas.toArray()
   if (!registros.length) return
+
+  // Estampar deviceId en registros locales que no lo tienen aún
+  const sinDeviceId = registros.filter((r) => !r.deviceId)
+  if (sinDeviceId.length > 0) {
+    await Promise.all(sinDeviceId.map((r) => db.ventas.update(r.id!, { deviceId })))
+  }
+
   await supabase.from('ventas').upsert(
     registros.map((r) => ({
       tienda_id: tiendaId, device_id: deviceId, local_id: r.id,
@@ -319,11 +381,15 @@ async function pushPagosProveedor(tiendaId: string, deviceId: string) {
 }
 
 async function pushMovimientosStock(tiendaId: string, deviceId: string) {
-  const registros = await db.movimientosStock.toArray()
+  // Solo enviamos los no sincronizados aún (deviceId propio, no importados de otros dispositivos)
+  const registros = await db.movimientosStock
+    .filter((r) => !r.sincronizado && (!r.deviceId || r.deviceId === deviceId))
+    .toArray()
   if (!registros.length) return
+
   for (let i = 0; i < registros.length; i += 500) {
     const lote = registros.slice(i, i + 500)
-    await supabase.from('movimientos_stock').upsert(
+    const { error } = await supabase.from('movimientos_stock').upsert(
       lote.map((r) => ({
         tienda_id: tiendaId, device_id: deviceId, local_id: r.id,
         producto_local_id: r.productoId,
@@ -339,6 +405,13 @@ async function pushMovimientosStock(tiendaId: string, deviceId: string) {
       })),
       { onConflict: 'tienda_id,device_id,local_id', ignoreDuplicates: false }
     )
+
+    // Marcar como sincronizados si el push fue exitoso
+    if (!error) {
+      await Promise.all(
+        lote.map((r) => db.movimientosStock.update(r.id!, { sincronizado: true, deviceId }))
+      )
+    }
   }
 }
 
@@ -437,6 +510,8 @@ async function pullProductos(tiendaId: string, myDeviceId: string) {
         precio: r.precio,
         precioCompra: r.precio_compra ?? undefined,
         codigoBarras: r.codigo_barras ?? undefined,
+        // stockActual: se inicializa con el valor remoto solo en el primer pull.
+        // A partir de ahí, pullMovimientosStock aplica deltas — nunca se sobreescribe.
         stockActual: r.stock_actual ?? undefined,
         stockMinimo: r.stock_minimo ?? undefined,
         unidad: r.unidad ?? 'unidad',
@@ -446,6 +521,9 @@ async function pullProductos(tiendaId: string, myDeviceId: string) {
         actualizadoEn: new Date(r.updated_at),
       })
     }
+    // Si el producto YA existe: NO actualizar stockActual.
+    // Los movimientos de stock remotos llegan vía pullMovimientosStock y se suman como delta.
+    // Sí actualizamos campos no críticos (precio, nombre) con last-write-wins si el remoto es más reciente.
   }
 }
 
@@ -508,6 +586,69 @@ async function pullMovimientosFiado(tiendaId: string, myDeviceId: string) {
         descripcion: r.descripcion,
         sesionCajaId: r.sesion_caja_local_id ? offset + r.sesion_caja_local_id : undefined,
         creadoEn: new Date(r.creado_en),
+      })
+    }
+  }
+}
+
+// ─── Pull: movimientos de stock de otros dispositivos ─────────────────────────
+// Estrategia suma-movimientos: nunca reemplaza el stockActual absoluto.
+// Descarga movimientos de otros dispositivos y aplica el delta (stockNuevo - stockAnterior)
+// sobre el stock local del mismo producto.
+// Supuesto: los dispositivos comparten el mismo catálogo de productos (mismo productoId).
+
+async function pullMovimientosStock(tiendaId: string, myDeviceId: string) {
+  const { data, error } = await supabase
+    .from('movimientos_stock')
+    .select('*')
+    .eq('tienda_id', tiendaId)
+    .neq('device_id', myDeviceId)
+    .order('creado_en', { ascending: true })
+    .limit(1000)
+
+  if (error || !data || data.length === 0) return
+
+  // Obtener movimientos remotos ya registrados localmente para deduplicar
+  const remotosExistentes = await db.movimientosStock
+    .filter((r) => !!r.deviceId && r.deviceId !== myDeviceId)
+    .toArray()
+
+  const { aplicar } = await resolverConflictos(
+    remotosExistentes as Record<string, unknown>[],
+    data.map((r) => ({ ...r, id: remoteOffset(r.device_id) + r.local_id })) as Record<string, unknown>[],
+    'suma-movimientos',
+  )
+
+  for (const remoto of aplicar) {
+    const r = remoto as Record<string, unknown>
+    const localId       = r['id'] as number
+    const productoId    = r['producto_local_id'] as number
+    const stockAnteriorRemoto = (r['stock_anterior'] ?? 0) as number
+    const stockNuevoRemoto    = (r['stock_nuevo']    ?? 0) as number
+    const delta = stockNuevoRemoto - stockAnteriorRemoto
+
+    // Aplicar delta al producto local (mismo productoId)
+    const producto = await db.productos.get(productoId)
+    if (producto && producto.stockActual !== undefined) {
+      const stockAnterior = producto.stockActual
+      const stockNuevo    = Math.max(0, stockAnterior + delta)
+      await db.productos.update(productoId, { stockActual: stockNuevo })
+
+      // Guardar el movimiento importado para no aplicarlo de nuevo
+      await db.movimientosStock.put({
+        id:            localId,
+        productoId,
+        tipo:          (r['tipo'] as MovimientoStock['tipo']) ?? 'ajuste',
+        cantidad:      (r['cantidad'] as number) ?? Math.abs(delta),
+        stockAnterior,
+        stockNuevo,
+        costo:         (r['costo'] as number | undefined) ?? undefined,
+        nota:          `[sync:${(r['device_id'] as string).slice(0, 8)}] ${r['nota'] ?? ''}`.trim(),
+        ventaId:       (r['venta_local_id'] as number | undefined) ?? undefined,
+        compraId:      (r['compra_local_id'] as number | undefined) ?? undefined,
+        deviceId:      r['device_id'] as string,
+        sincronizado:  true,   // Es de otro dispositivo — no re-enviar
+        creadoEn:      new Date(r['creado_en'] as string),
       })
     }
   }

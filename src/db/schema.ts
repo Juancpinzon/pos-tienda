@@ -23,6 +23,8 @@ export interface Producto {
   activo: boolean
   creadoEn: Date
   actualizadoEn: Date
+  fechaVencimiento?: Date  // Opcional: para productos perecederos
+  loteNumero?: string       // Opcional: número de lote
 }
 
 export interface Cliente {
@@ -65,6 +67,7 @@ export interface Venta {
   canal?: 'mostrador' | 'domicilio'       // Canal de venta (default: mostrador)
   estado: 'completada' | 'anulada'
   estadoPago?: 'verificado' | 'pendiente_verificacion'  // Solo para tipoPago === 'transferencia'
+  deviceId?: string        // UUID del dispositivo que creó la venta — para deduplicación en sync
   notas?: string
   creadaEn: Date
 }
@@ -241,6 +244,8 @@ export interface MovimientoStock {
   nota?: string
   ventaId?: number       // link a venta si tipo='venta'
   compraId?: number      // link a compra si tipo='entrada'
+  deviceId?: string      // UUID del dispositivo origen — para deduplicar al recibir movimientos remotos
+  sincronizado?: boolean // true = ya fue enviado a Supabase exitosamente
   creadoEn: Date
 }
 

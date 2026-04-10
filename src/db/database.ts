@@ -155,6 +155,18 @@ class POSDatabase extends Dexie {
     // Versión 13: campo estadoPago en ventas para conciliación de transferencias
     // Los registros existentes quedan con estadoPago = undefined (no aplica retro)
     this.version(13).stores({})
+
+    // Versión 14: campos fechaVencimiento y loteNumero en productos
+    // Se agrega fechaVencimiento como índice para facilitar reportes de caducidad
+    this.version(14).stores({
+      productos: '++id, categoriaId, nombre, codigoBarras, activo, esFantasma, fechaVencimiento',
+    })
+
+    // Versión 15: campos deviceId y sincronizado en movimientosStock para sync multi-dispositivo
+    // deviceId identifica el dispositivo origen; sincronizado evita re-envíos y detecta duplicados
+    this.version(15).stores({
+      movimientosStock: '++id, productoId, tipo, ventaId, compraId, deviceId, sincronizado, creadoEn',
+    })
   }
 }
 
