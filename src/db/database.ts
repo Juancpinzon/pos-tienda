@@ -151,6 +151,10 @@ class POSDatabase extends Dexie {
         if (!cfg.subsidioTransporte) cfg.subsidioTransporte = 200_000
       })
     })
+
+    // Versión 13: campo estadoPago en ventas para conciliación de transferencias
+    // Los registros existentes quedan con estadoPago = undefined (no aplica retro)
+    this.version(13).stores({})
   }
 }
 

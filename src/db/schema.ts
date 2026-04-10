@@ -64,6 +64,7 @@ export interface Venta {
   cambio?: number
   canal?: 'mostrador' | 'domicilio'       // Canal de venta (default: mostrador)
   estado: 'completada' | 'anulada'
+  estadoPago?: 'verificado' | 'pendiente_verificacion'  // Solo para tipoPago === 'transferencia'
   notas?: string
   creadaEn: Date
 }

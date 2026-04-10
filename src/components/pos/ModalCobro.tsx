@@ -25,7 +25,7 @@ type MetodoPago = 'efectivo' | 'fiado' | 'transferencia' | 'tarjeta'
 type CanalVenta = 'mostrador' | 'domicilio'
 type PlataformaTransferencia = 'Nequi' | 'Daviplata' | 'Dale'
 type SubtipoTarjeta = 'debito' | 'credito'
-type EstadoModal = 'seleccion' | 'confirmando' | 'exito' | 'error'
+type EstadoModal = 'seleccion' | 'confirmando' | 'exito' | 'verificacion' | 'error'
 
 const PLATAFORMAS: { id: PlataformaTransferencia; emoji: string }[] = [
   { id: 'Nequi',     emoji: '🟣' },
@@ -220,6 +220,69 @@ function TabTarjeta({
       {!subtipo && (
         <p className="text-xs text-suave text-center">Selecciona el tipo de tarjeta para continuar</p>
       )}
+    </div>
+  )
+}
+
+// ─── Pantalla de verificación de transferencia ────────────────────────────────
+
+function PantallaVerificacion({
+  ventaId,
+  total,
+  plataforma,
+  onVerificado,
+  onDespues,
+}: {
+  ventaId: number
+  total: number
+  plataforma: string
+  onVerificado: () => void
+  onDespues: () => void
+}) {
+  const [cargando, setCargando] = useState(false)
+
+  const handleVerificado = async () => {
+    setCargando(true)
+    await db.ventas.update(ventaId, { estadoPago: 'verificado' })
+    onVerificado()
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60">
+      <div className="bg-white w-full sm:max-w-sm rounded-t-2xl sm:rounded-2xl shadow-2xl
+                      flex flex-col items-center p-6 gap-5">
+        <CheckCircle2 size={52} className="text-exito" strokeWidth={1.5} />
+        <div className="text-center flex flex-col gap-2">
+          <p className="font-display font-bold text-xl text-texto">✅ Venta registrada</p>
+          <p className="moneda font-bold text-3xl text-primario">{formatCOP(total)}</p>
+          <p className="text-suave text-sm leading-relaxed">
+            ¿Ya verificaste que llegó la transferencia por{' '}
+            <span className="font-semibold text-texto">{plataforma}</span>?
+          </p>
+        </div>
+        <div className="flex flex-col gap-2 w-full">
+          <button
+            type="button"
+            onClick={handleVerificado}
+            disabled={cargando}
+            className="w-full h-12 bg-exito text-white rounded-xl font-display font-bold text-base
+                       flex items-center justify-center gap-2
+                       hover:bg-exito/90 active:scale-95 transition-all disabled:opacity-50"
+          >
+            <CheckCircle2 size={18} />
+            Sí, llegó
+          </button>
+          <button
+            type="button"
+            onClick={onDespues}
+            className="w-full h-11 border border-borde text-suave rounded-xl font-semibold text-sm
+                       flex items-center justify-center gap-2
+                       hover:bg-fondo active:scale-95 transition-all"
+          >
+            ⏳ Verificar después
+          </button>
+        </div>
+      </div>
     </div>
   )
 }
@@ -569,6 +632,8 @@ export function ModalCobro({ onClose, onVentaExitosa }: ModalCobroProps) {
             cambio: recibido !== undefined ? recibido - total : undefined,
             canal: canal,
             estado: 'completada',
+            // Transferencias inician como "pendiente_verificacion" — el tendero confirma después
+            estadoPago: metodo === 'transferencia' ? 'pendiente_verificacion' : undefined,
             notas: metodo === 'transferencia' && plataforma ? plataforma : undefined,
             creadaEn: ahora,
           })) as number
@@ -634,6 +699,7 @@ export function ModalCobro({ onClose, onVentaExitosa }: ModalCobroProps) {
         efectivoRecibido: recibido,
         cambio: recibido !== undefined ? recibido - total : undefined,
         canal: canal,
+        estadoPago: metodo === 'transferencia' ? 'pendiente_verificacion' : undefined,
         notas: metodo === 'transferencia' && plataforma ? plataforma : undefined,
         estado: 'completada',
         creadaEn: ahora,
@@ -659,6 +725,20 @@ export function ModalCobro({ onClose, onVentaExitosa }: ModalCobroProps) {
       setMensajeError(err instanceof Error ? err.message : 'Error desconocido')
       setEstado('error')
     }
+  }
+
+  // ── Pantalla de verificación de transferencia (antes de éxito) ───────────────
+
+  if (estado === 'exito' && ventaGuardada?.tipoPago === 'transferencia' && ventaGuardada.estadoPago === 'pendiente_verificacion') {
+    return (
+      <PantallaVerificacion
+        ventaId={ventaGuardada.id!}
+        total={ventaGuardada.total}
+        plataforma={ventaGuardada.notas ?? 'Transferencia'}
+        onVerificado={() => setVentaGuardada((v) => v ? { ...v, estadoPago: 'verificado' } : v)}
+        onDespues={() => setVentaGuardada((v) => v ? { ...v, estadoPago: undefined } : v)}
+      />
+    )
   }
 
   // ── Pantalla de éxito ──────────────────────────────────────────────────────

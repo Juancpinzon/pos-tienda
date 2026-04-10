@@ -8,6 +8,7 @@ import { useAuthStore } from '../stores/authStore'
 import {
   useVentasPeriodo,
   anularVenta,
+  marcarTransferenciaVerificada,
   rangoPeriodo,
   type VentaConDetalles,
   type PeriodoHistorial,
@@ -158,6 +159,7 @@ function ModalDetalleVenta({
   const [confirmarAnular, setConfirmarAnular] = useState(false)
   const [anulando, setAnulando] = useState(false)
   const [errorAnular, setErrorAnular] = useState<string | null>(null)
+  const [verificando, setVerificando] = useState(false)
   const [mostrarNota, setMostrarNota] = useState(false)
   const [consecutivoNota, setConsecutivoNota] = useState<string | undefined>(undefined)
 
@@ -176,6 +178,16 @@ function ModalDetalleVenta({
       setErrorAnular(err instanceof Error ? err.message : 'Error al anular')
       setAnulando(false)
       setConfirmarAnular(false)
+    }
+  }
+
+  const handleMarcarVerificado = async () => {
+    setVerificando(true)
+    try {
+      await marcarTransferenciaVerificada(venta.id)
+      onClose()
+    } finally {
+      setVerificando(false)
     }
   }
 
@@ -294,6 +306,23 @@ function ModalDetalleVenta({
           {/* Footer — botones de acción */}
           <div className="p-4 border-t border-borde shrink-0 flex flex-col gap-2">
 
+            {/* Botón verificar transferencia — solo si está pendiente */}
+            {venta.tipoPago === 'transferencia' && venta.estadoPago === 'pendiente_verificacion' && venta.estado === 'completada' && (
+              <button
+                type="button"
+                onClick={handleMarcarVerificado}
+                disabled={verificando}
+                className="w-full h-11 bg-exito/10 text-exito border border-exito/30
+                           rounded-xl font-semibold text-sm flex items-center justify-center gap-2
+                           hover:bg-exito/20 active:scale-95 transition-all disabled:opacity-50"
+              >
+                {verificando
+                  ? <div className="w-4 h-4 border-2 border-exito border-t-transparent rounded-full animate-spin" />
+                  : '✅ Marcar como recibido'
+                }
+              </button>
+            )}
+
             {/* Botón nota de venta — siempre visible */}
             <button
               type="button"
@@ -400,6 +429,11 @@ function FilaVenta({ item, onClick }: { item: VentaConDetalles; onClick: () => v
           {anulada && (
             <span className="text-[10px] font-bold text-peligro bg-peligro/10 px-1.5 py-0.5 rounded-full uppercase">
               Anulada
+            </span>
+          )}
+          {!anulada && venta.tipoPago === 'transferencia' && venta.estadoPago === 'pendiente_verificacion' && (
+            <span className="text-[10px] font-bold text-advertencia bg-advertencia/10 px-1.5 py-0.5 rounded-full">
+              ⏳ Por verificar
             </span>
           )}
         </div>

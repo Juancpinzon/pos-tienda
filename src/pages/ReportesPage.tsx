@@ -50,6 +50,9 @@ export default function ReportesPage() {
     totalDaviplata: number
     totalDale: number
     totalFiado: number
+    // Conciliación transferencias
+    totalTransfVerificado: number
+    totalTransfPendiente: number
     // Anuladas
     totalAnulado: number
     cantidadAnuladas: number
@@ -96,25 +99,27 @@ export default function ReportesPage() {
         .reduce((s, m) => s + m.monto, 0)
 
       if (ventas.length === 0) {
-        return { ventas: [], totalVendido: 0, cantidadVentas: 0, ticketPromedio: 0, totalEfectivo: 0, totalTransferencia: 0, totalNequi: 0, totalDaviplata: 0, totalDale: 0, totalFiado: 0, totalAnulado, cantidadAnuladas, cobrosfiado, cobrosFiadoEfectivo, cobrosFiadoTransferencia }
+        return { ventas: [], totalVendido: 0, cantidadVentas: 0, ticketPromedio: 0, totalEfectivo: 0, totalTransferencia: 0, totalNequi: 0, totalDaviplata: 0, totalDale: 0, totalTransfVerificado: 0, totalTransfPendiente: 0, totalFiado: 0, totalAnulado, cantidadAnuladas, cobrosfiado, cobrosFiadoEfectivo, cobrosFiadoTransferencia }
       }
 
       const totalVendido       = ventas.reduce((s, v) => s + v.total, 0)
       const totalEfectivo      = ventas.filter((v) => v.tipoPago === 'efectivo').reduce((s, v) => s + v.total, 0)
       const transVentas        = ventas.filter((v) => v.tipoPago === 'transferencia')
       const totalTransferencia = transVentas.reduce((s, v) => s + v.total, 0)
-      const totalNequi         = transVentas.filter((v) => v.notas === 'Nequi').reduce((s, v) => s + v.total, 0)
-      const totalDaviplata     = transVentas.filter((v) => v.notas === 'Daviplata').reduce((s, v) => s + v.total, 0)
-      const totalDale          = transVentas.filter((v) => v.notas === 'Dale').reduce((s, v) => s + v.total, 0)
-      const totalFiado         = ventas.filter((v) => v.tipoPago === 'fiado').reduce((s, v) => s + v.total, 0)
-      const ticketPromedio     = Math.round(totalVendido / ventas.length)
+      const totalNequi            = transVentas.filter((v) => v.notas === 'Nequi').reduce((s, v) => s + v.total, 0)
+      const totalDaviplata        = transVentas.filter((v) => v.notas === 'Daviplata').reduce((s, v) => s + v.total, 0)
+      const totalDale             = transVentas.filter((v) => v.notas === 'Dale').reduce((s, v) => s + v.total, 0)
+      const totalTransfVerificado = transVentas.filter((v) => v.estadoPago === 'verificado').reduce((s, v) => s + v.total, 0)
+      const totalTransfPendiente  = transVentas.filter((v) => v.estadoPago === 'pendiente_verificacion').reduce((s, v) => s + v.total, 0)
+      const totalFiado            = ventas.filter((v) => v.tipoPago === 'fiado').reduce((s, v) => s + v.total, 0)
+      const ticketPromedio        = Math.round(totalVendido / ventas.length)
 
-      return { ventas, totalVendido, cantidadVentas: ventas.length, ticketPromedio, totalEfectivo, totalTransferencia, totalNequi, totalDaviplata, totalDale, totalFiado, totalAnulado, cantidadAnuladas, cobrosfiado, cobrosFiadoEfectivo, cobrosFiadoTransferencia }
+      return { ventas, totalVendido, cantidadVentas: ventas.length, ticketPromedio, totalEfectivo, totalTransferencia, totalNequi, totalDaviplata, totalDale, totalTransfVerificado, totalTransfPendiente, totalFiado, totalAnulado, cantidadAnuladas, cobrosfiado, cobrosFiadoEfectivo, cobrosFiadoTransferencia }
     }).subscribe({
       next: setDatos,
       error: (err) => {
         console.error('[ReportesPage:datos]', err)
-        setDatos({ ventas: [], totalVendido: 0, cantidadVentas: 0, ticketPromedio: 0, totalEfectivo: 0, totalTransferencia: 0, totalNequi: 0, totalDaviplata: 0, totalDale: 0, totalFiado: 0, totalAnulado: 0, cantidadAnuladas: 0, cobrosfiado: 0, cobrosFiadoEfectivo: 0, cobrosFiadoTransferencia: 0 })
+        setDatos({ ventas: [], totalVendido: 0, cantidadVentas: 0, ticketPromedio: 0, totalEfectivo: 0, totalTransferencia: 0, totalNequi: 0, totalDaviplata: 0, totalDale: 0, totalTransfVerificado: 0, totalTransfPendiente: 0, totalFiado: 0, totalAnulado: 0, cantidadAnuladas: 0, cobrosfiado: 0, cobrosFiadoEfectivo: 0, cobrosFiadoTransferencia: 0 })
       },
     })
     return () => sub.unsubscribe()
@@ -322,6 +327,22 @@ export default function ReportesPage() {
                   />
                   <SubMetrica emoji="📒" label="Fiado"          valor={datos.totalFiado}         color="text-fiado"   />
                 </div>
+
+                {/* Conciliación transferencias — solo si hay pendientes */}
+                {datos.totalTransfPendiente > 0 && (
+                  <div className="border-t border-advertencia/20 pt-2 flex flex-col gap-1">
+                    {datos.totalTransfVerificado > 0 && (
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-xs text-suave">✅ Transferencias verificadas</span>
+                        <span className="moneda font-medium text-xs text-primario">{formatCOP(datos.totalTransfVerificado)}</span>
+                      </div>
+                    )}
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-xs font-semibold text-advertencia">⏳ Por verificar</span>
+                      <span className="moneda font-bold text-xs text-advertencia">{formatCOP(datos.totalTransfPendiente)}</span>
+                    </div>
+                  </div>
+                )}
 
                 {/* Cobros de cartera fiado — solo si hay abonos en el período */}
                 {datos.cobrosfiado > 0 && (

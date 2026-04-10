@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from 'react'
+import { liveQuery } from 'dexie'
 import {
   Plus, Wallet, ShoppingBag, TrendingDown,
   Smartphone, Banknote, BookOpen, Lock, ChevronDown, Truck, CreditCard, Ban,
@@ -16,6 +17,7 @@ import {
 import { usePagosProveedoresSesion } from '../hooks/useProveedores'
 import { DashboardUtilidadNeta } from '../components/reportes/DashboardUtilidadNeta'
 import { formatCOP } from '../utils/moneda'
+import { db } from '../db/database'
 import type { GastoCaja } from '../db/schema'
 
 // ─── Tipos de gasto ───────────────────────────────────────────────────────────
@@ -57,6 +59,24 @@ export default function CajaPage() {
       setMontoCierreSugerido(ultima?.montoCierre ?? null)
     })
   }, [sesion])
+
+  // Transferencias sin verificar en la sesión actual
+  const [transferenciasPendientes, setTransferenciasPendientes] = useState<{ count: number; total: number } | null>(null)
+
+  useEffect(() => {
+    if (!sesion?.id) { setTransferenciasPendientes(null); return }
+    const sub = liveQuery(async () => {
+      const ventas = await db.ventas
+        .where('sesionCajaId').equals(sesion.id!)
+        .filter((v) => v.tipoPago === 'transferencia' && v.estadoPago === 'pendiente_verificacion' && v.estado === 'completada')
+        .toArray()
+      return { count: ventas.length, total: ventas.reduce((s, v) => s + v.total, 0) }
+    }).subscribe({
+      next: setTransferenciasPendientes,
+      error: () => setTransferenciasPendientes(null),
+    })
+    return () => sub.unsubscribe()
+  }, [sesion?.id])
 
   // Estado modal cierre
   const [mostrarCierre, setMostrarCierre] = useState(false)
@@ -527,6 +547,22 @@ export default function CajaPage() {
           <div className="h-24" />
         </div>
       </div>
+
+      {/* Advertencia transferencias sin verificar */}
+      {transferenciasPendientes && transferenciasPendientes.count > 0 && (
+        <div className="mx-4 mb-2 px-4 py-3 bg-advertencia/10 border border-advertencia/30 rounded-xl flex items-center gap-3">
+          <Smartphone size={16} className="text-advertencia shrink-0" />
+          <div className="flex-1 min-w-0">
+            <p className="text-xs font-semibold text-advertencia">
+              ⚠️ {transferenciasPendientes.count} transferencia{transferenciasPendientes.count !== 1 ? 's' : ''} sin verificar
+            </p>
+            <p className="text-xs text-suave">
+              Total: <span className="moneda font-medium">{formatCOP(transferenciasPendientes.total)}</span>
+              {' '}— confirma en el historial antes de cerrar
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* Botón cerrar caja */}
       <button

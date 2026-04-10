@@ -149,6 +149,15 @@ export async function anularVenta(
   })
 }
 
+// ─── Marcar transferencia como verificada ─────────────────────────────────────
+
+/**
+ * Actualiza estadoPago a 'verificado' en una venta de tipo transferencia.
+ */
+export async function marcarTransferenciaVerificada(ventaId: number): Promise<void> {
+  await db.ventas.update(ventaId, { estadoPago: 'verificado' })
+}
+
 // ─── Utilidades de período ────────────────────────────────────────────────────
 
 export type PeriodoHistorial = 'hoy' | 'ayer' | 'semana' | 'mes'
