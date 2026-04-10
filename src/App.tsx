@@ -6,7 +6,7 @@ import { useSeed } from './hooks/useSeed'
 import { useSesionActual, useResumenCaja } from './hooks/useCaja'
 import { useConfig, usePlan } from './hooks/useConfig'
 import { ModalActivarPro } from './components/config/ModalActivarPro'
-import { useProductosBajoStock } from './hooks/useStock'
+import { useProductosBajoStock, useProductosPorVencer } from './hooks/useStock'
 import { useOnboarding } from './hooks/useOnboarding'
 import { useSyncStatus } from './hooks/useSyncStatus'
 import { TourOverlay } from './components/onboarding/TourOverlay'
@@ -443,6 +443,9 @@ function AppLayout({ primerUso }: { primerUso: boolean }) {
   const mostrarTour  = tour.tourCompletado === false
   const { esPro }    = usePlan()
 
+  const productosVencer = useProductosPorVencer()
+  const hayVencimientos = productosVencer?.some(p => p.estadoCaducidad !== 'proximo') ?? false
+
   const rol = usuario?.rol ?? 'dueno'
 
   const [modalActivarPro, setModalActivarPro] = useState(false)
@@ -465,7 +468,7 @@ function AppLayout({ primerUso }: { primerUso: boolean }) {
     { to: '/fiados',        icon: BookOpen,      label: 'Fiados',    badge: false,        tourId: 'nav-fiados', roles: ['dueno', 'encargado', 'empleado'] },
     { to: '/domicilios',    icon: Bike,          label: 'Domicil.',  badge: false,        tourId: undefined,    roles: ['dueno', 'encargado']             },
     { to: '/productos',     icon: Package,       label: 'Productos', badge: hayBajoStock, tourId: undefined,    roles: ['dueno', 'encargado']             },
-    { to: '/inventario',    icon: Archive,       label: 'Stock',     badge: hayBajoStock, tourId: undefined,    roles: ['dueno']                          },
+    { to: '/inventario',    icon: Archive,       label: 'Stock',     badge: hayBajoStock || hayVencimientos, tourId: undefined,    roles: ['dueno']                          },
     { to: '/proveedores',   icon: Truck,         label: 'Proveed.',  badge: false,        tourId: undefined,    roles: ['dueno', 'encargado']             },
     { to: '/caja',          icon: DollarSign,    label: 'Caja',      badge: sinCaja,      tourId: 'nav-caja',   roles: ['dueno', 'encargado']             },
     { to: '/reportes',      icon: BarChart2,     label: 'Reportes',  badge: false,        tourId: undefined,    roles: ['dueno', 'encargado']             },

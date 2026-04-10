@@ -15,6 +15,7 @@ export interface ItemCompra {
   cantidad: number
   precioUnitario: number
   subtotal: number
+  fechaVencimiento?: Date   // Opcional: capturado al recibir mercancía
 }
 
 export interface CompraConDetalles extends CompraProveedor {
@@ -237,6 +238,8 @@ export async function registrarCompra(
             db.productos.update(i.productoId!, {
               precioCompra: i.precioUnitario,
               actualizadoEn: new Date(),
+              // Actualizar fecha de vencimiento si se proporciona en la compra
+              ...(i.fechaVencimiento ? { fechaVencimiento: i.fechaVencimiento } : {}),
             })
           )
       )

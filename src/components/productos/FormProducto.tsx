@@ -21,6 +21,8 @@ const ProductoSchema = z.object({
   controlaStock: z.boolean(),
   stockActual: z.string().optional(),
   stockMinimo: z.string().optional(),
+  fechaVencimiento: z.string().optional(),
+  loteNumero: z.string().optional(),
 })
 
 type FormData = z.infer<typeof ProductoSchema>
@@ -135,6 +137,8 @@ export function FormProducto({ producto, nombrePreset, codigoBarrasPreset, onClo
         controlaStock: producto.stockActual !== undefined,
         stockActual: producto.stockActual !== undefined ? String(producto.stockActual) : '',
         stockMinimo: producto.stockMinimo !== undefined ? String(producto.stockMinimo) : '',
+        fechaVencimiento: producto.fechaVencimiento ? new Date(producto.fechaVencimiento).toISOString().split('T')[0] : '',
+        loteNumero: producto.loteNumero || '',
       })
     } else {
       if (nombrePreset) setValue('nombre', nombrePreset)
@@ -155,6 +159,8 @@ export function FormProducto({ producto, nombrePreset, codigoBarrasPreset, onClo
       // Stock: solo guardar si controla stock
       stockActual: data.controlaStock ? (toNum(data.stockActual) ?? 0) : undefined,
       stockMinimo: data.controlaStock ? toNum(data.stockMinimo) : undefined,
+      fechaVencimiento: data.fechaVencimiento ? new Date(data.fechaVencimiento + 'T00:00:00') : undefined,
+      loteNumero: data.loteNumero?.trim() || undefined,
     }
 
     if (esEdicion && producto.id !== undefined) {
@@ -411,6 +417,27 @@ export function FormProducto({ producto, nombrePreset, codigoBarrasPreset, onClo
                 </Campo>
               </div>
             )}
+            {/* Perecederos (Opcional) */}
+            <div className="pt-2 border-t border-borde/50">
+              <p className="text-xs font-bold text-suave uppercase tracking-wider mb-3">Vencimiento (Opcional)</p>
+              <div className="grid grid-cols-2 gap-3">
+                <Campo label="Fecha vencimiento" error={errors.fechaVencimiento?.message}>
+                  <input
+                    {...register('fechaVencimiento')}
+                    type="date"
+                    className={INPUT_CLS}
+                  />
+                </Campo>
+                <Campo label="Número de lote" error={errors.loteNumero?.message}>
+                  <input
+                    {...register('loteNumero')}
+                    type="text"
+                    placeholder="Ej: L123"
+                    className={INPUT_CLS}
+                  />
+                </Campo>
+              </div>
+            </div>
           </div>
 
           {/* Footer */}

@@ -12,6 +12,7 @@ import { formatCOP } from '../utils/moneda'
 import type { Producto, MovimientoStock } from '../db/schema'
 import { ModalRegistrarMerma } from '../components/inventario/ModalRegistrarMerma'
 import { useMermas } from '../hooks/useMermas'
+import { AlertasCaducidad } from '../components/inventario/AlertasCaducidad'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -149,6 +150,9 @@ export default function InventarioPage() {
       {/* Lista */}
       <div className="flex-1 overflow-y-auto">
         <div className="p-4 flex flex-col gap-3">
+          
+          {/* Alertas de Caducidad (Proactivas) */}
+          {!soloBajoMinimo && !query && <AlertasCaducidad />}
 
           {/* Cargando */}
           {!productosFiltrados && (

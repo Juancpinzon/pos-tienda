@@ -55,6 +55,7 @@ export function NuevaCompraModal({ proveedorInicial, onClose }: NuevaCompraModal
   const [iQty, setIQty] = useState('1')
   const [iPrecio, setIPrecio] = useState('')
   const [iSugerencias, setISugerencias] = useState<Producto[]>([])
+  const [iVencimiento, setIVencimiento] = useState('')
   const [iDesdeMapa, setIDesdeMapa] = useState(false)  // badge "Mapeo guardado"
   const nombreInputRef = useRef<HTMLInputElement>(null)
 
@@ -147,6 +148,7 @@ export function NuevaCompraModal({ proveedorInicial, onClose }: NuevaCompraModal
       cantidad: qty,
       precioUnitario: precio,
       subtotal: Math.round(qty * precio),
+      fechaVencimiento: iVencimiento ? new Date(iVencimiento + 'T00:00:00') : undefined,
     }
     setItems((prev) => [...prev, nuevoItem])
     // Reset form
@@ -154,6 +156,7 @@ export function NuevaCompraModal({ proveedorInicial, onClose }: NuevaCompraModal
     setIProductoId(undefined)
     setIQty('1')
     setIPrecio('')
+    setIVencimiento('')
     setISugerencias([])
     nombreInputRef.current?.focus()
   }
@@ -634,6 +637,18 @@ export function NuevaCompraModal({ proveedorInicial, onClose }: NuevaCompraModal
                                focus:outline-none focus:ring-2 focus:ring-primario/30"
                   />
                 </div>
+              </div>
+
+              {/* Fecha de vencimiento opcional */}
+              <div>
+                <label className="text-xs text-suave mb-1 block">Vencimiento (opcional)</label>
+                <input
+                  type="date"
+                  value={iVencimiento}
+                  onChange={(e) => setIVencimiento(e.target.value)}
+                  className="w-full h-10 px-3 border border-borde rounded-xl text-sm text-texto
+                             focus:outline-none focus:ring-2 focus:ring-primario/30"
+                />
               </div>
 
               {/* Preview subtotal + botón agregar */}

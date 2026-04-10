@@ -90,6 +90,63 @@ export function useProductosConStock(query = '') {
   return productos
 }
 
+export interface ProductoPorVencer extends Producto {
+  diasParaVencer: number
+  estadoCaducidad: 'vencido' | 'critico' | 'proximo'
+}
+
+/**
+ * Productos activos con fecha de vencimiento definida.
+ * Categoriza según cercanía al vencimiento.
+ */
+export function useProductosPorVencer() {
+  const [productos, setProductos] = useState<ProductoPorVencer[] | undefined>(undefined)
+
+  useEffect(() => {
+    const sub = liveQuery(async () => {
+      const hoy = new Date()
+      hoy.setHours(0, 0, 0, 0)
+
+      const proximos = await db.productos
+        .filter((p) => p.activo && !!p.fechaVencimiento && (p.stockActual ?? 0) > 0)
+        .toArray()
+
+      const procesados: ProductoPorVencer[] = proximos.map((p) => {
+        const fechaV = new Date(p.fechaVencimiento!)
+        fechaV.setHours(0, 0, 0, 0)
+        
+        const diffMs = fechaV.getTime() - hoy.getTime()
+        const dias = Math.floor(diffMs / (1000 * 60 * 60 * 24))
+
+        let estado: ProductoPorVencer['estadoCaducidad'] = 'proximo'
+        if (dias < 0) estado = 'vencido'
+        else if (dias <= 5) estado = 'critico'
+
+        return {
+          ...p,
+          diasParaVencer: dias,
+          estadoCaducidad: estado,
+        }
+      })
+
+      // Ordenar: vencidos primero, luego críticos, luego por días
+      return procesados.sort((a, b) => {
+        const orden = { vencido: 0, critico: 1, proximo: 2 }
+        if (orden[a.estadoCaducidad] !== orden[b.estadoCaducidad]) {
+          return orden[a.estadoCaducidad] - orden[b.estadoCaducidad]
+        }
+        return a.diasParaVencer - b.diasParaVencer
+      })
+    }).subscribe({
+      next: setProductos,
+      error: (err) => { console.error('[useProductosPorVencer]', err); setProductos([]) },
+    })
+    return () => sub.unsubscribe()
+  }, [])
+
+  return productos
+}
+
 /**
  * Últimos 30 movimientos de stock de un producto específico (más recientes primero).
  */

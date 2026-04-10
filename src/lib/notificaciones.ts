@@ -23,6 +23,7 @@ const INTERVALO: Record<string, number> = {
   stock: 24 * 60 * 60 * 1000,   // máximo una vez al día
   caja:  24 * 60 * 60 * 1000,   // máximo una vez al día
   nomina: 24 * 60 * 60 * 1000,  // máximo una vez al día
+  caducidad: 24 * 60 * 60 * 1000, // máximo una vez al día
 }
 
 function puedeEnviar(tipo: string): boolean {
@@ -159,6 +160,44 @@ async function checkProductosAgotados(): Promise<void> {
   marcarEnviado('stock')
 }
 
+async function checkProductosPorVencer(): Promise<void> {
+  if (!puedeEnviar('caducidad')) return
+  const config = await obtenerConfig()
+  if (!config.notificacionesActivas) return
+
+  const hoy = new Date()
+  hoy.setHours(0, 0, 0, 0)
+  const fechaCorte = new Date(hoy)
+  fechaCorte.setDate(fechaCorte.getDate() + 5) // Alerta 5 días antes
+
+  const criticos = await db.productos
+    .filter((p) => 
+      p.activo && 
+      !!p.fechaVencimiento && 
+      (p.stockActual ?? 0) > 0 &&
+      p.fechaVencimiento <= fechaCorte
+    )
+    .toArray()
+
+  if (criticos.length === 0) return
+
+  const vencidos = criticos.filter(p => p.fechaVencimiento! < hoy)
+  const porVencer = criticos.filter(p => p.fechaVencimiento! >= hoy)
+
+  let titulo = '⏳ Alerta de vencimiento'
+  let cuerpo = ''
+
+  if (vencidos.length > 0) {
+    titulo = '⚠️ Productos vencidos'
+    cuerpo = `${vencidos[0].nombre}${vencidos.length > 1 ? ` (+${vencidos.length - 1} más)` : ''} ya vencieron.`
+  } else if (porVencer.length > 0) {
+    cuerpo = `${porVencer[0].nombre}${porVencer.length > 1 ? ` (+${porVencer.length - 1} más)` : ''} vencen pronto (en ≤ 5 días).`
+  }
+
+  await mostrarNotificacion(titulo, cuerpo, '/inventario')
+  marcarEnviado('caducidad')
+}
+
 async function checkAperturaCaja(): Promise<void> {
   if (!puedeEnviar('caja')) return
   const config = await obtenerConfig()
@@ -272,6 +311,7 @@ export function iniciarScheduler(): () => void {
     if (!config.notificacionesActivas || Notification.permission !== 'granted') return
     await checkMoraFiado()
     await checkProductosAgotados()
+    await checkProductosPorVencer()
     await notificarMenuNomina()
   }, 30_000)
 
@@ -281,6 +321,7 @@ export function iniciarScheduler(): () => void {
     if (!config.notificacionesActivas || Notification.permission !== 'granted') return
     await checkMoraFiado()
     await checkProductosAgotados()
+    await checkProductosPorVencer()
     await notificarMenuNomina()
   }, 4 * 60 * 60 * 1000)
 
