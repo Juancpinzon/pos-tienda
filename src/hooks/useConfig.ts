@@ -20,10 +20,16 @@ export const CONFIG_DEFAULTS: Omit<ConfigTienda, 'id'> = {
   planActivo: 'basico',
   smmlv: 1_423_500,
   subsidioTransporte: 200_000,
+  modoDemo: true,
+  ventasDemo: 0,
+  limiteVentasDemo: 50,
 }
 
 // Códigos válidos para activar el Plan Pro (hardcodeados)
 const CODIGOS_PRO = ['PROTIENDA2025', 'DOMICILIOS2025', 'UPGRADE2025']
+
+// Códigos válidos para activar el Plan Básico (Fase 41)
+const CODIGOS_BASICO = ['TIENDA2025', 'BARRIO2025', 'POSBASICO2025', 'TENDERO2025', 'TIENDA2026']
 
 /**
  * Configuración reactiva de la tienda. Retorna defaults si aún no se ha guardado.
@@ -56,7 +62,23 @@ export function usePlan() {
   const config = useConfig()
   const esPro    = (config?.planActivo ?? 'basico') === 'pro'
   const esBasico = !esPro
-  return { esPro, esBasico, planActivadoEn: config?.planActivadoEn }
+
+  const modoDemo              = config?.modoDemo ?? false
+  const ventasDemo            = config?.ventasDemo ?? 0
+  const limiteVentasDemo      = config?.limiteVentasDemo ?? 50
+  const ventasRestantesDemo   = Math.max(0, limiteVentasDemo - ventasDemo)
+  const demoAgotado           = modoDemo && ventasRestantesDemo <= 0
+
+  return { 
+    esPro, 
+    esBasico, 
+    planActivadoEn: config?.planActivadoEn,
+    modoDemo,
+    ventasDemo,
+    limiteVentasDemo,
+    ventasRestantesDemo,
+    demoAgotado
+  }
 }
 
 /**
@@ -69,15 +91,48 @@ export async function activarPlanPro(codigo: string): Promise<boolean> {
     planActivo: 'pro',
     planActivadoEn: new Date(),
     codigoActivacion: codigo.trim().toUpperCase(),
+    modoDemo: false,
   })
   return true
+}
+
+/**
+ * Activa el Plan Básico si el código es válido.
+ * Retorna true si activó, false si el código es inválido.
+ */
+export async function activarPlanBasico(codigo: string): Promise<boolean> {
+  if (!CODIGOS_BASICO.includes(codigo.trim().toUpperCase())) return false
+  await guardarConfig({
+    modoDemo: false,
+    codigoBasico: codigo.trim().toUpperCase(),
+    planBasicoActivadoEn: new Date(),
+  })
+  return true
+}
+
+/**
+ * Incrementa contador de ventas demo.
+ * Debe llamarse antes de registrar cada venta si es demo.
+ */
+export async function incrementarVentasDemo(): Promise<void> {
+  const config = await obtenerConfig()
+  if (!config.modoDemo) return
+  await guardarConfig({ 
+    ventasDemo: (config.ventasDemo ?? 0) + 1 
+  })
 }
 
 /**
  * Vuelve al Plan Básico (solo para testing/admin).
  */
 export async function volverABasico(): Promise<void> {
-  await guardarConfig({ planActivo: 'basico', planActivadoEn: undefined, codigoActivacion: undefined })
+  await guardarConfig({ 
+    planActivo: 'basico', 
+    planActivadoEn: undefined, 
+    codigoActivacion: undefined,
+    modoDemo: true, // Opcional: volver a demo si se quita el pro
+    ventasDemo: 0 
+  })
 }
 
 /**

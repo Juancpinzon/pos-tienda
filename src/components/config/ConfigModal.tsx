@@ -9,6 +9,7 @@ import { importarProductosNuevos } from '../../hooks/useSeed'
 import { useLiveQuery } from 'dexie-react-hooks'
 import toast from 'react-hot-toast'
 import { ModalActivarPro } from './ModalActivarPro'
+import { ModalActivarBasico } from './ModalActivarBasico'
 import { supabase, supabaseConfigurado } from '../../lib/supabase'
 import { useAuthStore } from '../../stores/authStore'
 import { ConfirmDialog } from '../shared/ConfirmDialog'
@@ -1270,8 +1271,9 @@ function SeccionCatalogo() {
 // ─── Sección Mi Plan ─────────────────────────────────────────────────────────
 
 function SeccionMiPlan() {
-  const { esPro, esBasico, planActivadoEn } = usePlan()
-  const [modalAbierto, setModalAbierto] = useState(false)
+  const { esPro, esBasico, planActivadoEn, modoDemo, ventasDemo, limiteVentasDemo, ventasRestantesDemo } = usePlan()
+  const [modalProAbierto, setModalProAbierto] = useState(false)
+  const [modalBasicoAbierto, setModalBasicoAbierto] = useState(false)
   const usuario = useAuthStore((s) => s.usuario)
   if (usuario?.rol !== 'dueno') return null
 
@@ -1289,19 +1291,42 @@ function SeccionMiPlan() {
 
         <div className="bg-fondo rounded-xl border border-borde p-4 flex flex-col gap-3">
           {/* Badge del plan */}
-          <div className="flex items-center gap-2">
-            <span className={[
-              'px-2.5 py-1 rounded-lg text-xs font-bold',
-              esPro
-                ? 'bg-acento/15 text-acento'
-                : 'bg-gray-100 text-suave',
-            ].join(' ')}>
-              {esPro ? '⭐ Plan Pro' : '📦 Plan Básico'}
-            </span>
-            {esPro && fechaActivacion && (
-              <span className="text-xs text-suave">Activado el {fechaActivacion}</span>
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <span className={[
+                'px-2.5 py-1 rounded-lg text-xs font-bold',
+                esPro
+                  ? 'bg-acento/15 text-acento'
+                  : modoDemo
+                  ? 'bg-advertencia/15 text-advertencia'
+                  : 'bg-primario/10 text-primario',
+              ].join(' ')}>
+                {esPro ? '⭐ Plan Pro' : modoDemo ? '🔓 Modo Demo' : '✅ Plan Básico'}
+              </span>
+              {(esPro || !modoDemo) && fechaActivacion && (
+                <span className="text-xs text-suave">Activado el {fechaActivacion}</span>
+              )}
+            </div>
+            
+            {modoDemo && (
+              <span className="text-xs font-bold text-suave">
+                {ventasDemo} / {limiteVentasDemo} ventas
+              </span>
             )}
           </div>
+
+          {/* Barra de progreso demo */}
+          {modoDemo && (
+            <div className="w-full h-2 bg-borde rounded-full overflow-hidden">
+              <div 
+                className={[
+                  'h-full transition-all duration-500',
+                  ventasRestantesDemo <= 5 ? 'bg-peligro' : ventasRestantesDemo <= 15 ? 'bg-orange-500' : 'bg-primario'
+                ].join(' ')}
+                style={{ width: `${Math.min(100, (ventasDemo / limiteVentasDemo) * 100)}%` }}
+              />
+            </div>
+          )}
 
           {/* Lista de features */}
           <div className="flex flex-col gap-1.5">

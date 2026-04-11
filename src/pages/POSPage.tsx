@@ -1,6 +1,6 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { ShoppingCart, X, ClipboardList } from 'lucide-react'
-import { BuscadorProducto } from '../components/pos/BuscadorProducto'
+import { BuscadorProducto, type BuscadorProductoRef } from '../components/pos/BuscadorProducto'
 import { GridProductosRapidos } from '../components/pos/GridProductosRapidos'
 import { LineaVenta } from '../components/pos/LineaVenta'
 import { ResumenVenta } from '../components/pos/ResumenVenta'
@@ -17,6 +17,27 @@ export default function POSPage() {
   const [mostrarModal,   setMostrarModal]   = useState(false)
   const [drawerAbierto,  setDrawerAbierto]  = useState(false)
   const [mostrarCuentas, setMostrarCuentas] = useState(false)
+
+  // Ref al buscador para re-enfocar tras cerrar modales
+  const buscadorRef = useRef<BuscadorProductoRef>(null)
+
+  // Re-enfocar el buscador cuando se cierra el modal de cobro
+  const prevMostrarModal = useRef(false)
+  useEffect(() => {
+    if (prevMostrarModal.current && !mostrarModal) {
+      setTimeout(() => buscadorRef.current?.focus(), 80)
+    }
+    prevMostrarModal.current = mostrarModal
+  }, [mostrarModal])
+
+  // Re-enfocar el buscador cuando se cierra el panel de cuentas
+  const prevMostrarCuentas = useRef(false)
+  useEffect(() => {
+    if (prevMostrarCuentas.current && !mostrarCuentas) {
+      setTimeout(() => buscadorRef.current?.focus(), 80)
+    }
+    prevMostrarCuentas.current = mostrarCuentas
+  }, [mostrarCuentas])
 
   // Cuenta activa — persiste en memoria durante la sesión
   const [cuentaActiva, setCuentaActiva] = useState<CuentaAbierta | null>(null)
@@ -104,7 +125,7 @@ export default function POSPage() {
       {/* ── Header: buscador + botón cuentas ─────────────────────────── */}
       <div data-tour="buscador" className="bg-white border-b border-borde px-3 py-2 shrink-0 flex items-center gap-2">
         <div className="flex-1 min-w-0">
-          <BuscadorProducto />
+          <BuscadorProducto ref={buscadorRef} />
         </div>
 
         {/* Botón cuentas abiertas — solo dueño/encargado */}

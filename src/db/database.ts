@@ -167,6 +167,20 @@ class POSDatabase extends Dexie {
     this.version(15).stores({
       movimientosStock: '++id, productoId, tipo, ventaId, compraId, deviceId, sincronizado, creadoEn',
     })
+
+    // Versión 16: modo demo y activación obligatoria
+    this.version(16).stores({}).upgrade(async (tx) => {
+      await tx.table('configTienda').toCollection().modify(cfg => {
+        // Si no tiene código básico ni está en pro, entra en modo demo
+        if (!cfg.codigoBasico && cfg.planActivo !== 'pro') {
+          cfg.modoDemo = true
+          cfg.ventasDemo = cfg.ventasDemo ?? 0
+          cfg.limiteVentasDemo = cfg.limiteVentasDemo ?? 50
+        } else {
+          cfg.modoDemo = false
+        }
+      })
+    })
   }
 }
 

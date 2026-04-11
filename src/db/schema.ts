@@ -132,6 +132,12 @@ export interface ConfigTienda {
   // ── Valores legales — Nómina ────────────────────────────────────────────────
   smmlv?: number                  // Salario Mínimo Mensual Legal Vigente. Default: 1_423_500 (2025)
   subsidioTransporte?: number     // Subsidio de transporte. Default: 200_000 (2025)
+  // ── Modo Demo y Activación (Fase 41) ───────────────────────────────────────
+  modoDemo?: boolean              // true = sin activar
+  ventasDemo?: number             // Contador de ventas en demo. Default: 0
+  limiteVentasDemo?: number       // Default: 50
+  codigoBasico?: string           // Código ingresado para Plan Básico
+  planBasicoActivadoEn?: Date     // Cuándo se activó
 }
 
 // ─── Módulo de Proveedores y Compras (v2) ─────────────────────────────────────

@@ -12,6 +12,8 @@ import { useSyncStatus } from './hooks/useSyncStatus'
 import { TourOverlay } from './components/onboarding/TourOverlay'
 import { ConfigModal } from './components/config/ConfigModal'
 import { BannerInstalacion } from './components/shared/BannerInstalacion'
+import { BannerDemo } from './components/shared/BannerDemo'
+import { ModalActivarBasico } from './components/config/ModalActivarBasico'
 import POSPage from './pages/POSPage'
 import FiadosPage from './pages/FiadosPage'
 import ProductosPage from './pages/ProductosPage'
@@ -449,6 +451,12 @@ function AppLayout({ primerUso }: { primerUso: boolean }) {
   const rol = usuario?.rol ?? 'dueno'
 
   const [modalActivarPro, setModalActivarPro] = useState(false)
+  const [modalActivarBasico, setModalActivarBasico] = useState(false)
+
+  const { pathname } = useLocation()
+  const ocultarBanner = ['/login', '/registro'].includes(pathname) || 
+                       pathname.startsWith('/catalogo/') || 
+                       pathname.startsWith('/entrega/')
 
   // Pull manual al hacer clic en el indicador de sync
   const [sincronizando, setSincronizando] = useState(false)
@@ -551,8 +559,11 @@ function AppLayout({ primerUso }: { primerUso: boolean }) {
         </nav>
 
         {/* Contenido principal */}
-        <main className="flex-1 overflow-hidden">
-          <Routes>
+        <main className="flex-1 flex flex-col overflow-hidden">
+          {!ocultarBanner && <BannerDemo onActivar={() => setModalActivarBasico(true)} />}
+          
+          <div className="flex-1 overflow-y-auto">
+            <Routes>
             <Route path="/"            element={<POSPage />}                                                          />
             <Route path="/fiados"      element={<FiadosPage />}                                                       />
             <Route path="/productos"   element={<RutaProtegida><ProductosPage /></RutaProtegida>}                     />
@@ -566,6 +577,7 @@ function AppLayout({ primerUso }: { primerUso: boolean }) {
             <Route path="/domicilios"   element={<RutaProtegida>{esPro ? <DomiciliosPage /> : <Navigate to="/" replace />}</RutaProtegida>}  />
             <Route path="/multi-tienda" element={<RutaProtegida><DashboardMultitienda /></RutaProtegida>}             />
           </Routes>
+          </div>
         </main>
       </div>
 
@@ -589,6 +601,7 @@ function AppLayout({ primerUso }: { primerUso: boolean }) {
       )}
 
       {modalActivarPro && <ModalActivarPro onClose={() => setModalActivarPro(false)} />}
+      {modalActivarBasico && <ModalActivarBasico onClose={() => setModalActivarBasico(false)} />}
 
       <BannerInstalacion />
       <Toaster position="bottom-right" />

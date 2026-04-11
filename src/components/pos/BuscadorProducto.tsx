@@ -1,6 +1,7 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef, useCallback, forwardRef, useImperativeHandle } from 'react'
 import { Search, Ghost, X, ScanBarcode, PackagePlus } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
+import toast from 'react-hot-toast'
 import { db } from '../../db/database'
 import type { Producto } from '../../db/schema'
 import { useVentaStore } from '../../stores/ventaStore'
@@ -17,7 +18,11 @@ type ResultadoScan =
   | { tipo: 'no_encontrado'; codigo: string }
   | null
 
-export function BuscadorProducto() {
+export interface BuscadorProductoRef {
+  focus: () => void
+}
+
+export const BuscadorProducto = forwardRef<BuscadorProductoRef>(function BuscadorProducto(_, ref) {
   const navigate = useNavigate()
   const [query, setQuery] = useState('')
   const [resultados, setResultados] = useState<Producto[]>([])
@@ -32,7 +37,17 @@ export function BuscadorProducto() {
 
   const inputRef = useRef<HTMLInputElement>(null)
   const contenedorRef = useRef<HTMLDivElement>(null)
+  // Lector USB: marca el instante en que llegó el primer carácter del escaneo
+  const tiempoInicio = useRef<number>(0)
+  // Timer para procesar escaneo rápido sin esperar Enter
+  const scanTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
   const agregarItem = useVentaStore((s) => s.agregarItem)
+
+  // Expone focus() al padre (POSPage) para re-enfocar tras cerrar modales
+  useImperativeHandle(ref, () => ({
+    focus: () => inputRef.current?.focus(),
+  }))
 
   // Búsqueda con debounce 300ms
   useEffect(() => {
@@ -69,6 +84,100 @@ export function BuscadorProducto() {
     document.addEventListener('mousedown', handler)
     return () => document.removeEventListener('mousedown', handler)
   }, [])
+
+  // ── Procesamiento único (Enter o escaneo rápido USB) ─────────────────────
+
+  /**
+   * Busca `valor` en la DB y:
+   * - 1 resultado  → agrega al carrito directo
+   * - 0 resultados → abre modal fantasma
+   * - N resultados → deja el dropdown visible (el tendero elige)
+   */
+  const procesarBusquedaUnica = useCallback(async (valor: string) => {
+    const q = valor.trim()
+    if (q.length < 2) return
+
+    const lower = q.toLowerCase()
+    const found = await db.productos
+      .filter(
+        (p) =>
+          p.activo &&
+          !p.esFantasma &&
+          (p.codigoBarras === q || p.nombre.toLowerCase().includes(lower))
+      )
+      .limit(10)
+      .toArray()
+
+    if (found.length === 1) {
+      const producto = found[0]
+      setQuery('')
+      setResultados([])
+      setAbierto(false)
+
+      if (UNIDADES_PESABLES.includes(producto.unidad)) {
+        // Pesable → abre modal de cantidad
+        setProductoModal(producto)
+      } else {
+        agregarItem({
+          productoId: producto.id,
+          nombreProducto: producto.nombre,
+          cantidad: 1,
+          precioUnitario: producto.precio,
+          descuento: 0,
+          esProductoFantasma: false,
+        })
+        toast.success(`${producto.nombre} agregado`, { duration: 1500 })
+        inputRef.current?.focus()
+      }
+    } else if (found.length === 0) {
+      // Sin resultados → ofrecer producto fantasma con la descripción pre-llenada
+      setFantasmaDesc(q)
+      setAbierto(false)
+      setQuery('')
+      setMostrarFantasma(true)
+    }
+    // Múltiples resultados: el dropdown ya está activo, el tendero elige
+  }, [agregarItem])
+
+  // ── Enter: procesar búsqueda ──────────────────────────────────────────────
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      e.preventDefault()
+      // Cancelar el timer de escaneo rápido si está pendiente
+      if (scanTimer.current) {
+        clearTimeout(scanTimer.current)
+        scanTimer.current = null
+      }
+      void procesarBusquedaUnica(query)
+    }
+  }
+
+  // ── onChange con detección de lector USB ─────────────────────────────────
+
+  const handleChange = (valor: string) => {
+    // Marca el inicio del primer carácter para medir velocidad de escritura
+    if (valor.length === 1) tiempoInicio.current = Date.now()
+
+    setQuery(valor)
+
+    // Cancelar timer anterior si existe
+    if (scanTimer.current) {
+      clearTimeout(scanTimer.current)
+      scanTimer.current = null
+    }
+
+    // Detección de escaneo rápido: >6 chars llegaron en <100ms → probable lector USB
+    const tiempoEscritura = Date.now() - tiempoInicio.current
+    const esEscaneoRapido = valor.length > 6 && tiempoEscritura < 100
+
+    if (esEscaneoRapido) {
+      // Pequeño delay para que el lector termine de escribir el código completo
+      scanTimer.current = setTimeout(() => {
+        void procesarBusquedaUnica(valor)
+      }, 150)
+    }
+  }
 
   const seleccionarProducto = (producto: Producto) => {
     setQuery('')
@@ -110,7 +219,7 @@ export function BuscadorProducto() {
     inputRef.current?.focus()
   }
 
-  // ── Escáner de código de barras ────────────────────────────────────────────
+  // ── Escáner de código de barras (cámara) ──────────────────────────────────
 
   const handleCodigoDetectado = useCallback(async (codigo: string) => {
     setMostrarEscaner(false)
@@ -159,10 +268,13 @@ export function BuscadorProducto() {
           <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-suave pointer-events-none" />
           <input
             ref={inputRef}
+            // eslint-disable-next-line jsx-a11y/no-autofocus
+            autoFocus
             type="text"
             value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Buscar producto o código de barras..."
+            onChange={(e) => handleChange(e.target.value)}
+            onKeyDown={handleKeyDown}
+            placeholder="Buscar o escanear producto..."
             className="w-full h-12 pl-10 pr-4 bg-white border border-borde rounded-xl
                        text-base text-texto placeholder:text-suave
                        focus:outline-none focus:ring-2 focus:ring-primario/40 focus:border-primario"
@@ -178,11 +290,11 @@ export function BuscadorProducto() {
           )}
         </div>
 
-        {/* Botón escáner de código de barras */}
+        {/* Botón escáner de código de barras (cámara) */}
         <button
           type="button"
           onClick={() => { setMostrarEscaner(true); setAbierto(false); setResultadoScan(null) }}
-          title="Escanear código de barras"
+          title="Escanear código de barras con cámara"
           className="flex items-center justify-center w-12 h-12 border border-borde
                      text-suave hover:border-primario hover:text-primario rounded-xl
                      transition-colors shrink-0"
@@ -309,7 +421,7 @@ export function BuscadorProducto() {
         </div>
       )}
 
-      {/* Modal escáner de código de barras */}
+      {/* Modal escáner de código de barras (cámara) */}
       {mostrarEscaner && (
         <EscanerCodigoBarras
           onCodigoDetectado={handleCodigoDetectado}
@@ -358,4 +470,4 @@ export function BuscadorProducto() {
     </div>
     </>
   )
-}
+})

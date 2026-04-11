@@ -7,7 +7,7 @@ import { SelectorClienteFiado } from '../fiado/SelectorClienteFiado'
 import type { ClienteFiado } from '../fiado/SelectorClienteFiado'
 import { formatCOP, parsearEntero } from '../../utils/moneda'
 import { generarRecibo, compartirPorWhatsApp } from '../../utils/impresion'
-import { obtenerConfig } from '../../hooks/useConfig'
+import { obtenerConfig, usePlan, incrementarVentasDemo } from '../../hooks/useConfig'
 import { registrarSalida, verificarStockInsuficiente } from '../../hooks/useStock'
 import {
   bluetoothDisponible,
@@ -518,6 +518,9 @@ function PantallaExito({
 // ─── Modal principal ──────────────────────────────────────────────────────────
 
 export function ModalCobro({ onClose, onVentaExitosa }: ModalCobroProps) {
+  const { modoDemo, demoAgotado } = usePlan()
+  const [modalActivarOpen, setModalActivarOpen] = useState(false)
+
   const items = useVentaStore((s) => s.items)
   const total = useVentaStore(selectTotal)
   const limpiarCarrito = useVentaStore((s) => s.limpiarCarrito)
@@ -570,6 +573,12 @@ export function ModalCobro({ onClose, onVentaExitosa }: ModalCobroProps) {
   }
 
   const confirmarVenta = async () => {
+    if (modoDemo && demoAgotado) {
+      setModalActivarOpen(true)
+      toast.error('Límite de ventas demo alcanzado')
+      return
+    }
+
     setEstado('confirmando')
     try {
       const sesionCajaId = await obtenerSesionActiva()
@@ -685,6 +694,11 @@ export function ModalCobro({ onClose, onVentaExitosa }: ModalCobroProps) {
           )
       )
 
+      // Si es demo, incrementar contador
+      if (modoDemo) {
+        await incrementarVentasDemo()
+      }
+
       // Construir objetos para la pantalla de éxito
       const recibido = metodo === 'efectivo' ? parsearEntero(billete) : undefined
       setVentaGuardada({
@@ -795,87 +809,80 @@ export function ModalCobro({ onClose, onVentaExitosa }: ModalCobroProps) {
   ]
 
   return (
+    <>
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50">
       <div className="bg-white w-full sm:max-w-md rounded-t-2xl sm:rounded-2xl shadow-2xl flex flex-col max-h-[90vh]">
 
         {/* Header */}
-        <div className="flex items-center justify-between p-4 border-b border-borde">
-          <div>
-            <p className="text-suave text-xs font-medium uppercase tracking-wide">Total a cobrar</p>
-            <p className="moneda font-bold text-precio text-texto leading-none">{formatCOP(total)}</p>
+        <div className="flex items-center justify-between px-5 py-4 border-b border-borde">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-xl bg-suave/10 flex items-center justify-center">
+              <ShoppingCart size={16} className="text-suave" />
+            </div>
+            <h2 className="font-display font-bold text-base text-texto">Finalizar Venta</h2>
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="w-10 h-10 flex items-center justify-center rounded-xl
+            className="w-9 h-9 flex items-center justify-center rounded-xl
                        text-suave hover:text-texto hover:bg-gray-100 transition-colors"
           >
-            <X size={20} />
+            <X size={18} />
           </button>
         </div>
 
-        {/* Selector de canal — Mostrador vs Domicilio */}
-        <div className="flex gap-2 px-4 pt-3">
-          <button
-            type="button"
-            onClick={() => setCanal('mostrador')}
-            className={[
-              'flex-1 h-16 rounded-xl border-2 font-semibold text-sm flex flex-col items-center justify-center gap-1 transition-all active:scale-95',
-              canal === 'mostrador'
-                ? 'border-primario bg-primario/8 text-primario'
-                : 'border-borde text-suave hover:border-gray-300',
-            ].join(' ')}
-          >
-            <ShoppingCart size={20} />
-            Mostrador
-          </button>
-          <button
-            type="button"
-            onClick={() => setCanal('domicilio')}
-            className={[
-              'flex-1 h-16 rounded-xl border-2 font-semibold text-sm flex flex-col items-center justify-center gap-1 transition-all active:scale-95',
-              canal === 'domicilio'
-                ? 'border-acento bg-acento/8 text-acento'
-                : 'border-borde text-suave hover:border-gray-300',
-            ].join(' ')}
-          >
-            <span className="text-lg leading-none">🛵</span>
-            Domicilio
-          </button>
+        {/* Canales (Mostrador / Domicilio) */}
+        <div className="flex p-2 gap-1 bg-fondo border-b border-borde">
+          {(['mostrador', 'domicilio'] as const).map((c) => (
+            <button
+              key={c}
+              onClick={() => setCanal(c)}
+              className={[
+                'flex-1 h-10 rounded-lg text-sm font-semibold flex items-center justify-center gap-2 transition-all',
+                canal === c 
+                  ? 'bg-white text-primario shadow-sm border border-borde' 
+                  : 'text-suave hover:bg-white/50'
+              ].join(' ')}
+            >
+              {c === 'mostrador' ? <ShoppingCart size={14} /> : <MapPin size={14} />}
+              {c.charAt(0).toUpperCase() + c.slice(1)}
+            </button>
+          ))}
         </div>
 
-        {/* Campo dirección rápida — solo cuando canal = domicilio */}
+        {/* Si es domicilio, campo de dirección rápida */}
         {canal === 'domicilio' && (
-          <div className="px-4 pt-2">
-            <div className="relative">
-              <MapPin size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-suave pointer-events-none" />
+          <div className="px-4 py-3 bg-acento/5 border-b border-acento/10 flex flex-col gap-2">
+            <div className="flex items-center gap-2">
+              <MapPin size={14} className="text-acento" />
               <input
                 type="text"
                 value={direccionRapida}
                 onChange={(e) => setDireccionRapida(e.target.value)}
-                placeholder="Dirección de entrega…"
-                className="w-full h-11 pl-9 pr-3 border border-acento/40 rounded-xl text-sm text-texto
-                           focus:outline-none focus:ring-2 focus:ring-acento/40 focus:border-acento
-                           placeholder:text-suave bg-acento/5"
+                placeholder="Dirección del domicilio (opcional)"
+                className="flex-1 bg-transparent border-none text-sm text-texto focus:ring-0 placeholder:text-suave/60"
               />
             </div>
           </div>
         )}
 
-        {/* Tabs */}
-        <div className="flex border-b border-borde px-4 pt-3 gap-2">
-          {METODOS.map(({ id, icon: Icon, label, color }) => (
+        {/* Métodos de pago */}
+        <div className="grid grid-cols-3 sm:grid-cols-4 gap-1 p-2 bg-fondo border-b border-borde">
+          {METODOS.map((m) => (
             <button
-              key={id}
-              type="button"
-              onClick={() => setMetodo(id)}
+              key={m.id}
+              onClick={() => setMetodo(m.id)}
               className={[
-                'flex items-center gap-2 pb-2 px-3 text-sm font-semibold border-b-2 transition-colors',
-                metodo === id ? `border-current ${color}` : 'border-transparent text-suave hover:text-texto',
+                'flex flex-col items-center justify-center gap-1.5 h-20 rounded-xl transition-all',
+                metodo === m.id
+                  ? 'bg-white shadow-sm border border-borde ring-2 ring-primario/10'
+                  : 'hover:bg-white/40 grayscale opacity-60'
               ].join(' ')}
             >
-              <Icon size={16} />
-              {label}
+              <m.icon size={22} className={metodo === m.id ? m.color : 'text-suave'} />
+              <span className={`text-[11px] font-bold ${metodo === m.id ? 'text-texto' : 'text-suave'}`}>
+                {m.label}
+              </span>
             </button>
           ))}
         </div>
@@ -931,8 +938,13 @@ export function ModalCobro({ onClose, onVentaExitosa }: ModalCobroProps) {
               </>
             )}
           </button>
-        </div>{/* /footer flex */}
+        </div>
       </div>
     </div>
+
+    {modalActivarOpen && (
+      <ModalActivarBasico onClose={() => setModalActivarOpen(false)} />
+    )}
+    </>
   )
 }
