@@ -149,10 +149,12 @@ pos-tienda/
 │   │   │   └── LogAnulaciones.tsx
 │   │   ├── caja/                  # Sesiones de caja
 │   │   ├── config/                # ConfigModal + ajustes de tienda
-│   │   │   └── ModalActivarPro.tsx
+│   │   │   ├── ModalActivarPro.tsx
+│   │   │   └── ModalActivarBasico.tsx # Ingreso código + botón WhatsApp soporte
 │   │   ├── onboarding/            # TourOverlay para nuevos usuarios
 │   │   └── shared/                # Componentes reutilizables
-│   │       └── ProGuard.tsx       # Wrapper que oculta contenido Pro
+│   │       ├── ProGuard.tsx       # Wrapper que oculta contenido Pro
+│   │       └── BannerDemo.tsx     # Banner persistente con conteo regresivo demo
 │   ├── pages/
 │   │   ├── POSPage.tsx            # Pantalla principal (ruta /)
 │   │   ├── FiadosPage.tsx         # Cartera de clientes (/fiados)
@@ -314,6 +316,11 @@ export interface ConfigTienda {
   codigoActivacion?: string;
   smmlv: number;                // Default: 1_423_500 (2025)
   subsidioTransporte: number;   // Default: 200_000 (2025)
+  modoDemo: boolean;            // true = sin activar. Default: true
+  ventasDemo: number;           // Contador ventas en demo. Default: 0
+  limiteVentasDemo: number;     // Default: 50
+  codigoBasico?: string;        // Código de activación Plan Básico
+  planBasicoActivadoEn?: Date;  // Cuándo se activó el Plan Básico
 }
 
 // ─── Módulo de Domicilios ─────────────────────────────────────────────────────
@@ -904,6 +911,28 @@ Ver guía completa de publicación en `docs/fase-23-play-store.md`.
 - Precio remate sugerido: 50% del precio de venta
 - Notificación diaria integrada en src/lib/notificaciones.ts
 
+### Fase 41: Lector de Barras USB en PC ✅
+- `BuscadorProducto.tsx`: `autoFocus` al montar POSPage
+- `handleKeyDown`: Enter activa `procesarBusquedaUnica()`
+- 1 resultado → agrega al carrito + toast sutil + limpia campo + re-enfoca
+- 0 resultados → abre modal fantasma con descripción pre-llenada
+- N resultados → muestra lista para que el tendero elija (sin cambios)
+- Detección escaneo rápido USB: >6 chars en <100ms → procesa automáticamente (delay 150ms)
+- Re-enfoque automático post-venta y post-modal (80ms delay)
+- `BuscadorProductoRef` vía `forwardRef` + `useImperativeHandle` para foco desde POSPage
+- Flujo cámara @zxing intacto sin cambios
+
+### Fase 42: Modo Demo + Activación Obligatoria ✅
+- `modoDemo: true` en instalaciones nuevas sin código de activación
+- Límite: 50 ventas en modo demo (`limiteVentasDemo`)
+- `BannerDemo.tsx`: banner persistente con conteo regresivo de ventas restantes
+- `ModalActivarBasico.tsx`: ingreso de código de activación + botón WhatsApp soporte
+- Venta 51+: bloqueada automáticamente, abre `ModalActivarBasico`
+- Venta en progreso: NUNCA se bloquea (principio irrompible)
+- Códigos Plan Básico: `TIENDA2025`, `BARRIO2025`, `POSBASICO2025`, `TENDERO2025`, `TIENDA2026`
+- Códigos Plan Pro: `PROTIENDA2025`, `DOMICILIOS2025`, `UPGRADE2025`
+- DB versión 16 con migración limpia de campos nuevos en ConfigTienda
+
 # Fase 27: Módulo de Empleados y Nómina Básica
 
 > Agrega esta sección al CLAUDE.md existente del proyecto pos-tienda.
@@ -1480,5 +1509,25 @@ El seed (`src/db/seed.ts`) contiene **2.712 productos** distribuidos en **41 cat
 
 ---
 
+---
+
+## 💰 Modelo Comercial
+
+| Plan      | Precio              | Condición                              |
+| --------- | ------------------- | -------------------------------------- |
+| Demo      | Gratuito            | Hasta 50 ventas, sin código requerido  |
+| Básico    | $500.000 COP único  | Código de activación requerido         |
+| Pro       | $900.000 COP único  | Incluye domicilios y catálogo público  |
+| Upgrade B→Pro | $450.000 COP único | Para tiendas ya en Plan Básico     |
+
+**Códigos de activación (hardcodeados en `useConfig.ts`):**
+
+- Plan Básico: `TIENDA2025`, `BARRIO2025`, `POSBASICO2025`, `TENDERO2025`, `TIENDA2026`
+- Plan Pro: `PROTIENDA2025`, `DOMICILIOS2025`, `UPGRADE2025`
+
+**Regla irrompible:** Una venta en progreso NUNCA se bloquea, aunque se haya alcanzado el límite de demo.
+
+---
+
 _Este documento es la fuente de verdad del proyecto._
-_Versión: 4.0 — Actualizado 9 abril 2026 — Juan Camilo Pinzón_
+_Versión: 4.1 — Actualizado 10 abril 2026 — Juan Camilo Pinzón_
