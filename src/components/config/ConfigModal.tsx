@@ -1271,7 +1271,7 @@ function SeccionCatalogo() {
 
 // ─── Sección Mi Plan ─────────────────────────────────────────────────────────
 
-function SeccionMiPlan() {
+function SeccionMiPlan({ onUnlockAdmin }: { onUnlockAdmin: () => void }) {
   const { esPro, esBasico, planActivadoEn, modoDemo, ventasDemo, limiteVentasDemo, ventasRestantesDemo } = usePlan()
   const [modalProAbierto, setModalProAbierto] = useState(false)
   const [modalBasicoAbierto, setModalBasicoAbierto] = useState(false)
@@ -1390,6 +1390,18 @@ function SeccionMiPlan() {
               Upgrade a Plan Pro
             </button>
           )}
+
+          {/* Campo oculto Admin */}
+          <input
+            type="password"
+            placeholder="•••"
+            style={{ opacity: 0.2, fontSize: '10px', width: '60px' }}
+            onChange={(e) => {
+              if (e.target.value.toUpperCase() === 'ADMIN-JUAN') {
+                onUnlockAdmin()
+              }
+            }}
+          />
         </div>
       </section>
 
@@ -1442,8 +1454,9 @@ function SeccionValoresLegales() {
               value={smmlv || ''}
               onChange={(e) => setSmmlv(Number(e.target.value))}
               className={`${INPUT_CLS} pl-7 moneda`}
-              min={0}
-              step={1000}
+              step="1"
+              min={1000000}
+              max={5000000}
             />
           </div>
         </Campo>
@@ -1455,8 +1468,8 @@ function SeccionValoresLegales() {
               value={subsidio || ''}
               onChange={(e) => setSubsidio(Number(e.target.value))}
               className={`${INPUT_CLS} pl-7 moneda`}
+              step="1"
               min={0}
-              step={1000}
             />
           </div>
         </Campo>
@@ -1492,20 +1505,6 @@ export function ConfigModal({ onClose, onReiniciarTour }: ConfigModalProps) {
   const { esPro } = usePlan()
 
   const [esAdminSecreto, setEsAdminSecreto] = useState(false)
-  const pressTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
-
-  const handleLogoTouchStart = () => {
-    pressTimer.current = setTimeout(() => {
-      const code = window.prompt('Código maestro:')
-      if (code === 'ADMIN-JUAN') {
-        setEsAdminSecreto(true)
-      }
-    }, 1500)
-  }
-
-  const handleLogoTouchEnd = () => {
-    if (pressTimer.current) clearTimeout(pressTimer.current)
-  }
 
   const {
     register,
@@ -1568,16 +1567,9 @@ export function ConfigModal({ onClose, onReiniciarTour }: ConfigModalProps) {
 
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-borde shrink-0">
-          <div 
-            className="flex items-center gap-3 cursor-pointer select-none"
-            onMouseDown={handleLogoTouchStart}
-            onMouseUp={handleLogoTouchEnd}
-            onMouseLeave={handleLogoTouchEnd}
-            onTouchStart={handleLogoTouchStart}
-            onTouchEnd={handleLogoTouchEnd}
-          >
-            <Store size={20} className="text-primario pointer-events-none" />
-            <h2 className="font-display font-bold text-lg text-texto pointer-events-none">Configuración de la tienda</h2>
+          <div className="flex items-center gap-3">
+            <Store size={20} className="text-primario" />
+            <h2 className="font-display font-bold text-lg text-texto">Configuración de la tienda</h2>
           </div>
           <button
             type="button"
@@ -1594,7 +1586,7 @@ export function ConfigModal({ onClose, onReiniciarTour }: ConfigModalProps) {
           <div className="px-5 py-4 flex flex-col gap-5">
 
             {/* Mi Plan (solo dueño) */}
-            <SeccionMiPlan />
+            <SeccionMiPlan onUnlockAdmin={() => setEsAdminSecreto(true)} />
 
             {/* Generador de Códigos Oculto */}
             {esAdminSecreto && <GeneradorCodigos />}
