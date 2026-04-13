@@ -1520,10 +1520,14 @@ El seed (`src/db/seed.ts`) contiene **2.712 productos** distribuidos en **41 cat
 | Pro       | $900.000 COP único  | Incluye domicilios y catálogo público  |
 | Upgrade B→Pro | $450.000 COP único | Para tiendas ya en Plan Básico     |
 
-**Códigos de activación (hardcodeados en `useConfig.ts`):**
+**Códigos de activación (patrones dinámicos en `useConfig.ts`):**
 
-- Plan Básico: `TIENDA2025`, `BARRIO2025`, `POSBASICO2025`, `TENDERO2025`, `TIENDA2026`
-- Plan Pro: `PROTIENDA2025`, `DOMICILIOS2025`, `UPGRADE2025`
+- Plan Básico: `^TIENDA-[A-Z0-9]{4}$` (ej: TIENDA-K7M2)
+- Plan Pro: `^PRO-[A-Z0-9]{4}$` (ej: PRO-X3BN)
+- Upgrade B→Pro: `^UPG-[A-Z0-9]{4}$` (ej: UPG-M9QP)
+
+Existe un **Generador de Códigos (Admin)** oculto en el `ConfigModal`. Para acceder, haz "hold" / "toque largo" en el logo de la tienda e ingresa la contraseña `ADMIN-JUAN`.
+_(Se mantienen compatibles los códigos legacy como TIENDA2025, PROTIENDA2025, etc.)_
 
 **Regla irrompible:** Una venta en progreso NUNCA se bloquea, aunque se haya alcanzado el límite de demo.
 

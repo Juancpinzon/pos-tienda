@@ -1477,7 +1477,7 @@ export function ConfigModal({ onClose, onReiniciarTour }: ConfigModalProps) {
   const { esPro } = usePlan()
 
   const [esAdminSecreto, setEsAdminSecreto] = useState(false)
-  const pressTimer = useRef<NodeJS.Timeout | null>(null)
+  const pressTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const handleLogoTouchStart = () => {
     pressTimer.current = setTimeout(() => {
