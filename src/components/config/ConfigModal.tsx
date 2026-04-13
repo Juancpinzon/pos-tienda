@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -25,6 +25,7 @@ import {
   enviarNotificacionPrueba,
 } from '../../lib/notificaciones'
 import { db } from '../../db/database'
+import { GeneradorCodigos } from './GeneradorCodigos'
 
 // ─── Schema ───────────────────────────────────────────────────────────────────
 
@@ -1475,6 +1476,22 @@ export function ConfigModal({ onClose, onReiniciarTour }: ConfigModalProps) {
   const config = useConfig()
   const { esPro } = usePlan()
 
+  const [esAdminSecreto, setEsAdminSecreto] = useState(false)
+  const pressTimer = useRef<NodeJS.Timeout | null>(null)
+
+  const handleLogoTouchStart = () => {
+    pressTimer.current = setTimeout(() => {
+      const code = window.prompt('Código maestro:')
+      if (code === 'ADMIN-JUAN') {
+        setEsAdminSecreto(true)
+      }
+    }, 1500)
+  }
+
+  const handleLogoTouchEnd = () => {
+    if (pressTimer.current) clearTimeout(pressTimer.current)
+  }
+
   const {
     register,
     handleSubmit,
@@ -1536,9 +1553,16 @@ export function ConfigModal({ onClose, onReiniciarTour }: ConfigModalProps) {
 
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-borde shrink-0">
-          <div className="flex items-center gap-3">
-            <Store size={20} className="text-primario" />
-            <h2 className="font-display font-bold text-lg text-texto">Configuración de la tienda</h2>
+          <div 
+            className="flex items-center gap-3 cursor-pointer select-none"
+            onMouseDown={handleLogoTouchStart}
+            onMouseUp={handleLogoTouchEnd}
+            onMouseLeave={handleLogoTouchEnd}
+            onTouchStart={handleLogoTouchStart}
+            onTouchEnd={handleLogoTouchEnd}
+          >
+            <Store size={20} className="text-primario pointer-events-none" />
+            <h2 className="font-display font-bold text-lg text-texto pointer-events-none">Configuración de la tienda</h2>
           </div>
           <button
             type="button"
@@ -1556,6 +1580,9 @@ export function ConfigModal({ onClose, onReiniciarTour }: ConfigModalProps) {
 
             {/* Mi Plan (solo dueño) */}
             <SeccionMiPlan />
+
+            {/* Generador de Códigos Oculto */}
+            {esAdminSecreto && <GeneradorCodigos />}
 
             {/* Catálogo de productos */}
             <SeccionCatalogo />

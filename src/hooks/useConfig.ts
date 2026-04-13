@@ -25,11 +25,39 @@ export const CONFIG_DEFAULTS: Omit<ConfigTienda, 'id'> = {
   limiteVentasDemo: 50,
 }
 
-// Códigos válidos para activar el Plan Pro (hardcodeados)
-const CODIGOS_PRO = ['PROTIENDA2025', 'DOMICILIOS2025', 'UPGRADE2025']
-
-// Códigos válidos para activar el Plan Básico (Fase 41)
-const CODIGOS_BASICO = ['TIENDA2025', 'BARRIO2025', 'POSBASICO2025', 'TENDERO2025', 'TIENDA2026']
+// Validar formato del código
+export function validarFormatoCodigo(codigo: string): {
+  valido: boolean;
+  plan: "basico" | "pro" | "upgrade" | null;
+} {
+  const codigoUpper = codigo.trim().toUpperCase()
+  
+  // Patrón: PREFIJO-XXXX donde XXXX son 4 chars alfanuméricos
+  const patronBasico = /^TIENDA-[A-Z0-9]{4}$/
+  const patronPro = /^PRO-[A-Z0-9]{4}$/
+  const patronUpgrade = /^UPG-[A-Z0-9]{4}$/
+  
+  // Códigos legacy (mantener compatibilidad con códigos anteriores)
+  const codigosLegacyBasico = [
+    "TIENDA2025", "BARRIO2025", "POSBASICO2025",
+    "TENDERO2025", "TIENDA2026"
+  ]
+  const codigosLegacyPro = [
+    "PROTIENDA2025", "DOMICILIOS2025", "UPGRADE2025"
+  ]
+  
+  if (patronBasico.test(codigoUpper) || codigosLegacyBasico.includes(codigoUpper)) {
+    return { valido: true, plan: "basico" }
+  }
+  if (patronPro.test(codigoUpper) || codigosLegacyPro.includes(codigoUpper)) {
+    return { valido: true, plan: "pro" }
+  }
+  if (patronUpgrade.test(codigoUpper)) {
+    return { valido: true, plan: "upgrade" }
+  }
+  
+  return { valido: false, plan: null }
+}
 
 /**
  * Configuración reactiva de la tienda. Retorna defaults si aún no se ha guardado.
@@ -86,7 +114,9 @@ export function usePlan() {
  * Retorna true si activó, false si el código es inválido.
  */
 export async function activarPlanPro(codigo: string): Promise<boolean> {
-  if (!CODIGOS_PRO.includes(codigo.trim().toUpperCase())) return false
+  const resultado = validarFormatoCodigo(codigo)
+  if (!resultado.valido || 
+      (resultado.plan !== "pro" && resultado.plan !== "upgrade")) return false
   await guardarConfig({
     planActivo: 'pro',
     planActivadoEn: new Date(),
@@ -101,7 +131,8 @@ export async function activarPlanPro(codigo: string): Promise<boolean> {
  * Retorna true si activó, false si el código es inválido.
  */
 export async function activarPlanBasico(codigo: string): Promise<boolean> {
-  if (!CODIGOS_BASICO.includes(codigo.trim().toUpperCase())) return false
+  const resultado = validarFormatoCodigo(codigo)
+  if (!resultado.valido || resultado.plan !== "basico") return false
   await guardarConfig({
     modoDemo: false,
     codigoBasico: codigo.trim().toUpperCase(),
