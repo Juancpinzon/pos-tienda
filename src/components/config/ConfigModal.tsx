@@ -1363,11 +1363,25 @@ function SeccionMiPlan() {
             )}
           </div>
 
+          {/* Botón activar Plan Básico (solo en modo demo) */}
+          {modoDemo && (
+            <button
+              type="button"
+              onClick={() => setModalBasicoAbierto(true)}
+              className="flex items-center justify-center gap-2 h-10 bg-primario text-white
+                         rounded-xl text-sm font-semibold
+                         hover:bg-primario-hover active:scale-95 transition-all"
+            >
+              <Lock size={14} />
+              Activar Plan Básico
+            </button>
+          )}
+
           {/* Botón upgrade (solo si básico) */}
           {esBasico && (
             <button
               type="button"
-              onClick={() => setModalAbierto(true)}
+              onClick={() => setModalProAbierto(true)}
               className="flex items-center justify-center gap-2 h-10 bg-acento text-white
                          rounded-xl text-sm font-semibold
                          hover:bg-acento-hover active:scale-95 transition-all"
@@ -1379,7 +1393,8 @@ function SeccionMiPlan() {
         </div>
       </section>
 
-      {modalAbierto && <ModalActivarPro onClose={() => setModalAbierto(false)} />}
+      {modalProAbierto && <ModalActivarPro onClose={() => setModalProAbierto(false)} />}
+      {modalBasicoAbierto && <ModalActivarBasico onClose={() => setModalBasicoAbierto(false)} />}
     </>
   )
 }

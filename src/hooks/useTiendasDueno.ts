@@ -54,10 +54,15 @@ export async function registrarPropietarioTienda(
   tiendaId:  string
 ): Promise<void> {
   if (!supabaseConfigurado) return
-  await supabase
-    .from('propietarios_tienda')
-    .upsert({ usuario_id: usuarioId, tienda_id: tiendaId }, { onConflict: 'usuario_id,tienda_id' })
-    .throwOnError()
+  try {
+    await supabase
+      .from('propietarios_tienda')
+      .upsert({ usuario_id: usuarioId, tienda_id: tiendaId }, { onConflict: 'usuario_id,tienda_id' })
+      .throwOnError()
+  } catch (error) {
+    // Tabla no existe en Supabase — ignorar silenciosamente
+    console.warn('propietarios_tienda no disponible:', error)
+  }
 }
 
 // ─── Resumen de una tienda (consulta Supabase) ────────────────────────────────
