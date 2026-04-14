@@ -1271,10 +1271,11 @@ function SeccionCatalogo() {
 
 // ─── Sección Mi Plan ─────────────────────────────────────────────────────────
 
-function SeccionMiPlan({ onUnlockAdmin }: { onUnlockAdmin: () => void }) {
+function SeccionMiPlan() {
   const { esPro, esBasico, planActivadoEn, modoDemo, ventasDemo, limiteVentasDemo, ventasRestantesDemo } = usePlan()
-  const [modalProAbierto, setModalProAbierto] = useState(false)
-  const [modalBasicoAbierto, setModalBasicoAbierto] = useState(false)
+  const [modalProAbierto, setModalProAbierto]           = useState(false)
+  const [modalBasicoAbierto, setModalBasicoAbierto]     = useState(false)
+  const [mostrarGeneradorAdmin, setMostrarGeneradorAdmin] = useState(false)
   const usuario = useAuthStore((s) => s.usuario)
   if (usuario?.rol !== 'dueno') return null
 
@@ -1391,19 +1392,22 @@ function SeccionMiPlan({ onUnlockAdmin }: { onUnlockAdmin: () => void }) {
             </button>
           )}
 
-          {/* Campo oculto Admin */}
-          <input
-            type="password"
-            placeholder="•••"
-            style={{ opacity: 0.2, fontSize: '10px', width: '60px' }}
-            onChange={(e) => {
-              if (e.target.value.toUpperCase() === 'ADMIN-JUAN') {
-                onUnlockAdmin()
-              }
-            }}
-          />
+          {/* Versión — doble clic abre generador admin */}
+          <p
+            style={{ fontSize: '9px', color: 'transparent', cursor: 'default', userSelect: 'none' }}
+            onDoubleClick={() => setMostrarGeneradorAdmin(true)}
+          >
+            v4.1
+          </p>
         </div>
       </section>
+
+      {/* Generador de códigos admin (oculto hasta doble clic) */}
+      {mostrarGeneradorAdmin && (
+        <div style={{ marginTop: '12px' }}>
+          <GeneradorCodigos onCerrar={() => setMostrarGeneradorAdmin(false)} />
+        </div>
+      )}
 
       {modalProAbierto && <ModalActivarPro onClose={() => setModalProAbierto(false)} />}
       {modalBasicoAbierto && <ModalActivarBasico onClose={() => setModalBasicoAbierto(false)} />}
@@ -1504,8 +1508,6 @@ export function ConfigModal({ onClose, onReiniciarTour }: ConfigModalProps) {
   const config = useConfig()
   const { esPro } = usePlan()
 
-  const [esAdminSecreto, setEsAdminSecreto] = useState(false)
-
   const {
     register,
     handleSubmit,
@@ -1586,10 +1588,7 @@ export function ConfigModal({ onClose, onReiniciarTour }: ConfigModalProps) {
           <div className="px-5 py-4 flex flex-col gap-5">
 
             {/* Mi Plan (solo dueño) */}
-            <SeccionMiPlan onUnlockAdmin={() => setEsAdminSecreto(true)} />
-
-            {/* Generador de Códigos Oculto */}
-            {esAdminSecreto && <GeneradorCodigos />}
+            <SeccionMiPlan />
 
             {/* Catálogo de productos */}
             <SeccionCatalogo />
