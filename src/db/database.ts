@@ -181,6 +181,57 @@ class POSDatabase extends Dexie {
         }
       })
     })
+
+    // Versión 17: Migración de categorías mal asignadas y duplicados en producción
+    this.version(17).stores({}).upgrade(async (tx) => {
+      // 1. Unificar Cigarrillos (10) y eliminar Tabacos (40)
+      await tx.table('categorias').where('id').equals(10).modify({ nombre: 'Cigarrillos y Tabacos' })
+      await tx.table('categorias').where('id').equals(40).delete()
+      
+      await tx.table('productos').where('categoriaId').equals(40).modify({ categoriaId: 10 })
+
+      // 2. Corregir Frutas y Verduras asignadas a Cigarrillos (10 -> 9)
+      const fruitVegNames = [
+        'Zanahoria', 'Cebolla Cabezona', 'Ajo Cabeza', 'Ajo Pelado',
+        'Apio', 'Cilantro', 'Perejil', 'Pimentón', 'Ahuyama',
+        'Habichuela', 'Espinaca', 'Brócoli', 'Coliflor', 'Remolacha', 'Naranja',
+        'Mandarina', 'Manzana', 'Pera', 'Durazno', 'Kiwi', 'Uvas',
+        'Fresa', 'Mora', 'Maracuyá', 'Granadilla', 'Papaya', 'Sandía'
+      ]
+
+      await tx.table('productos').where('categoriaId').equals(10).modify((prod) => {
+        if (fruitVegNames.some(v => prod.nombre.includes(v))) {
+          prod.categoriaId = 9
+        }
+      })
+
+      // 3. Corregir Aguardientes y eliminar duplicados
+      // Asegurar que todos los que tengan "Aguardiente" pasen a la 18
+      const todosMover = await tx.table('productos').filter((p: any) => p.nombre.includes('Aguardiente') && p.categoriaId !== 18).toArray()
+      for (const prod of todosMover) {
+        await tx.table('productos').update(prod.id, { categoriaId: 18 })
+      }
+
+      // Eliminar duplicados exactos en categoría 18 (y 17 si quedó alguno)
+      const todosAguardientes = await tx.table('productos')
+        .filter((p: any) => p.nombre.includes('Aguardiente'))
+        .toArray()
+        
+      const vistos = new Set<string>()
+      const idsParaEliminar: number[] = []
+
+      for (const prod of todosAguardientes) {
+        if (vistos.has(prod.nombre)) {
+          if (prod.id) idsParaEliminar.push(prod.id)
+        } else {
+          vistos.add(prod.nombre)
+        }
+      }
+
+      if (idsParaEliminar.length > 0) {
+        await tx.table('productos').bulkDelete(idsParaEliminar)
+      }
+    })
   }
 }
 
