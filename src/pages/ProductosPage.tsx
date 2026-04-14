@@ -353,14 +353,14 @@ export default function ProductosPage() {
             type="button"
             onClick={() => seleccionarCategoria(null)}
             className={[
-              'w-full flex items-center gap-2.5 px-3 py-0 min-h-[56px] text-left transition-colors',
+              'w-full flex items-center gap-2.5 px-3 py-2 min-h-[56px] text-left transition-colors',
               categoriaFiltro === null
                 ? 'bg-primario text-white'
                 : 'text-texto hover:bg-gray-50',
             ].join(' ')}
           >
             <span className="text-lg w-6 text-center shrink-0">📦</span>
-            <span className="flex-1 text-[15px] font-medium truncate">Todos</span>
+            <span className="flex-1 text-[15px] font-medium whitespace-normal break-words leading-tight">Todos</span>
             <span className={`text-xs tabular-nums shrink-0 ${
               categoriaFiltro === null ? 'text-white/70' : 'text-suave'
             }`}>
@@ -377,7 +377,7 @@ export default function ProductosPage() {
                 type="button"
                 onClick={() => seleccionarCategoria(c.id!)}
                 className={[
-                  'w-full flex items-center gap-2.5 px-3 py-0 min-h-[56px] text-left transition-colors',
+                  'w-full flex items-center gap-2.5 px-3 py-2 min-h-[56px] text-left transition-colors',
                   'border-t border-borde/40',
                   activa
                     ? 'bg-primario text-white'
@@ -385,7 +385,7 @@ export default function ProductosPage() {
                 ].join(' ')}
               >
                 <span className="text-lg w-6 text-center shrink-0">{c.emoji}</span>
-                <span className="flex-1 text-[15px] font-medium truncate leading-tight">{c.nombre}</span>
+                <span className="flex-1 text-[15px] font-medium whitespace-normal break-words leading-tight">{c.nombre}</span>
                 <span className={`text-xs tabular-nums shrink-0 ${
                   activa ? 'text-white/70' : 'text-suave'
                 }`}>
@@ -427,7 +427,7 @@ export default function ProductosPage() {
                     <div key={f.nombreProducto} className="flex items-center gap-3 px-4 py-3">
                       <span className="text-xl">👻</span>
                       <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-texto truncate">
+                        <p className="text-sm font-medium text-texto whitespace-normal break-words leading-tight">
                           {f.nombreProducto === 'Producto sin registrar' ? '(sin descripción)' : f.nombreProducto}
                         </p>
                         <p className="text-xs text-suave">

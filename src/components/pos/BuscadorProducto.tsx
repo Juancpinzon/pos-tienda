@@ -380,7 +380,7 @@ export const BuscadorProducto = forwardRef<BuscadorProductoRef>(function Buscado
               className="w-full flex items-center justify-between px-4 py-3
                          hover:bg-fondo text-left transition-colors border-b border-borde/50 last:border-0"
             >
-              <span className="text-base text-texto font-medium truncate pr-4">{p.nombre}</span>
+              <span className="text-base text-texto font-medium whitespace-normal break-words leading-tight pr-4">{p.nombre}</span>
               <span className="moneda text-primario font-bold shrink-0">{formatCOP(p.precio)}</span>
             </button>
           ))}

@@ -62,8 +62,8 @@ function CardProducto({ producto, emoji, onPesable }: CardProps) {
                  transition-all min-h-[80px] text-center"
     >
       <span className="text-2xl leading-none">{emoji}</span>
-      <span className="text-xs font-medium text-texto leading-tight line-clamp-2 w-full">
-        {producto.nombre.length > 20 ? producto.nombre.slice(0, 18) + '…' : producto.nombre}
+      <span className="text-xs font-medium text-texto leading-tight whitespace-normal break-words w-full px-1">
+        {producto.nombre}
       </span>
       <span className="moneda text-primario font-bold text-sm">{formatCOP(producto.precio)}</span>
     </button>

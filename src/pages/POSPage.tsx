@@ -196,7 +196,7 @@ export default function POSPage() {
             {emojiCarrito
               ? <span className="text-base leading-none">{emojiCarrito}</span>
               : <ShoppingCart size={16} className="text-primario" />}
-            <span className="text-xs font-semibold text-suave uppercase tracking-wide flex-1 truncate">
+            <span className="text-xs font-semibold text-suave uppercase tracking-wide flex-1 whitespace-normal break-words leading-tight">
               {labelCarrito}
             </span>
             {cuentaActiva && (
@@ -258,7 +258,7 @@ export default function POSPage() {
                 {emojiCarrito
                   ? <span className="text-lg leading-none">{emojiCarrito}</span>
                   : <ShoppingCart size={18} className="text-primario" />}
-                <span className="font-semibold text-texto truncate max-w-[180px]">
+                <span className="font-semibold text-texto whitespace-normal break-words leading-tight max-w-[180px]">
                   {labelCarrito}
                 </span>
               </div>

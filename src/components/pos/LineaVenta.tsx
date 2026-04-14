@@ -52,7 +52,7 @@ export function LineaVenta({ item, index }: LineaVentaProps) {
 
       {/* Nombre */}
       <div className="flex-1 w-full sm:w-auto min-w-0">
-        <p className="text-sm font-medium text-texto line-clamp-2 md:truncate leading-tight text-balance" title={item.nombreProducto}>
+        <p className="text-sm font-medium text-texto whitespace-normal break-words leading-tight text-balance" title={item.nombreProducto}>
           {item.esProductoFantasma && (
             <span className="text-acento text-xs mr-1">👻</span>
           )}
