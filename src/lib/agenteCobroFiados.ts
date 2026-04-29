@@ -115,18 +115,27 @@ export async function verificarFiadosVencidos(): Promise<ResultadoCobroFiados | 
 /**
  * Punto de entrada del agente. Se llama una vez al montar la app.
  *
+ * @param onFiadosDetectados  Callback opcional. Se invoca con el resultado
+ *   cuando hay clientes en mora, además de la push notification.
+ *   Útil para mostrar un toast en la UI sin acoplar el agente a React.
+ *
  * Guarda en localStorage la fecha de la última ejecución para no spamear
  * al tendero con la misma notificación más de una vez al día.
  * Los errores internos deben manejarse con .catch() en el llamador.
  */
-export async function ejecutarAgenteFiados(): Promise<void> {
+export async function ejecutarAgenteFiados(
+  onFiadosDetectados?: (resultado: ResultadoCobroFiados) => void,
+): Promise<void> {
   // Guardia diaria: no correr más de una vez por día
   if (yaCorrioHoy()) return
 
   const resultado = await verificarFiadosVencidos()
 
   if (resultado) {
+    // Push notification (puede ser ignorada si no hay permiso)
     await notificarCobroFiados(resultado)
+    // Callback de UI — el llamador decide cómo presentarlo (toast, modal, etc.)
+    onFiadosDetectados?.(resultado)
   }
 
   // Marcar SIEMPRE al final, incluso si no hubo mora, para no repetir la consulta

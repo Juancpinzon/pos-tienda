@@ -30,7 +30,9 @@ import CatalogoPublicoPage from './pages/CatalogoPublicoPage'
 import LoginPage from './pages/LoginPage'
 import RegisterPage from './pages/RegisterPage'
 import { Toaster } from 'react-hot-toast'
+import toast from 'react-hot-toast'
 import { formatCOP } from './utils/moneda'
+import { ToastFiados } from './components/shared/ToastFiados'
 import { useAuthStore, puedeAcceder, type TiendaResumen, type RolUsuario } from './stores/authStore'
 import { supabase, supabaseConfigurado } from './lib/supabase'
 import { startAutoSync, stopAutoSync, pullFromSupabase } from './lib/sync'
@@ -374,7 +376,13 @@ export default function App() {
   useEffect(() => {
     if (!isLoading) {
       // Agente de cobro de fiados: corre máximo una vez al día
-      ejecutarAgenteFiados().catch(console.error)
+      // El callback muestra un toast persistente además de la push notification
+      ejecutarAgenteFiados((resultado) => {
+        toast.custom(
+          (t) => <ToastFiados resultado={resultado} toastId={t.id} />,
+          { duration: Infinity, position: 'bottom-right' },
+        )
+      }).catch(console.error)
       // Solicitar permiso de notificaciones la primera vez que el usuario abre la app
       if ('Notification' in window && Notification.permission === 'default') {
         Notification.requestPermission()
