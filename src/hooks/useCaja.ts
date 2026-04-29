@@ -5,6 +5,8 @@ import { useState, useEffect } from 'react'
 import { liveQuery } from 'dexie'
 import { db } from '../db/database'
 import type { SesionCaja, GastoCaja } from '../db/schema'
+import { verificarStockAlCerrarCaja } from '../lib/agenteReposicion'
+import { notificarReposicion } from '../lib/notificaciones'
 
 // ─── Tipos ───────────────────────────────────────────────────────────────────
 
@@ -293,6 +295,12 @@ export async function cerrarCaja(
     cerradaEn: new Date(),
     notas,
   })
+
+  // ── Agente de Reposición Automática ──────────────────────────────────────
+  // La sesión ya quedó cerrada arriba. Este bloque es un side-effect opcional:
+  // si falla (sin permiso, sin stock configurado, etc.) el cierre NO se revierte.
+  const resumenReposicion = await verificarStockAlCerrarCaja()
+  if (resumenReposicion) notificarReposicion(resumenReposicion).catch(console.error)
 }
 
 /**

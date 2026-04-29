@@ -411,3 +411,32 @@ export async function enviarNotificacionPrueba(): Promise<void> {
     '/',
   )
 }
+
+// ─── Reposición de stock al cerrar caja ──────────────────────────────────────
+
+import type { ResumenReposicion } from './agenteReposicion'
+
+/**
+ * Muestra una notificación push al cerrar caja cuando hay productos por reponer.
+ * Al tocar la notificación, lleva directamente a /pedido (lista de pedido).
+ *
+ * No tiene rate-limit: se dispara una única vez por cierre de caja, no en bucle.
+ * Si el permiso de notificaciones no está concedido, mostrarNotificacion lo ignora.
+ */
+export async function notificarReposicion(resumen: ResumenReposicion): Promise<void> {
+  const { totalProductos, productos } = resumen
+
+  // Pluralizar correctamente en español
+  const titulo = `📦 ${totalProductos} producto${totalProductos === 1 ? '' : 's'} por pedir`
+
+  // Mostrar los primeros 3 nombres; si hay más, añadir "y N más"
+  const primeros = productos.slice(0, 3).map((p) => p.nombre)
+  const resto = totalProductos - primeros.length
+  const cuerpo =
+    resto > 0
+      ? `${primeros.join(', ')} y ${resto} más`
+      : primeros.join(', ')
+
+  // Deep-link a /pedido al tocar la notificación
+  await mostrarNotificacion(titulo, cuerpo, '/pedido')
+}
