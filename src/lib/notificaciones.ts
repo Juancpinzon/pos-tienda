@@ -444,13 +444,16 @@ import type { ResultadoCobroFiados } from './agenteCobroFiados'
  * Si el permiso de notificaciones no está concedido, mostrarNotificacion lo ignora.
  */
 export async function notificarCobroFiados(resultado: ResultadoCobroFiados): Promise<void> {
-  const { totalClientes, clientes } = resultado
+  const { totalClientes, totalDeuda, clientes } = resultado
 
-  // Pluralizar correctamente en español
-  const titulo = `💜 ${totalClientes} cliente${totalClientes === 1 ? '' : 's'} con fiado pendiente`
+  // Título: cantidad de clientes + deuda total en pesos colombianos
+  const titulo = `💜 ${totalClientes} cliente${totalClientes === 1 ? '' : 's'} · ${formatCOPLocal(totalDeuda)} pendiente`
 
-  // Mostrar los primeros 2 clientes con su antigüedad; si hay más, añadir "y N más"
-  const primeros = clientes.slice(0, 2).map((c) => `${c.nombre} (${c.diasSinPago} días)`)
+  // Cuerpo: primeros 2 clientes con deuda y días. Ejemplo:
+  // "Jorge $85.000 (32d), María $42.000 (8d) y 3 más"
+  const primeros = clientes
+    .slice(0, 2)
+    .map((c) => `${c.nombre} ${formatCOPLocal(c.totalDeuda)} (${c.diasSinPago}d)`)
   const resto = totalClientes - primeros.length
   const cuerpo =
     resto > 0
