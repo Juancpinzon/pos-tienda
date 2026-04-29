@@ -440,3 +440,33 @@ export async function notificarReposicion(resumen: ResumenReposicion): Promise<v
   // Deep-link a /pedido al tocar la notificación
   await mostrarNotificacion(titulo, cuerpo, '/pedido')
 }
+
+// ─── Cobro de fiados (Agente 4) ───────────────────────────────────────────────
+
+import type { ResultadoCobroFiados } from './agenteCobroFiados'
+
+/**
+ * Muestra una notificación push cuando hay clientes con mora >= 7 días.
+ * Al tocar la notificación, lleva directamente a /fiados (módulo de cartera).
+ *
+ * Se llama desde ejecutarAgenteFiados(), que ya aplica el guard diario,
+ * por lo tanto esta función no aplica rate-limit propio.
+ * Si el permiso de notificaciones no está concedido, mostrarNotificacion lo ignora.
+ */
+export async function notificarCobroFiados(resultado: ResultadoCobroFiados): Promise<void> {
+  const { totalClientes, clientes } = resultado
+
+  // Pluralizar correctamente en español
+  const titulo = `💜 ${totalClientes} cliente${totalClientes === 1 ? '' : 's'} con fiado pendiente`
+
+  // Mostrar los primeros 2 clientes con su antigüedad; si hay más, añadir "y N más"
+  const primeros = clientes.slice(0, 2).map((c) => `${c.nombre} (${c.diasSinPago} días)`)
+  const resto = totalClientes - primeros.length
+  const cuerpo =
+    resto > 0
+      ? `${primeros.join(', ')} y ${resto} más`
+      : primeros.join(', ')
+
+  // Deep-link a /fiados al tocar la notificación
+  await mostrarNotificacion(titulo, cuerpo, '/fiados')
+}

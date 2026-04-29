@@ -36,6 +36,7 @@ import { supabase, supabaseConfigurado } from './lib/supabase'
 import { startAutoSync, stopAutoSync, pullFromSupabase } from './lib/sync'
 import { cargarTiendasDueno, registrarPropietarioTienda, cambiarTiendaActiva } from './hooks/useTiendasDueno'
 import { iniciarScheduler } from './lib/notificaciones'
+import { ejecutarAgenteFiados } from './lib/agenteCobroFiados'
 
 // ─── Pantallas de carga / error ───────────────────────────────────────────────
 
@@ -372,6 +373,8 @@ export default function App() {
   // Iniciar scheduler de notificaciones (solo cuando hay usuario autenticado o modo local)
   useEffect(() => {
     if (!isLoading) {
+      // Agente de cobro de fiados: corre máximo una vez al día
+      ejecutarAgenteFiados().catch(console.error)
       return iniciarScheduler()
     }
   }, [isLoading])
