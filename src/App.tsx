@@ -375,6 +375,10 @@ export default function App() {
     if (!isLoading) {
       // Agente de cobro de fiados: corre máximo una vez al día
       ejecutarAgenteFiados().catch(console.error)
+      // Solicitar permiso de notificaciones la primera vez que el usuario abre la app
+      if ('Notification' in window && Notification.permission === 'default') {
+        Notification.requestPermission()
+      }
       return iniciarScheduler()
     }
   }, [isLoading])
