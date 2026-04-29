@@ -414,8 +414,6 @@ import type { ResumenReposicion } from './agenteReposicion'
  * Si el permiso de notificaciones no está concedido, mostrarNotificacion lo ignora.
  */
 export async function notificarReposicion(resumen: ResumenReposicion): Promise<void> {
-  console.log('[Agente2] notificarReposicion llamada', resumen)
-
   const { totalProductos, productos } = resumen
 
   // Pluralizar correctamente en español
@@ -428,8 +426,6 @@ export async function notificarReposicion(resumen: ResumenReposicion): Promise<v
     resto > 0
       ? `${primeros.join(', ')} y ${resto} más`
       : primeros.join(', ')
-
-  console.log('[Agente2] disparando notificación', { titulo, cuerpo, permiso: Notification.permission })
 
   // Deep-link a /pedido al tocar la notificación
   await mostrarNotificacion(titulo, cuerpo, '/pedido')
