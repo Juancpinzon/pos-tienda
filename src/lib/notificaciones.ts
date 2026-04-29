@@ -64,28 +64,18 @@ async function mostrarNotificacion(
     badge: '/icons/icon-192.png',
     tag: titulo,            // evita notificaciones duplicadas con el mismo título
     requireInteraction: false,
-    // data se usa en el handler de click del service worker
     data: { url: rutaDestino ?? '/' },
   }
 
-  try {
-    if ('serviceWorker' in navigator) {
-      const reg = await navigator.serviceWorker.ready
-      await reg.showNotification(titulo, opciones)
-    } else {
-      const n = new Notification(titulo, opciones)
-      if (rutaDestino) {
-        n.onclick = () => {
-          window.focus()
-          window.location.pathname = rutaDestino
-        }
-      }
-    }
-  } catch {
-    // Fallback directo si el SW falla
-    const n = new Notification(titulo, opciones)
-    if (rutaDestino) {
-      n.onclick = () => { window.focus(); window.location.pathname = rutaDestino }
+  // NOTA: NO usamos navigator.serviceWorker.ready porque esa promesa puede
+  // quedar pendiente indefinidamente si el SW no está activo (dev, web sin SW).
+  // new Notification() directo funciona siempre que el permiso esté granted
+  // y la pestaña esté activa, que es exactamente nuestro caso de uso.
+  const n = new Notification(titulo, opciones)
+  if (rutaDestino) {
+    n.onclick = () => {
+      window.focus()
+      window.location.pathname = rutaDestino
     }
   }
 }
@@ -424,6 +414,8 @@ import type { ResumenReposicion } from './agenteReposicion'
  * Si el permiso de notificaciones no está concedido, mostrarNotificacion lo ignora.
  */
 export async function notificarReposicion(resumen: ResumenReposicion): Promise<void> {
+  console.log('[Agente2] notificarReposicion llamada', resumen)
+
   const { totalProductos, productos } = resumen
 
   // Pluralizar correctamente en español
@@ -436,6 +428,8 @@ export async function notificarReposicion(resumen: ResumenReposicion): Promise<v
     resto > 0
       ? `${primeros.join(', ')} y ${resto} más`
       : primeros.join(', ')
+
+  console.log('[Agente2] disparando notificación', { titulo, cuerpo, permiso: Notification.permission })
 
   // Deep-link a /pedido al tocar la notificación
   await mostrarNotificacion(titulo, cuerpo, '/pedido')
