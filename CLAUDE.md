@@ -222,8 +222,8 @@ export interface Producto {
   activo: boolean;
   creadoEn: Date;
   actualizadoEn: Date;
-  fechaVencimiento?: Date;  // Opcional — para productos perecederos
-  loteNumero?: string;      // Número de lote opcional
+  fechaVencimiento?: Date; // Opcional — para productos perecederos
+  loteNumero?: string; // Número de lote opcional
 }
 
 export interface Cliente {
@@ -314,13 +314,13 @@ export interface ConfigTienda {
   planActivo: "basico" | "pro";
   planActivadoEn?: Date;
   codigoActivacion?: string;
-  smmlv: number;                // Default: 1_423_500 (2025)
-  subsidioTransporte: number;   // Default: 200_000 (2025)
-  modoDemo: boolean;            // true = sin activar. Default: true
-  ventasDemo: number;           // Contador ventas en demo. Default: 0
-  limiteVentasDemo: number;     // Default: 50
-  codigoBasico?: string;        // Código de activación Plan Básico
-  planBasicoActivadoEn?: Date;  // Cuándo se activó el Plan Básico
+  smmlv: number; // Default: 1_423_500 (2025)
+  subsidioTransporte: number; // Default: 200_000 (2025)
+  modoDemo: boolean; // true = sin activar. Default: true
+  ventasDemo: number; // Contador ventas en demo. Default: 0
+  limiteVentasDemo: number; // Default: 50
+  codigoBasico?: string; // Código de activación Plan Básico
+  planBasicoActivadoEn?: Date; // Cuándo se activó el Plan Básico
 }
 
 // ─── Módulo de Domicilios ─────────────────────────────────────────────────────
@@ -406,7 +406,7 @@ export interface AuditoriaAnulacion {
   ventaTipoPago: string;
   usuarioNombre: string;
   usuarioRol: string;
-  motivo: string;           // Mínimo 10 caracteres, obligatorio
+  motivo: string; // Mínimo 10 caracteres, obligatorio
   creadoEn: Date;
 }
 
@@ -427,7 +427,7 @@ export interface Merma {
 export interface MovimientoStock {
   id?: number;
   productoId: number;
-  delta: number;            // Positivo = entrada, negativo = salida
+  delta: number; // Positivo = entrada, negativo = salida
   origen: "venta" | "compra" | "ajuste" | "merma";
   referenciaId?: number;
   deviceId: string;
@@ -584,21 +584,21 @@ CIERRE:
 
 ### Rutas disponibles
 
-| Ruta              | Página                                        | Roles                    |
-| ----------------- | --------------------------------------------- | ------------------------ |
-| `/`               | POSPage — POS principal                       | dueño, empleado          |
-| `/fiados`         | FiadosPage — Cartera de clientes              | dueño, empleado          |
-| `/productos`      | ProductosPage — CRUD de productos             | dueño                    |
-| `/inventario`     | InventarioPage — Stock y alertas              | dueño                    |
-| `/proveedores`    | ProveedoresPage — Compras a proveedores       | dueño                    |
-| `/caja`           | CajaPage — Apertura/cierre de caja            | dueño                    |
-| `/reportes`       | ReportesPage — Métricas del negocio           | dueño                    |
-| `/historial`      | HistorialVentasPage — Todas las ventas        | dueño, empleado          |
-| `/pedido`         | ListaPedidoPage — Lista de pedido a proveedor | dueño                    |
-| `/multi-tienda`   | DashboardMultitienda — Vista consolidada      | dueño (+2 tiendas)       |
-| `/domicilios`     | DomiciliosPage — Gestión de pedidos           | dueño, encargado         |
-| `/catalogo/:slug` | CatalogoPublicoPage — Catálogo público        | **público** (sin auth)   |
-| `/entrega/:token` | EntregaRepartidorPage — Confirmar entrega     | **público** (sin auth)   |
+| Ruta              | Página                                        | Roles                  |
+| ----------------- | --------------------------------------------- | ---------------------- |
+| `/`               | POSPage — POS principal                       | dueño, empleado        |
+| `/fiados`         | FiadosPage — Cartera de clientes              | dueño, empleado        |
+| `/productos`      | ProductosPage — CRUD de productos             | dueño                  |
+| `/inventario`     | InventarioPage — Stock y alertas              | dueño                  |
+| `/proveedores`    | ProveedoresPage — Compras a proveedores       | dueño                  |
+| `/caja`           | CajaPage — Apertura/cierre de caja            | dueño                  |
+| `/reportes`       | ReportesPage — Métricas del negocio           | dueño                  |
+| `/historial`      | HistorialVentasPage — Todas las ventas        | dueño, empleado        |
+| `/pedido`         | ListaPedidoPage — Lista de pedido a proveedor | dueño                  |
+| `/multi-tienda`   | DashboardMultitienda — Vista consolidada      | dueño (+2 tiendas)     |
+| `/domicilios`     | DomiciliosPage — Gestión de pedidos           | dueño, encargado       |
+| `/catalogo/:slug` | CatalogoPublicoPage — Catálogo público        | **público** (sin auth) |
+| `/entrega/:token` | EntregaRepartidorPage — Confirmar entrega     | **público** (sin auth) |
 
 ### Sistema de roles
 
@@ -853,6 +853,7 @@ Ver guía completa de publicación en `docs/fase-23-play-store.md`.
 - Cliente verifica sesión activa antes de invocar Edge Functions
 
 ### Fase 33: Log de Auditoría de Anulaciones ✅
+
 - Tabla auditoriaAnulaciones en Dexie
 - Motivo obligatorio (≥10 chars) antes de cualquier anulación
 - Registro inmutable: quién, cuándo, rol y motivo
@@ -860,6 +861,7 @@ Ver guía completa de publicación en `docs/fase-23-play-store.md`.
 - Alerta roja si mismo usuario anula >3 ventas en efectivo/día
 
 ### Fase 34: Calculadora Inversa para Granel ✅
+
 - Toggle "Por cantidad" / "Por valor" en productos por peso
 - Cliente ingresa valor en pesos → sistema calcula gramos
 - Fórmula: cantidad = valorIngresado / precioUnitarioPorGramo
@@ -867,12 +869,14 @@ Ver guía completa de publicación en `docs/fase-23-play-store.md`.
 - Stock se descuenta en gramos correctos
 
 ### Fase 35: SMMLV Editable ✅
+
 - smmlv y subsidioTransporte en ConfigTienda (no hardcodeados)
 - Sección "⚖️ Valores Legales" en ConfigModal
 - calcularDeduccionesSS() recibe smmlv como parámetro
 - Sin constantes hardcodeadas en nomina.ts
 
 ### Fase 36: Módulo de Mermas ✅
+
 - Tabla mermas en Dexie con hook useMermas
 - ModalRegistrarMerma: producto, tipo, cantidad, costo total
 - Stock se descuenta automáticamente al registrar merma
@@ -880,6 +884,7 @@ Ver guía completa de publicación en `docs/fase-23-play-store.md`.
 - Sección "Mermas del mes" en InventarioPage
 
 ### Fase 37: Sugerido de Compra Predictivo ✅
+
 - Velocidad de venta: promedio últimos 30 días
 - Sugerido para 15 días de cobertura
 - Prioridades: Urgente (<3 días) / Pronto (3-7) / Planificar (7-15)
@@ -888,6 +893,7 @@ Ver guía completa de publicación en `docs/fase-23-play-store.md`.
 - Productos sin historial de ventas no aparecen
 
 ### Fase 38: Conciliación de Pagos Digitales ✅
+
 - Campo estadoPago en Venta para transferencias
 - Toggle post-venta: "¿Ya llegó la transferencia?"
 - Badge "⏳ Por verificar" en HistorialVentasPage
@@ -895,6 +901,7 @@ Ver guía completa de publicación en `docs/fase-23-play-store.md`.
 - Desglose verificadas vs. pendientes en ReportesPage
 
 ### Fase 39: Race Conditions en Sync ✅
+
 - resolverConflictos() con 3 estrategias:
   conservar-ambos (ventas), suma-movimientos (stock), last-write-wins (config)
 - MovimientoStock: sync por deltas, nunca por valor absoluto
@@ -903,6 +910,7 @@ Ver guía completa de publicación en `docs/fase-23-play-store.md`.
 - pullProductos() NO sobreescribe stockActual
 
 ### Fase 40: Alertas de Caducidad ✅
+
 - Campo fechaVencimiento opcional en Producto
 - getProductosPorVencer(): vencido / crítico / próximo
 - AlertasCaducidad en InventarioPage con tarjetas por estado
@@ -912,6 +920,7 @@ Ver guía completa de publicación en `docs/fase-23-play-store.md`.
 - Notificación diaria integrada en src/lib/notificaciones.ts
 
 ### Fase 41: Lector de Barras USB en PC ✅
+
 - `BuscadorProducto.tsx`: `autoFocus` al montar POSPage
 - `handleKeyDown`: Enter activa `procesarBusquedaUnica()`
 - 1 resultado → agrega al carrito + toast sutil + limpia campo + re-enfoca
@@ -923,6 +932,7 @@ Ver guía completa de publicación en `docs/fase-23-play-store.md`.
 - Flujo cámara @zxing intacto sin cambios
 
 ### Fase 42: Modo Demo + Activación Obligatoria ✅
+
 - `modoDemo: true` en instalaciones nuevas sin código de activación
 - Límite: 50 ventas en modo demo (`limiteVentasDemo`)
 - `BannerDemo.tsx`: banner persistente con conteo regresivo de ventas restantes
@@ -1450,53 +1460,107 @@ git add . && git commit -m "mensaje" && git push origin main
 
 El seed (`src/db/seed.ts`) contiene **2.712 productos** distribuidos en **41 categorías**.
 
-| # | Categoría | Ejemplos |
-|---|-----------|----------|
-| 1 | Lácteos | Leche, yogurt, queso blanco |
-| 2 | Huevos | Huevo rojo, blanco, codorniz |
-| 3 | Panadería | Pan, arepas, mogollas |
-| 4 | Granos y harinas | Arroz, frijol, harina de trigo |
-| 5 | Agua y bebidas sin gas | Agua Cristal, Hatsu, infusadas |
-| 6 | Snacks | Margarita, chitos, galletas |
-| 7 | Aseo personal | Shampoo, jabón, desodorante |
-| 8 | Aseo hogar | Detergente, limpiadores, desechables |
-| 9 | Frutas y verduras | Aguacate, tomate, papa |
-| 10 | Carnes frías (charcutería) | Jamón, salchichón, mortadela |
-| 11 | Enlatados | Atún, sardinas, Spam |
-| 12 | Condimentos | Salsas, especias, aderezos |
-| 13 | Papelería y varios | Cuadernos, pilas, USB |
-| 14 | Carnes y procesados | Res, pollo, hamburguesas |
-| 15 | Quesos | Campesino, doble crema, mozzarella |
-| 16 | Huevos de codorniz | – |
-| 17 | Cócteles | Mezclas premezcladas |
-| 18 | Licores nacionales | Aguardiente, ron, whisky |
-| 19 | Cervezas | Águila, Poker, Club Colombia |
-| 20 | Vinos | Gato Negro, Concha y Toro |
-| 21 | Café y aromáticas | Sello Rojo, teteras, kombuchas |
-| 22 | Chocolates y maltas | Nutella, Lindt, Chocolate Corona |
-| 23 | Pañales y bebé | Huggies, Pampers, teteros |
-| 24 | Medicamentos OTC | Acetaminofén, ibuprofeno, vitaminas |
-| 25 | Energizantes | Monster, Red Bull, Celsius |
-| 26 | Gaseosas | Coca-Cola, Postobon, Pepsi |
-| 27 | Jugos y néctares | Hit, natura, frescos naturales |
-| 28 | Helados y paletas | Bon Ice, Cremhelado |
-| 29 | Salchichas y frankfurters | Zenú, Suizo |
-| 30 | Jamones y fiambres | Jamón de cerdo, pavo |
-| 31 | Chorizos y longanizas | Chorizo casero, parrillero |
-| 32 | Tocineta y costillas | Cerdo ahumado, baby-back |
-| 33 | Sal, sopas y caldos | Knorr, noodles, gelatinas |
-| 34 | Aceites y grasas | Soya, girasol, oliva, aguacate |
-| 35 | Pastas y arroces | Espaguetis, linguine, risotto |
-| 36 | Azúcar y endulzantes | Azúcar, panela, miel, stevia |
-| 37 | Cuidado adulto mayor | Pañal adulto, tensiómetro, glucómetro |
-| 38 | Pilas y accesorios | Pilas AA, bombillos, cables |
-| 39 | Combos y paquetes | Combos desayuno, asado, escolar |
-| 40 | Tabacos y cigarros | Cigarrillos, encendedores |
-| 41 | Mascotas | Pedigree, Whiskas, arena gato |
+| #   | Categoría                  | Ejemplos                              |
+| --- | -------------------------- | ------------------------------------- |
+| 1   | Lácteos                    | Leche, yogurt, queso blanco           |
+| 2   | Huevos                     | Huevo rojo, blanco, codorniz          |
+| 3   | Panadería                  | Pan, arepas, mogollas                 |
+| 4   | Granos y harinas           | Arroz, frijol, harina de trigo        |
+| 5   | Agua y bebidas sin gas     | Agua Cristal, Hatsu, infusadas        |
+| 6   | Snacks                     | Margarita, chitos, galletas           |
+| 7   | Aseo personal              | Shampoo, jabón, desodorante           |
+| 8   | Aseo hogar                 | Detergente, limpiadores, desechables  |
+| 9   | Frutas y verduras          | Aguacate, tomate, papa                |
+| 10  | Carnes frías (charcutería) | Jamón, salchichón, mortadela          |
+| 11  | Enlatados                  | Atún, sardinas, Spam                  |
+| 12  | Condimentos                | Salsas, especias, aderezos            |
+| 13  | Papelería y varios         | Cuadernos, pilas, USB                 |
+| 14  | Carnes y procesados        | Res, pollo, hamburguesas              |
+| 15  | Quesos                     | Campesino, doble crema, mozzarella    |
+| 16  | Huevos de codorniz         | –                                     |
+| 17  | Cócteles                   | Mezclas premezcladas                  |
+| 18  | Licores nacionales         | Aguardiente, ron, whisky              |
+| 19  | Cervezas                   | Águila, Poker, Club Colombia          |
+| 20  | Vinos                      | Gato Negro, Concha y Toro             |
+| 21  | Café y aromáticas          | Sello Rojo, teteras, kombuchas        |
+| 22  | Chocolates y maltas        | Nutella, Lindt, Chocolate Corona      |
+| 23  | Pañales y bebé             | Huggies, Pampers, teteros             |
+| 24  | Medicamentos OTC           | Acetaminofén, ibuprofeno, vitaminas   |
+| 25  | Energizantes               | Monster, Red Bull, Celsius            |
+| 26  | Gaseosas                   | Coca-Cola, Postobon, Pepsi            |
+| 27  | Jugos y néctares           | Hit, natura, frescos naturales        |
+| 28  | Helados y paletas          | Bon Ice, Cremhelado                   |
+| 29  | Salchichas y frankfurters  | Zenú, Suizo                           |
+| 30  | Jamones y fiambres         | Jamón de cerdo, pavo                  |
+| 31  | Chorizos y longanizas      | Chorizo casero, parrillero            |
+| 32  | Tocineta y costillas       | Cerdo ahumado, baby-back              |
+| 33  | Sal, sopas y caldos        | Knorr, noodles, gelatinas             |
+| 34  | Aceites y grasas           | Soya, girasol, oliva, aguacate        |
+| 35  | Pastas y arroces           | Espaguetis, linguine, risotto         |
+| 36  | Azúcar y endulzantes       | Azúcar, panela, miel, stevia          |
+| 37  | Cuidado adulto mayor       | Pañal adulto, tensiómetro, glucómetro |
+| 38  | Pilas y accesorios         | Pilas AA, bombillos, cables           |
+| 39  | Combos y paquetes          | Combos desayuno, asado, escolar       |
+| 40  | Tabacos y cigarros         | Cigarrillos, encendedores             |
+| 41  | Mascotas                   | Pedigree, Whiskas, arena gato         |
 
 > **⚠️ Nota:** La categoría 41 (Mascotas) es nueva y debe existir en la tabla `categorias`  
 > antes de que el seed la asigne. Si no existe, agregar en `CATEGORIAS[]` dentro del seed  
 > o crearla manualmente desde el panel de productos.
+
+---
+
+🔄 Instrucción de Auto-actualización
+
+Insertar esta sección en cualquier CLAUDE.md, preferiblemente al final antes del Roadmap.
+
+🔄 Cómo mantener este archivo actualizado
+Cuando el usuario diga cualquiera de estas frases:
+
+"Lee el git diff de los últimos commits y actualiza el archivo CLAUDE.md siguiendo las instrucciones de la sección 🔄 que está al final del archivo"
+"actualiza el CLAUDE.md con los cambios recientes"
+"sincroniza el CLAUDE.md con el git diff"
+"registra los cambios de esta sesión en el CLAUDE.md"
+
+Evitar frases cortas como "actualiza el md" — pueden ser interceptadas por el sistema de memoria automático de Claude Code.
+
+Ejecutar este flujo en orden:
+
+1. Leer el estado actual
+   bashcat CLAUDE.md
+   git log --oneline -10
+   git diff HEAD~1 --stat
+2. Leer el diff completo si hay cambios relevantes
+   bashgit diff HEAD~1
+3. Mapear cambios a secciones
+   Identificar qué secciones del CLAUDE.md se ven afectadas:
+
+Archivos nuevos en src/ → posible cambio en Estructura del Proyecto
+Archivos en supabase/migrations/ → actualizar Schema de Base de Datos
+Cambios en src/hooks/ o src/lib/ → posible cambio en Flujos o Reglas de Código
+Cambios en package.json → actualizar Stack Tecnológico
+Fases completadas → marcar [x] en Orden de Construcción
+
+4. Actualizar solo las secciones afectadas
+
+Marcar fases completadas con [x] o ✅
+Agregar tablas/campos nuevos al schema
+Registrar patrones nuevos en Reglas de Código
+NO reescribir secciones no afectadas
+NO cambiar los Principios Irrompibles sin confirmación
+
+5. Confirmar al usuario
+   CLAUDE.md actualizado. Cambios aplicados:
+
+- [sección]: [qué cambió]
+- [sección]: [qué cambió]
+  ⚠️ [inconsistencia si la hay]
+
+Nota para el agente: Si el diff es muy grande o cubre múltiples fases,
+pedir confirmación antes de hacer cambios estructurales al CLAUDE.md.
+
+NUNCA crear archivos de documentación separados.
+Todos los cambios van integrados en este CLAUDE.md, no en archivos externos.
 
 ---
 
@@ -1513,12 +1577,12 @@ El seed (`src/db/seed.ts`) contiene **2.712 productos** distribuidos en **41 cat
 
 ## 💰 Modelo Comercial
 
-| Plan      | Precio              | Condición                              |
-| --------- | ------------------- | -------------------------------------- |
-| Demo      | Gratuito            | Hasta 50 ventas, sin código requerido  |
-| Básico    | $500.000 COP único  | Código de activación requerido         |
-| Pro       | $900.000 COP único  | Incluye domicilios y catálogo público  |
-| Upgrade B→Pro | $450.000 COP único | Para tiendas ya en Plan Básico     |
+| Plan          | Precio             | Condición                             |
+| ------------- | ------------------ | ------------------------------------- |
+| Demo          | Gratuito           | Hasta 50 ventas, sin código requerido |
+| Básico        | $500.000 COP único | Código de activación requerido        |
+| Pro           | $900.000 COP único | Incluye domicilios y catálogo público |
+| Upgrade B→Pro | $450.000 COP único | Para tiendas ya en Plan Básico        |
 
 **Códigos de activación (patrones dinámicos en `useConfig.ts`):**
 
