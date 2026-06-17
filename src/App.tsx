@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, lazy, Suspense } from 'react'
 import { BrowserRouter, Routes, Route, NavLink, Navigate, useLocation, useNavigate } from 'react-router-dom'
 import { ShoppingCart, BookOpen, Package, DollarSign, BarChart2, AlertCircle, Settings, Truck, Archive, LogOut, RefreshCw, Moon, Sun, Store, ChevronDown, Receipt, ClipboardList, Users, Bike } from 'lucide-react'
 import { useThemeStore, esModoOscuroActivo } from './stores/themeStore'
@@ -14,21 +14,26 @@ import { ConfigModal } from './components/config/ConfigModal'
 import { BannerInstalacion } from './components/shared/BannerInstalacion'
 import { BannerDemo } from './components/shared/BannerDemo'
 import { ModalActivarBasico } from './components/config/ModalActivarBasico'
+// Rutas críticas — cargan con el bundle inicial
 import POSPage from './pages/POSPage'
 import FiadosPage from './pages/FiadosPage'
-import ProductosPage from './pages/ProductosPage'
-import CajaPage from './pages/CajaPage'
-import ReportesPage from './pages/ReportesPage'
-import ProveedoresPage from './pages/ProveedoresPage'
-import InventarioPage from './pages/InventarioPage'
-import DashboardMultitienda from './pages/DashboardMultitienda'
-import HistorialVentasPage from './pages/HistorialVentasPage'
-import ListaPedidoPage from './pages/ListaPedidoPage'
-import NominaPage from './pages/NominaPage'
-import DomiciliosPage from './pages/DomiciliosPage'
 import CatalogoPublicoPage from './pages/CatalogoPublicoPage'
 import LoginPage from './pages/LoginPage'
 import RegisterPage from './pages/RegisterPage'
+
+// Rutas secundarias — code-split: se cargan solo cuando el usuario navega a ellas
+const ProductosPage      = lazy(() => import('./pages/ProductosPage'))
+const CajaPage           = lazy(() => import('./pages/CajaPage'))
+const ReportesPage       = lazy(() => import('./pages/ReportesPage'))
+const ProveedoresPage    = lazy(() => import('./pages/ProveedoresPage'))
+const InventarioPage     = lazy(() => import('./pages/InventarioPage'))
+const DashboardMultitienda = lazy(() => import('./pages/DashboardMultitienda'))
+const HistorialVentasPage = lazy(() => import('./pages/HistorialVentasPage'))
+const ListaPedidoPage    = lazy(() => import('./pages/ListaPedidoPage'))
+const NominaPage         = lazy(() => import('./pages/NominaPage'))
+const DomiciliosPage     = lazy(() => import('./pages/DomiciliosPage'))
+const PrivacidadPage     = lazy(() => import('./pages/PrivacidadPage'))
+const TerminosPage       = lazy(() => import('./pages/TerminosPage'))
 import { Toaster } from 'react-hot-toast'
 import toast from 'react-hot-toast'
 import { formatCOP } from './utils/moneda'
@@ -36,6 +41,7 @@ import { ToastFiados } from './components/shared/ToastFiados'
 import { useAuthStore, puedeAcceder, type TiendaResumen, type RolUsuario } from './stores/authStore'
 import { supabase, supabaseConfigurado } from './lib/supabase'
 import { startAutoSync, stopAutoSync, pullFromSupabase } from './lib/sync'
+import { verificarPlanEnServidor } from './hooks/useConfig'
 import { cargarTiendasDueno, registrarPropietarioTienda, cambiarTiendaActiva } from './hooks/useTiendasDueno'
 import { iniciarScheduler } from './lib/notificaciones'
 import { ejecutarAgenteFiados } from './lib/agenteCobroFiados'
@@ -48,6 +54,14 @@ function PantallaCarga({ mensaje }: { mensaje: string }) {
       <div className="text-6xl">🏪</div>
       <p className="text-primario font-display font-bold text-xl">POS Tienda</p>
       <p className="text-suave text-sm">{mensaje}</p>
+      <div className="w-8 h-8 border-4 border-primario border-t-transparent rounded-full animate-spin" />
+    </div>
+  )
+}
+
+function PaginaCargando() {
+  return (
+    <div className="flex-1 flex items-center justify-center">
       <div className="w-8 h-8 border-4 border-primario border-t-transparent rounded-full animate-spin" />
     </div>
   )
@@ -351,6 +365,9 @@ export default function App() {
         }
         setUsuario(usuarioAuth)
 
+        // Verificar integridad del plan al arrancar (anti-tamper de IndexedDB)
+        verificarPlanEnServidor().catch(console.error)
+
         // Dueño: asegurar propietarios_tienda + cargar todas las tiendas
         if (usuarioAuth.rol === 'dueno') {
           void registrarPropietarioTienda(usuarioAuth.id, usuarioAuth.tiendaId)
@@ -411,6 +428,21 @@ export default function App() {
           <Route path="/catalogo/:slug" element={<CatalogoPublicoPage />} />
         </Routes>
       </BrowserRouter>
+    )
+  }
+
+  // ── Páginas legales — rutas públicas sin auth
+  if (typeof window !== 'undefined' &&
+      (window.location.pathname === '/privacy' || window.location.pathname === '/terms')) {
+    return (
+      <Suspense fallback={<PantallaCarga mensaje="Cargando…" />}>
+        <BrowserRouter>
+          <Routes>
+            <Route path="/privacy" element={<PrivacidadPage />} />
+            <Route path="/terms"   element={<TerminosPage />}   />
+          </Routes>
+        </BrowserRouter>
+      </Suspense>
     )
   }
 
@@ -578,20 +610,24 @@ function AppLayout({ primerUso }: { primerUso: boolean }) {
           {!ocultarBanner && <BannerDemo onActivar={() => setModalActivarBasico(true)} />}
           
           <div className="flex-1 overflow-y-auto">
-            <Routes>
-            <Route path="/"            element={<POSPage />}                                                          />
-            <Route path="/fiados"      element={<FiadosPage />}                                                       />
-            <Route path="/productos"   element={<RutaProtegida><ProductosPage /></RutaProtegida>}                     />
-            <Route path="/inventario"  element={<RutaProtegida><InventarioPage /></RutaProtegida>}                    />
-            <Route path="/proveedores" element={<RutaProtegida><ProveedoresPage /></RutaProtegida>}                   />
-            <Route path="/caja"        element={<RutaProtegida><CajaPage /></RutaProtegida>}                          />
-            <Route path="/reportes"      element={<RutaProtegida><ReportesPage /></RutaProtegida>}                  />
-            <Route path="/historial"     element={<HistorialVentasPage />}                                             />
-            <Route path="/pedido"        element={<RutaProtegida><ListaPedidoPage /></RutaProtegida>}                  />
-            <Route path="/nomina"        element={<RutaProtegida><NominaPage /></RutaProtegida>}                       />
-            <Route path="/domicilios"   element={<RutaProtegida>{esPro ? <DomiciliosPage /> : <Navigate to="/" replace />}</RutaProtegida>}  />
-            <Route path="/multi-tienda" element={<RutaProtegida><DashboardMultitienda /></RutaProtegida>}             />
-          </Routes>
+            <Suspense fallback={<PaginaCargando />}>
+              <Routes>
+                <Route path="/"            element={<POSPage />}                                                                             />
+                <Route path="/fiados"      element={<FiadosPage />}                                                                          />
+                <Route path="/productos"   element={<RutaProtegida><ProductosPage /></RutaProtegida>}                                        />
+                <Route path="/inventario"  element={<RutaProtegida><InventarioPage /></RutaProtegida>}                                       />
+                <Route path="/proveedores" element={<RutaProtegida><ProveedoresPage /></RutaProtegida>}                                      />
+                <Route path="/caja"        element={<RutaProtegida><CajaPage /></RutaProtegida>}                                             />
+                <Route path="/reportes"    element={<RutaProtegida><ReportesPage /></RutaProtegida>}                                         />
+                <Route path="/historial"   element={<HistorialVentasPage />}                                                                  />
+                <Route path="/pedido"      element={<RutaProtegida><ListaPedidoPage /></RutaProtegida>}                                      />
+                <Route path="/nomina"      element={<RutaProtegida><NominaPage /></RutaProtegida>}                                           />
+                <Route path="/domicilios"  element={<RutaProtegida>{esPro ? <DomiciliosPage /> : <Navigate to="/" replace />}</RutaProtegida>} />
+                <Route path="/multi-tienda" element={<RutaProtegida><DashboardMultitienda /></RutaProtegida>}                                />
+                <Route path="/privacy"     element={<PrivacidadPage />}                                                                       />
+                <Route path="/terms"       element={<TerminosPage />}                                                                         />
+              </Routes>
+            </Suspense>
           </div>
         </main>
       </div>

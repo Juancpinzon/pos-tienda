@@ -5,11 +5,25 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
-const CORS_HEADERS = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, content-type, x-client-info, apikey',
-  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+const ALLOWED_ORIGINS = new Set(
+  (Deno.env.get('ALLOWED_ORIGINS') ??
+    'https://pos-tienda-ten.vercel.app,https://localhost,capacitor://localhost,http://localhost:5173')
+    .split(',').map((o) => o.trim()).filter(Boolean),
+)
+
+function corsHeaders(origin: string | null): Record<string, string> {
+  const allowed = origin && ALLOWED_ORIGINS.has(origin)
+    ? origin
+    : 'https://pos-tienda-ten.vercel.app'
+  return {
+    'Access-Control-Allow-Origin':  allowed,
+    'Access-Control-Allow-Headers': 'authorization, content-type, x-client-info, apikey',
+    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+  }
 }
+
+// Máximo 30 análisis de facturas por usuario por día
+const LIMITE_POR_DIA = 30
 
 const PROMPT_SISTEMA = `Eres un experto en leer facturas de distribuidores de tiendas de barrio colombianas.
 
@@ -60,34 +74,59 @@ Formato JSON requerido:
 Si la imagen no es una factura, devuelve: {"proveedor":null,"factura":{"numero":null,"fecha":null,"total":0},"productos":[]}`
 
 serve(async (req: Request) => {
+  const origin = req.headers.get('origin')
+  const CORS   = corsHeaders(origin)
+
   console.log('[analizar-factura] metodo:', req.method)
 
   if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: CORS_HEADERS })
+    return new Response('ok', { headers: CORS })
   }
 
-  // Validar autenticación
   const authHeader = req.headers.get('Authorization')
   if (!authHeader) {
     return new Response(
       JSON.stringify({ error: 'No autorizado' }),
-      { status: 401, headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' } }
+      { status: 401, headers: { ...CORS, 'Content-Type': 'application/json' } }
     )
   }
 
   const token = authHeader.replace('Bearer ', '')
-  const supabase = createClient(
+  const supabaseAnon = createClient(
     Deno.env.get('SUPABASE_URL') ?? '',
     Deno.env.get('SUPABASE_ANON_KEY') ?? ''
   )
 
-  const { data: { user }, error: authError } = await supabase.auth.getUser(token)
+  const { data: { user }, error: authError } = await supabaseAnon.auth.getUser(token)
   if (authError || !user) {
     return new Response(
       JSON.stringify({ error: 'Token inválido o expirado' }),
-      { status: 401, headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' } }
+      { status: 401, headers: { ...CORS, 'Content-Type': 'application/json' } }
     )
   }
+
+  const supabaseAdmin = createClient(
+    Deno.env.get('SUPABASE_URL') ?? '',
+    Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+  )
+
+  // Rate limiting: máx 30 análisis por día por usuario
+  const hace24Horas = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
+  const { count: analisishoy } = await supabaseAdmin
+    .from('rate_limits')
+    .select('*', { count: 'exact', head: true })
+    .eq('user_id', user.id)
+    .eq('accion', 'analizar_factura')
+    .gte('creado_en', hace24Horas)
+
+  if ((analisishoy ?? 0) >= LIMITE_POR_DIA) {
+    return new Response(
+      JSON.stringify({ error: 'Límite de análisis diario alcanzado. Reinicia mañana.' }),
+      { status: 429, headers: { ...CORS, 'Content-Type': 'application/json' } }
+    )
+  }
+
+  void supabaseAdmin.from('rate_limits').insert({ user_id: user.id, accion: 'analizar_factura' })
 
   try {
     const apiKey = Deno.env.get('ANTHROPIC_API_KEY')
@@ -96,7 +135,7 @@ serve(async (req: Request) => {
     if (!apiKey) {
       return new Response(
         JSON.stringify({ error: 'ANTHROPIC_API_KEY no configurada' }),
-        { status: 500, headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' } },
+        { status: 500, headers: { ...CORS, 'Content-Type': 'application/json' } },
       )
     }
 
@@ -107,7 +146,7 @@ serve(async (req: Request) => {
     if (!imagenBase64) {
       return new Response(
         JSON.stringify({ error: 'imagenBase64 es requerido' }),
-        { status: 400, headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' } },
+        { status: 400, headers: { ...CORS, 'Content-Type': 'application/json' } },
       )
     }
 
@@ -154,13 +193,13 @@ serve(async (req: Request) => {
       console.error('[analizar-factura] Error Anthropic:', JSON.stringify(errData))
       return new Response(
         JSON.stringify({ error: msg, status: anthropicRes.status }),
-        { status: anthropicRes.status, headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' } },
+        { status: anthropicRes.status, headers: { ...CORS, 'Content-Type': 'application/json' } },
       )
     }
 
     console.log('[analizar-factura] Exito')
     return new Response(JSON.stringify(data), {
-      headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+      headers: { ...CORS, 'Content-Type': 'application/json' },
     })
 
   } catch (err) {
@@ -168,7 +207,7 @@ serve(async (req: Request) => {
     console.error('[analizar-factura] Excepcion:', msg)
     return new Response(
       JSON.stringify({ error: msg }),
-      { status: 500, headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' } },
+      { status: 500, headers: { ...CORS, 'Content-Type': 'application/json' } },
     )
   }
 })
