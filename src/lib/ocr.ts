@@ -1,12 +1,9 @@
 // Módulo OCR: analiza fotos de facturas con Claude Vision.
 //
 // Arquitectura:
-//   Cuando Supabase está configurado (producción) → llama a la Edge Function
-//   'analizar-factura' como proxy. Esto resuelve el bloqueo CORS del navegador
-//   y mantiene la API key de Anthropic en el servidor, nunca expuesta al cliente.
-//
-//   Cuando Supabase NO está configurado (dev local sin .env) → intento directo
-//   con VITE_ANTHROPIC_API_KEY + cabecera 'anthropic-dangerous-direct-browser-calls'.
+//   Siempre llama a la Edge Function 'analizar-factura' como proxy.
+//   La API key de Anthropic vive en los secrets de Supabase, nunca en el cliente.
+//   Si Supabase no está configurado, el OCR no está disponible.
 
 import { supabase, supabaseConfigurado } from './supabase'
 
@@ -160,84 +157,18 @@ async function analizarViaEdgeFunction(
   return parsearRespuestaAnthropic(payload)
 }
 
-// ─── Llamada directa (fallback desarrollo local) ──────────────────────────────
-
-const PROMPT_SISTEMA_DIRECTO = `Eres un asistente especializado en leer facturas y remisiones de proveedores de tiendas de barrio colombianas.
-
-Cuando te muestren una imagen de una factura o remisión, extrae TODA la información disponible.
-
-REGLAS:
-- Los precios están en pesos colombianos (COP), sin decimales
-- Las cantidades pueden ser fraccionadas (ej: 0.5 kg, 2.5 litros)
-- Si no puedes leer un valor, usa null o 0 según corresponda
-- Las fechas van en formato YYYY-MM-DD
-- Devuelve ÚNICAMENTE un JSON válido, sin texto adicional
-
-Formato:
-{
-  "proveedor": { "nombre": null, "nit": null, "telefono": null, "direccion": null },
-  "factura": { "numero": null, "fecha": null, "total": 0 },
-  "productos": [{ "nombre": "nombre", "cantidad": 1, "precioUnitario": 0, "subtotal": 0 }]
-}`
-
-async function analizarDirecto(
-  imagenBase64: string,
-  mimeType: string,
-): Promise<ResultadoOCR> {
-  const apiKey = import.meta.env.VITE_ANTHROPIC_API_KEY
-  if (!apiKey) throw new Error('API_KEY_MISSING')
-
-  const respuesta = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-api-key': apiKey,
-      'anthropic-version': '2023-06-01',
-      'anthropic-dangerous-direct-browser-calls': 'true',
-    },
-    body: JSON.stringify({
-      model: 'claude-sonnet-4-5-20251001',
-      max_tokens: 2048,
-      system: PROMPT_SISTEMA_DIRECTO,
-      messages: [{
-        role: 'user',
-        content: [
-          { type: 'image', source: { type: 'base64', media_type: mimeType, data: imagenBase64 } },
-          { type: 'text', text: 'Analiza esta factura colombiana y extrae TODA la información. Responde SOLO con el JSON.' },
-        ],
-      }],
-    }),
-  })
-
-  if (!respuesta.ok) {
-    const err = await respuesta.json().catch(() => ({})) as { error?: { message?: string } }
-    const msg = err.error?.message ?? ''
-    if (respuesta.status === 401) throw new Error('API_KEY_INVALID')
-    if (respuesta.status === 429) throw new Error('RATE_LIMIT')
-    throw new Error(`API_ERROR:${respuesta.status}:${msg}`)
-  }
-
-  const data = await respuesta.json() as { content: Array<{ type: string; text?: string }> }
-  return parsearRespuestaAnthropic(data)
-}
-
 // ─── Punto de entrada principal ───────────────────────────────────────────────
 
 export async function analizarFactura(
   imagenBase64: string,
   mimeType: 'image/jpeg' | 'image/png' | 'image/webp' | 'image/gif' = 'image/jpeg',
 ): Promise<ResultadoOCR> {
-  console.log(
-    '[OCR] vía:', supabaseConfigurado ? 'Edge Function' : 'directo',
-    '| chars imagen:', imagenBase64.length,
-  )
+  if (!supabaseConfigurado) {
+    throw new Error('SUPABASE_REQUIRED')
+  }
 
   try {
-    if (supabaseConfigurado) {
-      return await analizarViaEdgeFunction(imagenBase64, mimeType)
-    } else {
-      return await analizarDirecto(imagenBase64, mimeType)
-    }
+    return await analizarViaEdgeFunction(imagenBase64, mimeType)
   } catch (err) {
     if (err instanceof Error) throw err
     throw new Error('NETWORK_ERROR')

@@ -16,11 +16,11 @@ export async function prepararContextoIA(): Promise<string> {
     .filter(v => v.estado === 'completada')
     .toArray()
 
-  // 2. Extraer detalles para top de productos
-  const detallesList = await Promise.all(
-    ventas.map(v => db.detallesVenta.where('ventaId').equals(v.id!).toArray())
-  )
-  const detalles = detallesList.flat()
+  // 2. Extraer detalles para top de productos — 1 query en lote en lugar de N
+  const ventaIds = ventas.map(v => v.id!)
+  const detalles = ventaIds.length > 0
+    ? await db.detallesVenta.where('ventaId').anyOf(ventaIds).toArray()
+    : []
 
   // Agrupar productos
   const mapaProductos = new Map<number | string, { nombre: string; cantidad: number; ingresos: number; ganancia: number }>()

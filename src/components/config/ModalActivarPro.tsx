@@ -24,13 +24,13 @@ export function ModalActivarPro({ onClose }: Props) {
     e.preventDefault()
     if (!codigo.trim()) return
     setCargando(true)
-    const ok = await activarPlanPro(codigo)
+    const resultado = await activarPlanPro(codigo)
     setCargando(false)
-    if (ok) {
+    if (resultado.ok) {
       toast.success('¡Plan Pro activado! Ya tienes acceso a domicilios')
       onClose()
     } else {
-      toast.error('Código inválido. Verifica e intenta de nuevo')
+      toast.error(resultado.error ?? 'Error al activar el plan')
     }
   }
 
@@ -71,7 +71,7 @@ export function ModalActivarPro({ onClose }: Props) {
               type="text"
               value={codigo}
               onChange={(e) => setCodigo(e.target.value.toUpperCase())}
-              placeholder="PROTIENDA2025"
+              placeholder="PRO-XXXX"
               maxLength={30}
               autoFocus
               className="w-full h-12 px-4 border border-borde rounded-xl text-sm font-mono

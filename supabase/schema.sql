@@ -34,7 +34,7 @@ CREATE TABLE usuarios (
   tienda_id  UUID REFERENCES tiendas(id) ON DELETE CASCADE NOT NULL,
   email      TEXT NOT NULL,
   nombre     TEXT NOT NULL,
-  rol        TEXT CHECK (rol IN ('dueno', 'empleado')) NOT NULL DEFAULT 'empleado',
+  rol        TEXT CHECK (rol IN ('dueno', 'empleado', 'encargado')) NOT NULL DEFAULT 'empleado',
   activo     BOOLEAN DEFAULT TRUE,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
@@ -442,11 +442,10 @@ CREATE TABLE IF NOT EXISTS mapeos_sku (
 
 ALTER TABLE mapeos_sku ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "mapeos_sku: solo su tienda"
+CREATE POLICY "mapeos_sku_all"
   ON mapeos_sku FOR ALL
-  USING (tienda_id = (
-    SELECT tienda_id FROM usuarios WHERE user_id = auth.uid() LIMIT 1
-  ));
+  USING      (tienda_id = get_tienda_id())
+  WITH CHECK (tienda_id = get_tienda_id());
 
 CREATE INDEX idx_mapeos_sku_tienda ON mapeos_sku (tienda_id, nombre_proveedor);
 
@@ -548,3 +547,23 @@ CREATE POLICY "push_sub_delete" ON push_subscriptions
   FOR DELETE USING (usuario_id = auth.uid());
 
 CREATE INDEX idx_push_sub_tienda ON push_subscriptions (tienda_id, activo);
+
+-- ═══════════════════════════════════════════════════════════════════════════
+--  Tabla: codigos_activacion
+--  Códigos individuales emitidos por el admin. Solo accesibles via service_role.
+-- ═══════════════════════════════════════════════════════════════════════════
+
+CREATE TABLE IF NOT EXISTS codigos_activacion (
+  id         BIGSERIAL    PRIMARY KEY,
+  codigo     TEXT         NOT NULL UNIQUE,
+  plan       TEXT         NOT NULL CHECK (plan IN ('basico', 'pro', 'upgrade')),
+  usado      BOOLEAN      NOT NULL DEFAULT FALSE,
+  tienda_id  UUID         REFERENCES tiendas(id) ON DELETE SET NULL,
+  creado_en  TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+  usado_en   TIMESTAMPTZ
+);
+
+ALTER TABLE codigos_activacion ENABLE ROW LEVEL SECURITY;
+-- Sin políticas públicas — solo accesible via service_role_key desde Edge Functions.
+
+CREATE INDEX idx_codigos_activacion_codigo ON codigos_activacion (codigo);

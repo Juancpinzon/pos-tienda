@@ -105,10 +105,10 @@ export function useResumenCaja(sesionId: number | undefined) {
         .where('sesionCajaId').equals(sesionId)
         .toArray()
 
-      // Cobros de deuda fiado asociados a esta sesión
-      // NOTA: sesionCajaId no está indexado en Dexie — usar .filter() en lugar de .where()
+      // Cobros de deuda fiado asociados a esta sesión — índice agregado en v18
       const pagosfiado = await db.movimientosFiado
-        .filter((m) => m.sesionCajaId === sesionId && m.tipo === 'pago')
+        .where('sesionCajaId').equals(sesionId)
+        .filter((m) => m.tipo === 'pago')
         .toArray()
 
       const totalVentas = ventas.reduce((s, v) => s + v.total, 0)
@@ -149,24 +149,25 @@ export function useResumenCaja(sesionId: number | undefined) {
       const totalAnulado = ventasAnuladas.reduce((s, v) => s + v.total, 0)
       const cantidadAnuladas = ventasAnuladas.length
 
-      // Últimas 10 ventas con conteo de ítems
-      const ultimasVentas = await Promise.all(
-        ventas
-          .sort((a, b) => b.creadaEn.getTime() - a.creadaEn.getTime())
-          .slice(0, 10)
-          .map(async (v) => {
-            const itemCount = await db.detallesVenta
-              .where('ventaId').equals(v.id!)
-              .count()
-            return {
-              id: v.id!,
-              total: v.total,
-              tipoPago: v.tipoPago,
-              creadaEn: v.creadaEn,
-              itemCount,
-            }
-          })
-      )
+      // Últimas 10 ventas con conteo de ítems — 1 query en lote en lugar de N
+      const sorted10 = ventas
+        .sort((a, b) => b.creadaEn.getTime() - a.creadaEn.getTime())
+        .slice(0, 10)
+      const ids10 = sorted10.map((v) => v.id!)
+      const detalles10 = ids10.length > 0
+        ? await db.detallesVenta.where('ventaId').anyOf(ids10).toArray()
+        : []
+      const conteos = new Map<number, number>()
+      for (const d of detalles10) {
+        conteos.set(d.ventaId, (conteos.get(d.ventaId) ?? 0) + 1)
+      }
+      const ultimasVentas = sorted10.map((v) => ({
+        id: v.id!,
+        total: v.total,
+        tipoPago: v.tipoPago,
+        creadaEn: v.creadaEn,
+        itemCount: conteos.get(v.id!) ?? 0,
+      }))
 
       return {
         sesion,

@@ -9,6 +9,9 @@ export default defineConfig({
       '@': fileURLToPath(new URL('./src', import.meta.url)),
     },
   },
+  build: {
+    sourcemap: false,
+  },
   // @zxing/library es CJS — Vite necesita pre-bundlearlo para ESM
   optimizeDeps: {
     include: ['@zxing/library'],

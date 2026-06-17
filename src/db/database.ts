@@ -232,6 +232,11 @@ class POSDatabase extends Dexie {
         await tx.table('productos').bulkDelete(idsParaEliminar)
       }
     })
+
+    // Versión 18: índice sesionCajaId en movimientosFiado — elimina full scan en cierre de caja
+    this.version(18).stores({
+      movimientosFiado: '++id, clienteId, ventaId, tipo, sesionCajaId, creadoEn',
+    })
   }
 }
 

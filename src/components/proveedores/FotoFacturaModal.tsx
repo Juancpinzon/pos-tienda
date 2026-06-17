@@ -27,23 +27,25 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
   import.meta.url,
 ).toString()
 
-// OCR disponible si hay Edge Function (Supabase) o API key directa (dev local)
-const OCR_DISPONIBLE = supabaseConfigurado || !!(import.meta.env.VITE_ANTHROPIC_API_KEY)
+// OCR requiere Supabase (la API key de Anthropic vive en los secrets del servidor)
+const OCR_DISPONIBLE = supabaseConfigurado
 
 // Traduce los códigos de error internos de ocr.ts a mensajes amigables para el tendero
 function traducirError(raw: string): string {
+  if (raw === 'SUPABASE_REQUIRED')
+    return 'El OCR requiere conexión con Supabase. Configura las variables VITE_SUPABASE_URL y VITE_SUPABASE_ANON_KEY e inicia sesión.'
   if (raw === 'API_KEY_MISSING')
-    return 'API key no configurada. Agrega VITE_ANTHROPIC_API_KEY en las variables de entorno de Vercel y vuelve a desplegar.'
+    return 'La clave de Anthropic no está configurada en los secrets de Supabase. Contacta al soporte.'
   if (raw === 'API_KEY_INVALID')
-    return 'API key inválida o expirada. Verifica que la key sea correcta en Vercel → Settings → Environment Variables.'
+    return 'Clave de API inválida o expirada. Contacta al soporte.'
   if (raw === 'SUPABASE_NOT_CONFIGURED')
     return 'Supabase no está configurado. Agrega las variables VITE_SUPABASE_URL y VITE_SUPABASE_ANON_KEY en Vercel y vuelve a desplegar.'
   if (raw === 'NETWORK_ERROR')
     return 'Sin conexión. Verifica tu internet e intenta de nuevo.'
   if (raw === 'RATE_LIMIT')
-    return 'Límite de uso de la API alcanzado. Espera unos minutos e intenta de nuevo.'
+    return 'Límite de uso alcanzado. Espera unos minutos e intenta de nuevo.'
   if (raw === 'IMAGE_TOO_LARGE')
-    return 'La imagen es demasiado grande para la API. Intenta con una foto de menor resolución.'
+    return 'La imagen es demasiado grande. Intenta con una foto de menor resolución.'
   if (raw.startsWith('API_ERROR:')) {
     const [, status, msg] = raw.split(':')
     return `Error de API (${status})${msg ? ': ' + msg : ''}. Intenta de nuevo o revisa los logs.`
@@ -441,9 +443,7 @@ export function FotoFacturaModal({ onAgregar, onClose }: FotoFacturaModalProps) 
             <div className="flex flex-col gap-0.5">
               <p className="text-sm font-semibold text-advertencia">OCR no disponible</p>
               <p className="text-xs text-texto/80 leading-relaxed">
-                El OCR requiere Supabase configurado (producción) o{' '}
-                <span className="font-mono bg-black/5 px-1 rounded">VITE_ANTHROPIC_API_KEY</span>{' '}
-                (desarrollo local). Puede agregar los productos manualmente usando el formulario de abajo.
+                El OCR requiere Supabase configurado e iniciar sesión. Puede agregar los productos manualmente usando el formulario de abajo.
               </p>
             </div>
           </div>
@@ -498,7 +498,7 @@ export function FotoFacturaModal({ onAgregar, onClose }: FotoFacturaModalProps) 
               {previewUrl && estado !== 'analizando' && (
                 <button type="button" onClick={handleAnalizar}
                   disabled={!OCR_DISPONIBLE}
-                  title={!OCR_DISPONIBLE ? 'Configura Supabase o VITE_ANTHROPIC_API_KEY para usar el OCR' : undefined}
+                  title={!OCR_DISPONIBLE ? 'Configura Supabase e inicia sesión para usar el OCR' : undefined}
                   className="h-12 bg-primario text-white rounded-xl font-display font-bold text-base
                              flex items-center justify-center gap-2
                              hover:bg-primario-hover active:scale-[0.98] transition-all

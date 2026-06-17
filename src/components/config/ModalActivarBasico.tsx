@@ -23,13 +23,13 @@ export function ModalActivarBasico({ onClose }: Props) {
     e.preventDefault()
     if (!codigo.trim()) return
     setCargando(true)
-    const ok = await activarPlanBasico(codigo)
+    const resultado = await activarPlanBasico(codigo)
     setCargando(false)
-    if (ok) {
+    if (resultado.ok) {
       toast.success('¡POS activado! — uso ilimitado habilitado')
       onClose()
     } else {
-      toast.error('Código inválido. Verifica e intenta de nuevo')
+      toast.error(resultado.error ?? 'Error al activar el plan')
     }
   }
 
@@ -70,7 +70,7 @@ export function ModalActivarBasico({ onClose }: Props) {
               type="text"
               value={codigo}
               onChange={(e) => setCodigo(e.target.value.toUpperCase())}
-              placeholder="TIENDA2025"
+              placeholder="TIENDA-XXXX"
               maxLength={30}
               autoFocus
               className="w-full h-12 px-4 border border-borde rounded-xl text-sm font-mono

@@ -35,29 +35,39 @@ export function useVentasPeriodo(inicio: Date, fin: Date) {
         .reverse()
         .toArray()
 
-      // Cargar detalles y nombres de clientes en paralelo
-      const resultados = await Promise.all(
-        ventasRaw.map(async (venta) => {
-          const detalles = await db.detallesVenta
-            .where('ventaId')
-            .equals(venta.id!)
-            .toArray()
+      // Carga en lote: 2 queries en lugar de N × 2
+      const ventaIds = ventasRaw.map((v) => v.id!)
+      const clienteIds = [
+        ...new Set(
+          ventasRaw.filter((v) => v.clienteId !== undefined).map((v) => v.clienteId!)
+        ),
+      ]
 
-          let nombreCliente: string | undefined
-          if (venta.clienteId !== undefined) {
-            const cliente = await db.clientes.get(venta.clienteId)
-            nombreCliente = cliente?.nombre
-          }
+      const [todosDetalles, todosClientes] = await Promise.all([
+        ventaIds.length > 0
+          ? db.detallesVenta.where('ventaId').anyOf(ventaIds).toArray()
+          : Promise.resolve([]),
+        clienteIds.length > 0
+          ? db.clientes.where('id').anyOf(clienteIds).toArray()
+          : Promise.resolve([]),
+      ])
 
-          return {
-            venta: venta as Venta & { id: number },
-            detalles,
-            nombreCliente,
-          }
-        })
-      )
+      const mapaDetalles = new Map<number, DetalleVenta[]>()
+      for (const d of todosDetalles) {
+        const arr = mapaDetalles.get(d.ventaId) ?? []
+        arr.push(d)
+        mapaDetalles.set(d.ventaId, arr)
+      }
+      const mapaClientes = new Map(todosClientes.map((c) => [c.id!, c.nombre]))
 
-      return resultados
+      return ventasRaw.map((venta) => ({
+        venta: venta as Venta & { id: number },
+        detalles: mapaDetalles.get(venta.id!) ?? [],
+        nombreCliente:
+          venta.clienteId !== undefined
+            ? mapaClientes.get(venta.clienteId)
+            : undefined,
+      }))
     }).subscribe({
       next: setVentas,
       error: (err) => {

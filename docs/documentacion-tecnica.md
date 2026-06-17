@@ -1,6 +1,6 @@
 # POS Tienda — Documentación Técnica
 
-> Versión 4.1 — Abril 2026 | Repositorio: github.com/Juancpinzon/pos-tienda
+> Versión 4.2 — Junio 2026 | Repositorio: github.com/Juancpinzon/pos-tienda
 
 ---
 
@@ -128,6 +128,24 @@ mermas                  ++id, productoId, tipo, sesionCajaId
 movimientosStock        ++id, productoId, deviceId, sincronizado
 ```
 
+### Tabla Supabase adicional: codigos_activacion
+
+```sql
+-- No está en Dexie — solo en Supabase PostgreSQL
+-- Permite emitir códigos individuales por tienda
+CREATE TABLE codigos_activacion (
+  id         BIGSERIAL    PRIMARY KEY,
+  codigo     TEXT         NOT NULL UNIQUE,
+  plan       TEXT         NOT NULL CHECK (plan IN ('basico', 'pro', 'upgrade')),
+  usado      BOOLEAN      NOT NULL DEFAULT FALSE,
+  tienda_id  UUID         REFERENCES tiendas(id) ON DELETE SET NULL,
+  creado_en  TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+  usado_en   TIMESTAMPTZ
+);
+```
+
+La Edge Function `validar-codigo` consulta esta tabla primero. Si el código no está aquí, cae a validación por patrón/legacy.
+
 ### Reglas del schema
 
 1. Nunca modificar el schema sin incrementar la versión de Dexie y agregar migración
@@ -201,13 +219,20 @@ src/
 
 ## Edge Functions (Supabase)
 
+### validar-codigo
+- **Propósito**: Valida códigos de activación server-side. Los patrones (`TIENDA-XXXX`, `PRO-XXXX`, `UPG-XXXX`) y los códigos legacy nunca están en el bundle del cliente.
+- **Auth**: JWT manual (valida con `supabase.auth.getUser(token)`)
+- **Lógica**: Consulta primero `codigos_activacion` (códigos individuales por tienda), luego cae a validación por patrón/legacy.
+- **Request**: `POST` con body `{ "codigo": "TIENDA-K7M2" }`
+- **Response**: `{ "valido": true, "plan": "basico" | "pro" | "upgrade" }`
+
 ### analizar-factura
 - **Propósito**: OCR de facturas de proveedores via Claude Vision API
 - **Auth**: `verify_jwt: true` — requiere JWT válido
 - **Versión**: 12
 
 ### asistente-ventas
-- **Propósito**: Asistente IA para análisis de ventas
+- **Propósito**: Asistente IA para análisis de ventas del tendero
 - **Modelo**: `claude-3-5-haiku-20241022`
 - **Auth**: `verify_jwt: true` — requiere JWT válido
 - **Versión**: 2
@@ -215,6 +240,7 @@ src/
 ### Redesplegar funciones
 
 ```bash
+supabase functions deploy validar-codigo
 supabase functions deploy analizar-factura
 supabase functions deploy asistente-ventas
 ```
@@ -275,21 +301,26 @@ const { esDemo, esBasico, esPro } = useConfig()
 // Conteo demo
 const { ventasDemo, ventasRestantesDemo, demoAgotado } = useConfig()
 
-// Activar Plan Básico
-await activarPlanBasico("TIENDA2025")  // retorna boolean
+// Activar plan (llama a Edge Function validar-codigo server-side)
+await activarPlanBasico("TIENDA-K7M2")  // retorna boolean
+await activarPlanPro("PRO-X3BN")        // retorna boolean
 
-// Activar Plan Pro  
-await activarPlanPro("PROTIENDA2025") // retorna boolean
+// Patrones de código (validan en Edge Function, nunca en el cliente):
+// Básico:    ^TIENDA-[A-Z0-9]{4}$   (ej: TIENDA-K7M2)
+// Pro:       ^PRO-[A-Z0-9]{4}$      (ej: PRO-X3BN)
+// Upgrade:   ^UPG-[A-Z0-9]{4}$      (ej: UPG-M9QP)
 
-// Códigos Básico válidos:
-["TIENDA2025", "BARRIO2025", "POSBASICO2025", "TENDERO2025", "TIENDA2026"]
-
-// Códigos Pro válidos:
-["PROTIENDA2025", "DOMICILIOS2025", "UPGRADE2025"]
+// Códigos legacy (siguen funcionando por compatibilidad):
+// Básico:   ["TIENDA2025", "BARRIO2025", "POSBASICO2025", "TENDERO2025", "TIENDA2026"]
+// Pro:      ["PROTIENDA2025", "DOMICILIOS2025", "UPGRADE2025"]
 
 // Rutas bloqueadas en demo agotado:
 // Al intentar nueva venta → abre ModalActivarBasico
 ```
+
+### Generador de códigos (admin)
+
+Acceso oculto en ConfigModal: hacer "hold" / toque largo en el logo de la tienda → ingresar contraseña `ADMIN-JUAN`. Genera códigos con los patrones `TIENDA-XXXX` / `PRO-XXXX` / `UPG-XXXX`.
 
 ## Lector de barras USB
 
@@ -367,5 +398,14 @@ Re-enfoque automático:
 
 ---
 
-*POS Tienda v4.1 — Repositorio: github.com/Juancpinzon/pos-tienda*
-*Actualizado: 10 abril 2026 — Juan Camilo Pinzón*
+## Migraciones de BD aplicadas
+
+| Archivo | Fecha | Descripción |
+|---------|-------|-------------|
+| `20260617_02_fix_tiendas_insert.sql` | 2026-06-17 | Fix constraint INSERT en tabla tiendas |
+| `20260617_seguridad_y_roles.sql` | 2026-06-17 | Agrega rol `encargado`, tabla `codigos_activacion`, fix RLS `mapeos_sku` |
+
+---
+
+*POS Tienda v4.2 — Repositorio: github.com/Juancpinzon/pos-tienda*
+*Actualizado: 17 junio 2026 — Juan Camilo Pinzón*

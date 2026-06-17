@@ -225,13 +225,22 @@ async function pushSesionesCaja(tiendaId: string, deviceId: string) {
 }
 
 async function pushVentas(tiendaId: string, deviceId: string) {
-  const registros = await db.ventas.toArray()
+  const lastSync = getLastSyncAt()
+  // Primera sync: carga todo y estampa deviceId en registros viejos.
+  // Syncs posteriores: solo registros nuevos desde el último ciclo (buffer 10 min).
+  const registros = lastSync
+    ? await db.ventas.where('creadaEn').aboveOrEqual(new Date(lastSync.getTime() - 10 * 60 * 1000)).toArray()
+    : await db.ventas.toArray()
+
   if (!registros.length) return
 
-  // Estampar deviceId en registros locales que no lo tienen aún
-  const sinDeviceId = registros.filter((r) => !r.deviceId)
-  if (sinDeviceId.length > 0) {
-    await Promise.all(sinDeviceId.map((r) => db.ventas.update(r.id!, { deviceId })))
+  // Parche deviceId solo en primera sync completa (los nuevos ya lo traen)
+  if (!lastSync) {
+    const sinDeviceId = registros.filter((r) => !r.deviceId)
+    if (sinDeviceId.length > 0) {
+      const ids = sinDeviceId.map((r) => r.id!)
+      await db.ventas.where('id').anyOf(ids).modify({ deviceId })
+    }
   }
 
   await supabase.from('ventas').upsert(
@@ -254,13 +263,26 @@ async function pushVentas(tiendaId: string, deviceId: string) {
 }
 
 async function pushDetallesVenta(tiendaId: string, deviceId: string) {
-  const registros = await db.detallesVenta.toArray()
-  if (!registros.length) return
-  // Lotes de 500 para no exceder el límite de Supabase
-  for (let i = 0; i < registros.length; i += 500) {
-    const lote = registros.slice(i, i + 500)
+  const lastSync = getLastSyncAt()
+  // DetalleVenta no tiene creadaEn propio — se navega por las ventas padre.
+  // Primera sync: itera todos los IDs de ventas en lotes de 100 (evita cargar en RAM).
+  // Syncs posteriores: solo ventas recientes (buffer 10 min) → sus detalles.
+  const fechaDesde = lastSync ? new Date(lastSync.getTime() - 10 * 60 * 1000) : null
+
+  const ventasIds: number[] = fechaDesde
+    ? (await db.ventas.where('creadaEn').aboveOrEqual(fechaDesde).primaryKeys()) as number[]
+    : (await db.ventas.orderBy('id').primaryKeys()) as number[]
+
+  if (!ventasIds.length) return
+
+  // Procesar en lotes de 100 ventas (~300 detalles por request)
+  const LOTE = 100
+  for (let i = 0; i < ventasIds.length; i += LOTE) {
+    const loteVentas = ventasIds.slice(i, i + LOTE)
+    const registros = await db.detallesVenta.where('ventaId').anyOf(loteVentas).toArray()
+    if (!registros.length) continue
     await supabase.from('detalles_venta').upsert(
-      lote.map((r) => ({
+      registros.map((r) => ({
         tienda_id: tiendaId, device_id: deviceId, local_id: r.id,
         venta_local_id: r.ventaId,
         producto_local_id: r.productoId ?? null,
@@ -278,21 +300,28 @@ async function pushDetallesVenta(tiendaId: string, deviceId: string) {
 }
 
 async function pushMovimientosFiado(tiendaId: string, deviceId: string) {
-  const registros = await db.movimientosFiado.toArray()
+  const lastSync = getLastSyncAt()
+  const registros = lastSync
+    ? await db.movimientosFiado.where('creadoEn').aboveOrEqual(new Date(lastSync.getTime() - 10 * 60 * 1000)).toArray()
+    : await db.movimientosFiado.toArray()
+
   if (!registros.length) return
-  await supabase.from('movimientos_fiado').upsert(
-    registros.map((r) => ({
-      tienda_id: tiendaId, device_id: deviceId, local_id: r.id,
-      cliente_local_id: r.clienteId,
-      venta_local_id: r.ventaId ?? null,
-      tipo: r.tipo,
-      monto: r.monto,
-      descripcion: r.descripcion,
-      sesion_caja_local_id: r.sesionCajaId ?? null,
-      creado_en: r.creadoEn,
-    })),
-    { onConflict: 'tienda_id,device_id,local_id', ignoreDuplicates: false }
-  )
+  for (let i = 0; i < registros.length; i += 500) {
+    const lote = registros.slice(i, i + 500)
+    await supabase.from('movimientos_fiado').upsert(
+      lote.map((r) => ({
+        tienda_id: tiendaId, device_id: deviceId, local_id: r.id,
+        cliente_local_id: r.clienteId,
+        venta_local_id: r.ventaId ?? null,
+        tipo: r.tipo,
+        monto: r.monto,
+        descripcion: r.descripcion,
+        sesion_caja_local_id: r.sesionCajaId ?? null,
+        creado_en: r.creadoEn,
+      })),
+      { onConflict: 'tienda_id,device_id,local_id', ignoreDuplicates: false }
+    )
+  }
 }
 
 async function pushGastosCaja(tiendaId: string, deviceId: string) {
@@ -406,11 +435,10 @@ async function pushMovimientosStock(tiendaId: string, deviceId: string) {
       { onConflict: 'tienda_id,device_id,local_id', ignoreDuplicates: false }
     )
 
-    // Marcar como sincronizados si el push fue exitoso
+    // Marcar como sincronizados en una sola transacción atómica
     if (!error) {
-      await Promise.all(
-        lote.map((r) => db.movimientosStock.update(r.id!, { sincronizado: true, deviceId }))
-      )
+      const ids = lote.map((r) => r.id!)
+      await db.movimientosStock.where('id').anyOf(ids).modify({ sincronizado: true, deviceId })
     }
   }
 }
