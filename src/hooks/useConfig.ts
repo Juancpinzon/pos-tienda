@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { liveQuery } from 'dexie'
 import { db } from '../db/database'
+import { supabase, supabaseConfigurado } from '../lib/supabase'
 import type { ConfigTienda } from '../db/schema'
 
 export const CONFIG_DEFAULTS: Omit<ConfigTienda, 'id'> = {
@@ -23,40 +24,13 @@ export const CONFIG_DEFAULTS: Omit<ConfigTienda, 'id'> = {
   modoDemo: true,
   ventasDemo: 0,
   limiteVentasDemo: 50,
+  nombreResponsable: 'Juan Carlos Pinzón Zamudio',
+  emailResponsable: 'juancpinzonz@gmail.com',
 }
 
-// Validar formato del código
-export function validarFormatoCodigo(codigo: string): {
-  valido: boolean;
-  plan: "basico" | "pro" | "upgrade" | null;
-} {
-  const codigoUpper = codigo.trim().toUpperCase()
-  
-  // Patrón: PREFIJO-XXXX donde XXXX son 4 chars alfanuméricos
-  const patronBasico = /^TIENDA-[A-Z0-9]{4}$/
-  const patronPro = /^PRO-[A-Z0-9]{4}$/
-  const patronUpgrade = /^UPG-[A-Z0-9]{4}$/
-  
-  // Códigos legacy (mantener compatibilidad con códigos anteriores)
-  const codigosLegacyBasico = [
-    "TIENDA2025", "BARRIO2025", "POSBASICO2025",
-    "TENDERO2025", "TIENDA2026"
-  ]
-  const codigosLegacyPro = [
-    "PROTIENDA2025", "DOMICILIOS2025", "UPGRADE2025"
-  ]
-  
-  if (patronBasico.test(codigoUpper) || codigosLegacyBasico.includes(codigoUpper)) {
-    return { valido: true, plan: "basico" }
-  }
-  if (patronPro.test(codigoUpper) || codigosLegacyPro.includes(codigoUpper)) {
-    return { valido: true, plan: "pro" }
-  }
-  if (patronUpgrade.test(codigoUpper)) {
-    return { valido: true, plan: "upgrade" }
-  }
-  
-  return { valido: false, plan: null }
+export interface ResultadoActivacion {
+  ok: boolean
+  error?: string
 }
 
 /**
@@ -109,36 +83,120 @@ export function usePlan() {
   }
 }
 
+interface _RespuestaValidacion {
+  valido: boolean
+  plan: 'basico' | 'pro' | 'upgrade' | null
+  sinConexion?: boolean
+}
+
+/**
+ * Valida un código contra la Edge Function validar-codigo.
+ * NUNCA cae a lógica local: los patrones y códigos válidos solo viven en el servidor.
+ * Si no hay sesión o no hay internet, retorna sinConexion=true.
+ */
+async function validarCodigoConServidor(codigo: string): Promise<_RespuestaValidacion> {
+  if (!supabaseConfigurado || !navigator.onLine) {
+    return { valido: false, plan: null, sinConexion: true }
+  }
+  try {
+    const { data: { session } } = await supabase.auth.getSession()
+    if (!session) {
+      return { valido: false, plan: null, sinConexion: true }
+    }
+    const { data, error } = await supabase.functions.invoke('validar-codigo', {
+      body: { codigo },
+    })
+    if (error || data == null) {
+      return { valido: false, plan: null, sinConexion: true }
+    }
+    return { valido: data.valido ?? false, plan: data.plan ?? null }
+  } catch {
+    return { valido: false, plan: null, sinConexion: true }
+  }
+}
+
 /**
  * Activa el Plan Pro si el código es válido.
- * Retorna true si activó, false si el código es inválido.
+ * Requiere conexión a internet — los códigos solo se validan en el servidor.
  */
-export async function activarPlanPro(codigo: string): Promise<boolean> {
-  const resultado = validarFormatoCodigo(codigo)
-  if (!resultado.valido || 
-      (resultado.plan !== "pro" && resultado.plan !== "upgrade")) return false
+export async function activarPlanPro(codigo: string): Promise<ResultadoActivacion> {
+  const resultado = await validarCodigoConServidor(codigo)
+  if (resultado.sinConexion) {
+    return { ok: false, error: 'Necesitas conexión a internet para activar el plan' }
+  }
+  if (!resultado.valido || (resultado.plan !== 'pro' && resultado.plan !== 'upgrade')) {
+    return { ok: false, error: 'Código inválido. Verifica e intenta de nuevo' }
+  }
   await guardarConfig({
     planActivo: 'pro',
     planActivadoEn: new Date(),
     codigoActivacion: codigo.trim().toUpperCase(),
     modoDemo: false,
   })
-  return true
+  return { ok: true }
 }
 
 /**
  * Activa el Plan Básico si el código es válido.
- * Retorna true si activó, false si el código es inválido.
+ * Requiere conexión a internet — los códigos solo se validan en el servidor.
  */
-export async function activarPlanBasico(codigo: string): Promise<boolean> {
-  const resultado = validarFormatoCodigo(codigo)
-  if (!resultado.valido || resultado.plan !== "basico") return false
+export async function activarPlanBasico(codigo: string): Promise<ResultadoActivacion> {
+  const resultado = await validarCodigoConServidor(codigo)
+  if (resultado.sinConexion) {
+    return { ok: false, error: 'Necesitas conexión a internet para activar el plan' }
+  }
+  if (!resultado.valido || resultado.plan !== 'basico') {
+    return { ok: false, error: 'Código inválido. Verifica e intenta de nuevo' }
+  }
   await guardarConfig({
     modoDemo: false,
     codigoBasico: codigo.trim().toUpperCase(),
     planBasicoActivadoEn: new Date(),
   })
-  return true
+  return { ok: true }
+}
+
+/**
+ * Verifica al arrancar (con conexión + sesión activa) que el código de activación
+ * almacenado en Dexie sigue siendo válido en el servidor.
+ * Si alguien manipuló IndexedDB para activarse gratis, esto lo detecta y resetea.
+ */
+export async function verificarPlanEnServidor(): Promise<void> {
+  if (!supabaseConfigurado || !navigator.onLine) return
+  const config = await obtenerConfig()
+  if (config.modoDemo) return
+
+  const codigoGuardado = config.planActivo === 'pro'
+    ? config.codigoActivacion
+    : config.codigoBasico
+
+  if (!codigoGuardado) {
+    // Plan activado sin código de activación → manipulación detectada
+    await guardarConfig({ planActivo: 'basico', planActivadoEn: undefined, codigoActivacion: undefined, modoDemo: true, ventasDemo: 0 })
+    return
+  }
+
+  try {
+    const { data: { session } } = await supabase.auth.getSession()
+    if (!session) return
+
+    const { data, error } = await supabase.functions.invoke('validar-codigo', {
+      body: { codigo: codigoGuardado },
+    })
+    if (!error && data != null && !data.valido) {
+      // Código ya no es válido (revocado o inválido) → resetear
+      await guardarConfig({
+        planActivo: 'basico',
+        planActivadoEn: undefined,
+        codigoActivacion: undefined,
+        codigoBasico: undefined,
+        modoDemo: true,
+        ventasDemo: 0,
+      })
+    }
+  } catch {
+    // Error de red → no resetear (beneficio de la duda para usuarios offline)
+  }
 }
 
 /**

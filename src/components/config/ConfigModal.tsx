@@ -1276,6 +1276,8 @@ function SeccionMiPlan() {
   const [modalProAbierto, setModalProAbierto]           = useState(false)
   const [modalBasicoAbierto, setModalBasicoAbierto]     = useState(false)
   const [mostrarGeneradorAdmin, setMostrarGeneradorAdmin] = useState(false)
+  const [pinAdmin, setPinAdmin] = useState('')
+  const [mostrarPinAdmin, setMostrarPinAdmin] = useState(false)
   const usuario = useAuthStore((s) => s.usuario)
   if (usuario?.rol !== 'dueno') return null
 
@@ -1392,20 +1394,48 @@ function SeccionMiPlan() {
             </button>
           )}
 
-          {/* Versión — doble clic abre generador admin */}
+          {/* Versión — doble clic abre prompt admin */}
           <p
             style={{ fontSize: '9px', color: 'transparent', cursor: 'default', userSelect: 'none' }}
-            onDoubleClick={() => setMostrarGeneradorAdmin(true)}
+            onDoubleClick={() => { setPinAdmin(''); setMostrarPinAdmin(true) }}
           >
             v4.1
           </p>
         </div>
       </section>
 
-      {/* Generador de códigos admin (oculto hasta doble clic) */}
+      {/* Prompt de PIN admin */}
+      {mostrarPinAdmin && !mostrarGeneradorAdmin && (
+        <div style={{ marginTop: '12px' }} className="flex flex-col gap-2">
+          <input
+            type="password"
+            autoFocus
+            value={pinAdmin}
+            onChange={(e) => setPinAdmin(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                if (pinAdmin === 'ADMIN-JUAN') {
+                  setMostrarGeneradorAdmin(true)
+                  setMostrarPinAdmin(false)
+                } else {
+                  setPinAdmin('')
+                }
+              }
+              if (e.key === 'Escape') {
+                setMostrarPinAdmin(false)
+                setPinAdmin('')
+              }
+            }}
+            placeholder="Contraseña admin"
+            className="w-full h-10 px-3 border border-borde rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primario/30"
+          />
+        </div>
+      )}
+
+      {/* Generador de códigos admin (visible solo con contraseña correcta) */}
       {mostrarGeneradorAdmin && (
         <div style={{ marginTop: '12px' }}>
-          <GeneradorCodigos onCerrar={() => setMostrarGeneradorAdmin(false)} />
+          <GeneradorCodigos onCerrar={() => { setMostrarGeneradorAdmin(false); setPinAdmin('') }} />
         </div>
       )}
 
@@ -1491,6 +1521,77 @@ function SeccionValoresLegales() {
                      disabled:opacity-40 disabled:cursor-not-allowed"
         >
           {guardando ? 'Guardando…' : 'Guardar valores'}
+        </button>
+      </div>
+    </section>
+  )
+}
+
+// ─── Sección Responsable del Tratamiento de Datos — Ley 1581/2012 ────────────
+
+function SeccionResponsableDatos() {
+  const config = useConfig()
+  const [nombre, setNombre] = useState<string>('')
+  const [email, setEmail]   = useState<string>('')
+  const [guardando, setGuardando] = useState(false)
+
+  useEffect(() => {
+    if (config) {
+      setNombre(config.nombreResponsable ?? 'Juan Carlos Pinzón Zamudio')
+      setEmail(config.emailResponsable  ?? 'juancpinzonz@gmail.com')
+    }
+  }, [config])
+
+  const handleGuardar = async () => {
+    if (guardando) return
+    setGuardando(true)
+    try {
+      await guardarConfig({ nombreResponsable: nombre.trim(), emailResponsable: email.trim() })
+      toast.success('Responsable de datos actualizado')
+    } catch {
+      toast.error('Error al guardar')
+    } finally {
+      setGuardando(false)
+    }
+  }
+
+  return (
+    <section>
+      <p className="text-xs font-semibold text-suave uppercase tracking-wider mb-3">
+        Responsable del Tratamiento de Datos
+      </p>
+      <div className="flex flex-col gap-3 p-4 bg-fondo rounded-xl border border-borde">
+        <p className="text-xs text-suave leading-relaxed">
+          Nombre y correo que aparecen en la Política de Privacidad bajo la Ley 1581 de 2012.
+          Si otra persona adquirió y opera esta app, actualiza estos datos con los suyos.
+        </p>
+        <Campo label="Nombre del responsable" icon={<ShieldCheck size={14} />}>
+          <input
+            type="text"
+            value={nombre}
+            onChange={(e) => setNombre(e.target.value)}
+            className={INPUT_CLS}
+            placeholder="Nombre completo"
+          />
+        </Campo>
+        <Campo label="Correo de contacto" icon={<ShieldCheck size={14} />}>
+          <input
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            className={INPUT_CLS}
+            placeholder="correo@ejemplo.com"
+          />
+        </Campo>
+        <button
+          type="button"
+          onClick={handleGuardar}
+          disabled={guardando || !nombre.trim() || !email.trim()}
+          className="w-full h-10 bg-primario text-white rounded-xl font-semibold text-sm
+                     hover:bg-primario-hover active:scale-95 transition-all
+                     disabled:opacity-40 disabled:cursor-not-allowed"
+        >
+          {guardando ? 'Guardando…' : 'Guardar'}
         </button>
       </div>
     </section>
@@ -1675,6 +1776,9 @@ export function ConfigModal({ onClose, onReiniciarTour }: ConfigModalProps) {
 
             {/* Valores Legales — SMMLV y Subsidio de Transporte (nómina) */}
             <SeccionValoresLegales />
+
+            {/* Responsable del Tratamiento de Datos — Ley 1581/2012 */}
+            <SeccionResponsableDatos />
 
             {/* Apariencia — selector de tema */}
             <SeccionTema />

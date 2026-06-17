@@ -1,8 +1,12 @@
 import { useNavigate } from 'react-router-dom'
 import { ArrowLeft } from 'lucide-react'
+import { useConfig } from '../hooks/useConfig'
 
 export default function TerminosPage() {
   const navigate = useNavigate()
+  const config = useConfig()
+
+  const emailResponsable = config?.emailResponsable ?? '{emailResponsable}'
 
   return (
     <div className="min-h-screen bg-white dark:bg-gray-950 text-gray-900 dark:text-gray-100">
@@ -100,8 +104,8 @@ export default function TerminosPage() {
           </p>
           <p className="mt-2">
             Si tiene un problema técnico con la activación, contáctenos a{' '}
-            <a href="mailto:juancpinzonz@gmail.com" className="text-[#1e3a5f] underline">
-              juancpinzonz@gmail.com
+            <a href={`mailto:${emailResponsable}`} className="text-[#1e3a5f] underline">
+              {emailResponsable}
             </a>{' '}
             y lo resolveremos.
           </p>
@@ -176,8 +180,8 @@ export default function TerminosPage() {
           <h2 className="font-bold text-base mb-2">11. Contacto</h2>
           <p>
             Para cualquier consulta sobre estos términos:{' '}
-            <a href="mailto:juancpinzonz@gmail.com" className="text-[#1e3a5f] underline">
-              juancpinzonz@gmail.com
+            <a href={`mailto:${emailResponsable}`} className="text-[#1e3a5f] underline">
+              {emailResponsable}
             </a>
           </p>
           <p className="mt-1">

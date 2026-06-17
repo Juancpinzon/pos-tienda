@@ -138,6 +138,9 @@ export interface ConfigTienda {
   limiteVentasDemo?: number       // Default: 50
   codigoBasico?: string           // Código ingresado para Plan Básico
   planBasicoActivadoEn?: Date     // Cuándo se activó
+  // ── Responsable del tratamiento de datos (Ley 1581/2012) ────────────────────
+  nombreResponsable?: string      // Nombre del responsable del tratamiento. Default: Juan Carlos Pinzón Zamudio
+  emailResponsable?: string       // Email de contacto para ejercicio de derechos Habeas Data
 }
 
 // ─── Módulo de Proveedores y Compras (v2) ─────────────────────────────────────

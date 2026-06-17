@@ -1,8 +1,13 @@
 import { useNavigate } from 'react-router-dom'
 import { ArrowLeft } from 'lucide-react'
+import { useConfig } from '../hooks/useConfig'
 
 export default function PrivacidadPage() {
   const navigate = useNavigate()
+  const config = useConfig()
+
+  const nombreResponsable = config?.nombreResponsable ?? 'Juan Carlos Pinzón Zamudio'
+  const emailResponsable  = config?.emailResponsable  ?? 'juancpinzonz@gmail.com'
 
   return (
     <div className="min-h-screen bg-white dark:bg-gray-950 text-gray-900 dark:text-gray-100">
@@ -29,11 +34,14 @@ export default function PrivacidadPage() {
         <section>
           <h2 className="font-bold text-base mb-2">1. Responsable del tratamiento</h2>
           <p>
-            El responsable del tratamiento de los datos personales es <strong>Juan Carlos Pinzón Zapata</strong>,
-            desarrollador independiente de POS Tienda de Barrio.
+            El responsable del tratamiento de los datos personales es <strong>{nombreResponsable}</strong>,
+            operador de POS Tienda de Barrio.
           </p>
           <p className="mt-2">
-            Correo de contacto: <a href="mailto:juancpinzonz@gmail.com" className="text-[#1e3a5f] underline">juancpinzonz@gmail.com</a>
+            Correo de contacto:{' '}
+            <a href={`mailto:${emailResponsable}`} className="text-[#1e3a5f] underline">
+              {emailResponsable}
+            </a>
           </p>
         </section>
 
@@ -120,8 +128,8 @@ export default function PrivacidadPage() {
           </ul>
           <p className="mt-3">
             Para ejercer cualquiera de estos derechos, escríbanos a{' '}
-            <a href="mailto:juancpinzonz@gmail.com" className="text-[#1e3a5f] underline">
-              juancpinzonz@gmail.com
+            <a href={`mailto:${emailResponsable}`} className="text-[#1e3a5f] underline">
+              {emailResponsable}
             </a>{' '}
             indicando su solicitud. Respondemos en un plazo máximo de 10 días hábiles.
           </p>
